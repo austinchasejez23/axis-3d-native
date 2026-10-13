@@ -1,0 +1,1 @@
+export default function ProBadge() { return <span className="absolute right-0.5 top-0.5 rounded bg-amber-400 px-1 text-[8px] font-bold leading-4 text-black">PRO</span>; }

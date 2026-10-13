@@ -1,0 +1,65 @@
+import {
+  MergeCloseIcon, MirrorIcon, SoftNormalsIcon, CombineIcon, SeparateIcon,
+  DivideIcon, SmoothIcon, CloneIcon, RadialArrayIcon, LockIcon, DeleteIcon,
+  BooleanIcon, SubtractIcon, UnionIcon, IntersectIcon,
+  DrawFaceIcon, DetachIcon, ExtrudeIcon, FaceCloneIcon, FaceExtrudeIcon,
+  CreateFaceBorderIcon, SplitIcon, DrawCutIcon, BevelIcon, EdgeBridgeIcon, FaceBridgeIcon,
+  SelectRingIcon, SelectLoopIcon, CutLoopIcon,
+  CreateFaceVerticesIcon, AddVertexIcon, ConnectIcon, TargetMergeIcon, MergeIcon,
+} from '@/lib/toolIcons';
+
+export const TOOLS = {
+  object: {
+    pages: [[
+      { id: 'merge', label: 'Merge vertices', icon: MergeCloseIcon },
+      { id: 'mirror', label: 'Mirror', icon: MirrorIcon },
+      { id: 'soft_normals', label: 'Soft normals', icon: SoftNormalsIcon },
+      { id: 'combine', label: 'Combine', icon: CombineIcon },
+      { id: 'separate', label: 'Separate', icon: SeparateIcon },
+      { id: 'divide', label: 'Divide', icon: DivideIcon },
+      { id: 'boolean', label: 'Boolean', icon: BooleanIcon },
+      { id: 'subtract', label: 'Subtract', icon: SubtractIcon },
+      { id: 'union', label: 'Union', icon: UnionIcon },
+      { id: 'intersect', label: 'Intersect', icon: IntersectIcon },
+      { id: 'smooth', label: 'Smooth', icon: SmoothIcon },
+      { id: 'clone', label: 'Clone', icon: CloneIcon },
+      { id: 'radial_array', label: 'Radial array', icon: RadialArrayIcon },
+      { id: 'lock', label: 'Lock', icon: LockIcon },
+      { id: 'delete', label: 'Delete', icon: DeleteIcon },
+    ]],
+  },
+  face: {
+    pages: [[
+      { id: 'draw_face', label: 'Draw face', icon: DrawFaceIcon },
+      { id: 'detach', label: 'Detach', icon: DetachIcon },
+      { id: 'clone', label: 'Clone', icon: FaceCloneIcon },
+      { id: 'bridge', label: 'Bridge', icon: FaceBridgeIcon },
+      { id: 'extrude', label: 'Extrude', icon: FaceExtrudeIcon },
+      { id: 'delete', label: 'Delete', icon: DeleteIcon },
+    ]],
+  },
+  edge: {
+    pages: [[
+      { id: 'create_face_border', label: 'New face', icon: CreateFaceBorderIcon },
+      { id: 'bridge', label: 'Bridge', icon: EdgeBridgeIcon },
+      { id: 'split', label: 'Split', icon: SplitIcon },
+      { id: 'draw_cut', label: 'Draw cut', icon: DrawCutIcon },
+      { id: 'bevel', label: 'Bevel', icon: BevelIcon },
+      { id: 'extrude', label: 'Extrude', icon: ExtrudeIcon },
+      { id: 'select_ring', label: 'Select ring', icon: SelectRingIcon },
+      { id: 'select_loop', label: 'Select loop', icon: SelectLoopIcon },
+      { id: 'cut_loop', label: 'Cut loop', icon: CutLoopIcon },
+      { id: 'delete', label: 'Delete', icon: DeleteIcon },
+    ]],
+  },
+  vertex: {
+    pages: [[
+      { id: 'create_face', label: 'Create face', icon: CreateFaceVerticesIcon },
+      { id: 'add_vertex', label: 'Add vertex', icon: AddVertexIcon },
+      { id: 'connect', label: 'Connect', icon: ConnectIcon },
+      { id: 'target_merge', label: 'Target merge', icon: TargetMergeIcon },
+      { id: 'merge', label: 'Merge', icon: MergeIcon },
+      { id: 'delete', label: 'Delete', icon: DeleteIcon },
+    ]],
+  },
+};

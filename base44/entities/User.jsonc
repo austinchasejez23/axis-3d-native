@@ -1,0 +1,33 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "username": {
+      "type": "string",
+      "description": "Display name chosen by the user"
+    },
+    "pro_active": {
+      "type": "boolean",
+      "default": false
+    },
+    "pro_plan": {
+      "type": "string",
+      "enum": [
+        "monthly",
+        "annual",
+        "lifetime",
+        "none"
+      ],
+      "default": "none"
+    },
+    "stripe_customer_id": {
+      "type": "string"
+    },
+    "stripe_subscription_id": {
+      "type": "string"
+    },
+    "pro_period_end": {
+      "type": "number"
+    }
+  }
+}

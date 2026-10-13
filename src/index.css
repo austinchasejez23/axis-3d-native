@@ -1,0 +1,316 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Tablet / iPad UI scale ───────────────────────────────────────────────
+   Phones are the 1.0 baseline and are never touched: the scale only leaves 1
+   when BOTH screen dimensions exceed phone range (so phone landscape stays 1).
+   Above that, the factor comes from the SHORTER screen dimension, so portrait
+   and landscape tablets scale identically.
+   It is applied once, on the root font size, so every rem-based size in the app
+   (buttons, tool buttons, menus, drawers, sheets, keypads, sliders, inputs,
+   icons, labels, padding, gaps, touch targets, HUD) scales proportionally with
+   no transforms — hitboxes, fixed positioning and the 3D canvas are unaffected.
+   New controls get this for free by using normal rem-based Tailwind classes. */
+@media (min-width: 600px) and (min-height: 600px) {
+  html {
+    /* 560px short side = 1.0 (16px). Medium tablets land near 1.35x,
+       large iPads cap at 1.5x (24px) so controls never get oversized. */
+    font-size: clamp(16px, min(100vw, 100vh) / 35, 24px);
+  }
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 0.5rem;
+    --font-heading: "Rajdhani", sans-serif;
+    --font-body: "Rajdhani", sans-serif;
+    --font-display: "Rajdhani", sans-serif;
+    --font-mono: "Rajdhani", sans-serif;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html, body, #root {
+    overscroll-behavior: none;
+    overscroll-behavior-y: none;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body;
+    font-weight: 600;
+  }
+
+  button, input, textarea, select {
+    font-family: var(--font-body);
+    font-weight: 600;
+  }
+
+  /* Every modeler foreground follows the selected viewport background. */
+  html:has(.axis-modeler) {
+    overflow: hidden;
+  }
+
+  body:has(.axis-modeler) {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  .axis-modeler {
+    color: var(--axis-ui-color);
+    touch-action: none;
+    overscroll-behavior: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* A finger brushing over an icon or its label must not pan the browser's
+     page or initiate a native drag. Only the viewport canvas owns gestures. */
+  .axis-modeler button,
+  .axis-modeler [role="button"],
+  .axis-modeler [role="textbox"],
+  .axis-modeler .modeling-panel {
+    touch-action: none;
+    -webkit-user-drag: none;
+  }
+
+  /* Keep actual long menus vertically scrollable on small displays. */
+  .axis-modeler .axis-menu-scroll,
+  .axis-modeler .axis-menu-scroll button {
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+  }
+
+  /* Native-app feel inside a WebView: no blue tap flash, no text selection
+     on controls (inputs/textareas keep normal selection). */
+  button, a, [role="button"], canvas {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+@layer utilities {
+  /* Device notch / gesture-bar spacing. */
+  /* Some Android React-Native wrappers report a zero CSS safe-area even
+     though the WebView is drawn under the status bar. Keep a small physical
+     fallback so top modeler controls remain tappable there. */
+  .safe-top { padding-top: max(env(safe-area-inset-top, 0px), 1.75rem); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  /* Modeler workspaceHeight already excludes Android's system navigation area.
+     Use the Modeler's normalized inset so every bottom-docked surface shares
+     one coordinate system instead of adding the OS inset a second time. */
+  .axis-modeler .safe-bottom { padding-bottom: var(--axis-safe-bottom, env(safe-area-inset-bottom, 0px)); }
+
+  /* Scrollable menus scroll without ever showing a scrollbar. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
+}
+
+/* Hide scrollbars globally (menus, drawers, panels). */
+* {
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+/* Minimum readable UI text size: anything smaller than 13px is bumped to 13px. */
+@layer utilities {
+  .text-\[8px\],
+  .text-\[8\.5px\],
+  .text-\[9px\],
+  .text-\[9\.5px\],
+  .text-\[10px\],
+  .text-\[10\.5px\],
+  .text-\[11px\],
+  .text-\[11\.5px\],
+  .text-\[12px\],
+  .text-\[12\.5px\],
+  .text-\[0\.625rem\],
+  .text-\[0\.7rem\],
+  .text-xs {
+    /* rem so this floor scales with --ui-scale on tablets */
+    font-size: 0.8125rem;
+    line-height: 1.15;
+  }
+}
+
+/* Surface-mode sliders: slim glowing track with a bright round thumb. */
+@layer utilities {
+  .gs-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 22px;
+    background: transparent;
+    outline: none;
+  }
+  .gs-slider::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(
+      to right,
+      var(--gs-accent) 0%,
+      var(--gs-accent) var(--gs-pct),
+      rgba(255, 255, 255, 0.16) var(--gs-pct),
+      rgba(255, 255, 255, 0.16) 100%
+    );
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 1px 3px rgba(0, 0, 0, 0.55);
+  }
+  .gs-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    margin-top: -5px;
+    border-radius: 999px;
+    background: #c7cbd1;
+    border: 2px solid #eef0f2;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.6);
+  }
+  /* Full color-spectrum variant used by the Tint hue slider. */
+  .gs-slider-hue::-webkit-slider-runnable-track {
+    background: linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000);
+  }
+  .gs-slider-hue::-moz-range-track {
+    background: linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000);
+  }
+  .gs-slider-hue::-moz-range-progress { background: transparent; }
+  .gs-slider::-moz-range-track {
+    height: 5px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.22);
+  }
+  .gs-slider::-moz-range-progress {
+    height: 5px;
+    border-radius: 999px;
+    background: var(--gs-accent);
+  }
+  .gs-slider::-moz-range-thumb {
+    width: 15px;
+    height: 15px;
+    border-radius: 999px;
+    background: #c7cbd1;
+    border: 2px solid #eef0f2;
+  }
+}
+
+
+
+.axis-library {
+  --background: 240 5.9% 4%;
+  --foreground: 0 0% 98%;
+  --card: 240 5.9% 10%;
+  --muted: 240 3.7% 16%;
+  --muted-foreground: 240 5% 65%;
+  --border: 240 4% 24%;
+  --ring: 0 0% 80%;
+  --destructive: 0 72% 48%;
+  --destructive-foreground: 0 0% 100%;
+}
+
+:root, .dark {
+  --modeling-sheet: 9 13 22;
+  --modeling-border: 255 255 255;
+  --modeling-ink: 255 255 255;
+}
+.modeling-sheet {
+  background: rgb(var(--modeling-sheet) / 0.94);
+  color: rgb(var(--modeling-ink));
+  box-shadow: 0 0 0 1px rgb(var(--modeling-border) / 0.10), 0 -6px 24px rgb(0 0 0 / 0.6);
+}
+.modeling-value {
+  background: rgb(var(--modeling-border) / 0.06);
+  border: 1px solid rgb(var(--modeling-border) / 0.16);
+}
+.modeling-caret {
+  width: 1px;
+  height: 1em;
+  margin-left: 1px;
+  background: currentColor;
+  animation: modeling-caret-blink 1s steps(1, end) infinite;
+}
+@keyframes modeling-caret-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+
+/* Let the splash's blue glow dissolve outward in its natural orb shape. */
+.axis-splash-video-fade {
+  -webkit-mask-image: radial-gradient(ellipse 50% 50% at center, black 55%, transparent 100%);
+  mask-image: radial-gradient(ellipse 50% 50% at center, black 55%, transparent 100%);
+}

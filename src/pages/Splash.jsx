@@ -1,0 +1,68 @@
+import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/lib/AuthContext';
+import { useProAccess } from '@/lib/ProAccessContext';
+import { prepareLibraryStartup } from '@/lib/libraryStartup';
+
+const VIDEO_URL = '/splash/axis_splash_v3.mp4';
+const CREDIT_URL = 'https://media.base44.com/images/public/6a5340f43f8fd031c5921680/4557d27b8_Picsart_26-08-20_14-42-35-065.jpg';
+const CREDIT_AT_MS = 4000;
+
+export default function Splash() {
+  const navigate = useNavigate();
+  const { isAuthenticated, user, isLoadingAuth, isLoadingPublicSettings } = useAuth();
+  const { isPro } = useProAccess();
+  const [creditIn, setCreditIn] = useState(false);
+  const [videoEnded, setVideoEnded] = useState(false);
+  const [libraryReady, setLibraryReady] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setCreditIn(true), CREDIT_AT_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (isLoadingAuth || isLoadingPublicSettings) return;
+    if (!isAuthenticated) { setLibraryReady(true); return; }
+    let cancelled = false;
+    prepareLibraryStartup(user, isPro)
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLibraryReady(true); });
+    return () => { cancelled = true; };
+  }, [isAuthenticated, isLoadingAuth, isLoadingPublicSettings, isPro, user]);
+
+  useEffect(() => {
+    if (!videoEnded || isLoadingAuth || isLoadingPublicSettings || !libraryReady) return;
+    navigate(isAuthenticated ? '/library' : '/login', { state: { fromSplash: true } });
+  }, [videoEnded, libraryReady, isAuthenticated, isLoadingAuth, isLoadingPublicSettings, navigate]);
+
+  return (
+    <motion.div
+      className="fixed inset-0 flex items-center justify-center overflow-hidden bg-black"
+      initial={{ backgroundColor: '#000000' }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 1, ease: [0.4, 0, 0.2, 1] }}
+    >
+      <div className="axis-splash-video-fade relative aspect-video w-[195vmin] shrink-0">
+        <video
+          src={VIDEO_URL}
+          autoPlay
+          muted
+          playsInline
+          preload="auto"
+          className="absolute inset-0 h-full w-full object-contain"
+          aria-label="AXIS splash animation"
+          onEnded={() => setVideoEnded(true)}
+        />
+      </div>
+
+      <div
+        className="absolute bottom-6 left-0 right-0 z-20 flex justify-center transition-opacity ease-out"
+        style={{ opacity: creditIn ? 1 : 0, transitionDuration: '700ms' }}
+      >
+        <img src={CREDIT_URL} alt="A First App Production" className="block h-auto w-[52vw] max-w-[220px]" />
+      </div>
+    </motion.div>
+  );
+}
