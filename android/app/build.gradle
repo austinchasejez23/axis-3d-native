@@ -17,6 +17,14 @@ android {
         }
     }
     buildTypes {
+        // The Play build and this one share an application id, and Android
+        // refuses to install over an app signed with a different key. The
+        // suffix gives the test build its own id so it sits alongside the
+        // Play version instead of fighting it. Release is untouched, so
+        // uploads to Play still carry the real id.
+        debug {
+            applicationIdSuffix ".debug"
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

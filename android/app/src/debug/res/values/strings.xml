@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <!-- Debug builds sit next to the Play app, so they need a distinct name
+         on the home screen. Release keeps the plain "AXIS 3D". -->
+    <string name="app_name">AXIS 3D dev</string>
+    <string name="title_activity_main">AXIS 3D dev</string>
+</resources>
