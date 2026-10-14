@@ -47,12 +47,16 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      # Install the exact SDK pieces the project asks for. Gradle will not
+      # always fetch a missing platform on its own, and compileSdk here is 36.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
 
       - name: Debug APK
         run: |
           chmod +x android/gradlew
-          cd android && ./gradlew --no-daemon assembleDebug
+          cd android && ./gradlew --no-daemon --stacktrace assembleDebug
 
       - uses: actions/upload-artifact@v4
         with:
