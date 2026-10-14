@@ -21,9 +21,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # @capacitor/cli 8.x declares engines.node >=22, and this is the version
+      # the project is actually built and tested on.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - run: npm ci
 
