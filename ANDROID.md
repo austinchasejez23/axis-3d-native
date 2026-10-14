@@ -54,14 +54,21 @@ your mind.
 ## What still needs a connection
 
 Projects already live on the device (IndexedDB), so modelling, saving and
-opening work with no network. These do not:
+opening work with no network. The logo, the 15 texture presets and the 7
+reflection environments are now bundled too — they were being fetched from
+`media.base44.com`, and are served from `/media/` inside the app instead.
+The splash video was already local.
 
-- **Sign-in, Pro entitlement, cloud backup, promo codes, the contact form** —
-  all go through the Base44 SDK.
-- **Texture presets and reflection environments** — their images are fetched
-  from `media.base44.com`.
-- **The AXIS logo** on the splash and sign-in screens — same host. The splash
-  *video* is bundled locally and plays offline.
+Still online-only:
 
-If you want a fully offline app, the next piece of work is downloading those
-images into the repo and letting the modeler run without an account.
+- **Sign-in, Pro entitlement, cloud backup, promo codes and the contact form**
+  — all go through the Base44 SDK.
+
+That is the remaining piece if you want the modeler usable with no account.
+
+## Adding or changing a bundled image
+
+Put the file in `public/media/` and reference it as `/media/<filename>`.
+Vite copies `public/` into `dist` untouched, and `npm run android:sync` copies
+`dist` into the APK. Do not point at `media.base44.com` again — anything on
+that host disappears when the device is offline.
