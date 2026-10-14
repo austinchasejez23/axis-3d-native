@@ -6,7 +6,7 @@ import { useProAccess } from '@/lib/ProAccessContext';
 import { prepareLibraryStartup } from '@/lib/libraryStartup';
 
 const VIDEO_URL = '/splash/axis_splash_v3.mp4';
-const CREDIT_URL = 'https://media.base44.com/images/public/6a5340f43f8fd031c5921680/4557d27b8_Picsart_26-08-20_14-42-35-065.jpg';
+const CREDIT_URL = '/media/4557d27b8_Picsart_26-08-20_14-42-35-065.jpg';
 const CREDIT_AT_MS = 4000;
 
 export default function Splash() {

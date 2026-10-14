@@ -19,13 +19,13 @@ const CUBE_SIZE = 256;
 // These are true 2:1 equirectangular panoramas — a normal photo wrapped as an
 // equirect map is what made reflections look hugely magnified and smeared.
 export const ENV_URLS = {
-  studio: 'https://media.base44.com/images/public/6a5340f43f8fd031c5921680/fd46f6957_generated_image.png',
-  city: 'https://media.base44.com/images/public/6a5340f43f8fd031c5921680/fcdabaffe_generated_image.png',
-  shop: 'https://media.base44.com/images/public/6a5340f43f8fd031c5921680/114b0179c_generated_image.png',
-  sunset: 'https://media.base44.com/images/public/6a5340f43f8fd031c5921680/c9e3b0241_generated_image.png',
-  darkStudio: 'https://media.base44.com/images/public/6a5340f43f8fd031c5921680/678406f73_generated_image.png',
-  desert: 'https://media.base44.com/images/public/6a5340f43f8fd031c5921680/54bb9e80f_generated_image.png',
-  graffiti: 'https://media.base44.com/images/public/6a5340f43f8fd031c5921680/4262c0d5d_generated_image.png',
+  studio: '/media/fd46f6957_generated_image.png',
+  city: '/media/fcdabaffe_generated_image.png',
+  shop: '/media/114b0179c_generated_image.png',
+  sunset: '/media/c9e3b0241_generated_image.png',
+  darkStudio: '/media/678406f73_generated_image.png',
+  desert: '/media/54bb9e80f_generated_image.png',
+  graffiti: '/media/4262c0d5d_generated_image.png',
 };
 
 export function applySceneReflections(SceneManagerClass) {

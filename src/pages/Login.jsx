@@ -37,7 +37,7 @@ export default function Login() {
   return (
     <AuthLayout
       compact
-      logoUrl="https://media.base44.com/images/public/6a5340f43f8fd031c5921680/92bec63fb_file_00000000a990820d8515bede88972084.png"
+      logoUrl="/media/92bec63fb_file_00000000a990820d8515bede88972084.png"
       title="Sign in"
       subtitle="Log in or create an account"
       footer={
