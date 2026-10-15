@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app's own background. Used for the launch window so the first
+         frame is already dark instead of flashing the default light theme. -->
+    <color name="axisBackground">#1c1c1c</color>
+    <color name="colorPrimary">#1c1c1c</color>
+    <color name="colorPrimaryDark">#1c1c1c</color>
+    <color name="colorAccent">#0066ff</color>
+</resources>
