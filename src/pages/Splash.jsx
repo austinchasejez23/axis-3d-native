@@ -51,7 +51,12 @@ export default function Splash() {
           muted
           playsInline
           preload="auto"
-          className="absolute inset-0 h-full w-full object-contain"
+          // A video with no poster draws the browser's own huge grey play
+          // button until its first frame decodes. In the native app that is
+          // the whole screen for a moment. A 1x1 black poster fills that gap
+          // with the background colour instead.
+          poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+          className="absolute inset-0 h-full w-full bg-black object-contain"
           aria-label="AXIS splash animation"
           onEnded={() => setVideoEnded(true)}
         />
