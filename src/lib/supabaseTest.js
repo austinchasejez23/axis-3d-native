@@ -34,6 +34,10 @@ function errorMessage(body, status) {
   return body?.msg || body?.error_description || body?.message || body?.error || ('Request failed (' + status + ')');
 }
 
+/**
+ * @param {string} path
+ * @param {{ token?: string, method?: string, body?: any, headers?: Record<string,string>, raw?: boolean }} [options]
+ */
 async function request(path, { token, method = 'GET', body, headers = {}, raw = false } = {}) {
   let response;
   try {
