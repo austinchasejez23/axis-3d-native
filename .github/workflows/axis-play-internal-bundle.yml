@@ -1,0 +1,132 @@
+name: Axis Play INTERNAL AAB preparation (NEVER UPLOAD)
+
+on:
+  push:
+    branches: [chore/play-internal-bundle-prep]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-internal-bundle:
+    runs-on: ubuntu-latest
+    # Never run this release-ID job for main or production pull requests.
+    if: github.ref == 'refs/heads/chore/play-internal-bundle-prep'
+    env:
+      PLAY_APP_ID: com.base6a5340f43f8fd031c5921680.app
+      AXIS_PLAY_INTERNAL_VERSION_CODE: ${{ vars.AXIS_PLAY_INTERNAL_VERSION_CODE }}
+      AXIS_PLAY_SIGN_CANDIDATE: ${{ vars.AXIS_PLAY_SIGN_CANDIDATE }}
+      AXIS_PLAY_EXPECTED_UPLOAD_CERT_SHA256: ${{ vars.AXIS_PLAY_EXPECTED_UPLOAD_CERT_SHA256 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Check Base44 isolation, locked Pro, and billing safety
+        run: npm run test:standalone
+      - name: Build web assets and sync native Android
+        run: npm run android:sync
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+      - name: Set candidate version code (do NOT guess the Play Console code)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$AXIS_PLAY_INTERNAL_VERSION_CODE" ]]; then
+            if [[ "$AXIS_PLAY_SIGN_CANDIDATE" == "true" ]]; then
+              echo "::error::Set AXIS_PLAY_INTERNAL_VERSION_CODE to a code higher than every uploaded Play build."
+              exit 1
+            fi
+            echo "AXIS_GRADLE_VERSION_FLAG=" >> "$GITHUB_ENV"
+            echo "::notice::Unsigned inspection only; default code 25 MUST NOT be uploaded."
+          else
+            if [[ ! "$AXIS_PLAY_INTERNAL_VERSION_CODE" =~ ^[1-9][0-9]{0,9}$ ]] || (( AXIS_PLAY_INTERNAL_VERSION_CODE <= 25 || AXIS_PLAY_INTERNAL_VERSION_CODE > 2100000000 )); then
+              echo "::error::Use an integer version code greater than 25 and no higher than 2100000000."
+              exit 1
+            fi
+            echo "AXIS_GRADLE_VERSION_FLAG=-PaxisPlayInternalVersionCode=$AXIS_PLAY_INTERNAL_VERSION_CODE" >> "$GITHUB_ENV"
+          fi
+      - name: Compile ORIGINAL-PACKAGE release AAB (unsigned)
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x android/gradlew
+          cd android
+          if [[ -n "$AXIS_GRADLE_VERSION_FLAG" ]]; then
+            ./gradlew --no-daemon bundleRelease "$AXIS_GRADLE_VERSION_FLAG"
+          else
+            ./gradlew --no-daemon bundleRelease
+          fi
+      - name: Verify original package, BILLING permission and bundle integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=android/app/build/outputs/bundle/release/app-release.aab
+          test -s "$file"
+          unzip -tq "$file" >/dev/null
+          found=false
+          while IFS= read -r manifest; do
+            if grep -qF "$PLAY_APP_ID" "$manifest" && grep -qF 'com.android.vending.BILLING' "$manifest"; then
+              if grep -qF "$PLAY_APP_ID.debug" "$manifest"; then
+                echo "::error::Release manifest contains the .debug application ID."
+                exit 1
+              fi
+              found=true
+              break
+            fi
+          done < <(find android/app/build/intermediates -name AndroidManifest.xml -path '*/release/*' -type f)
+          if [[ "$found" != "true" ]]; then
+            echo "::error::No merged release manifest with original package ID AND Google Play BILLING permission."
+            exit 1
+          fi
+          {
+            echo "## Axis internal Play candidate inspection"
+            echo "- Original Android ID: \`$PLAY_APP_ID\`"
+            echo "- Billing library: 9.1.0 (read-only client)"
+            echo "- BILLING permission found in merged release manifest"
+            echo "- Release AAB compiled; ZIP integrity passed"
+            echo "- No Google Play upload, no release publication, no Pro unlock"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Refuse signing without explicit approval and complete key verification
+        if: env.AXIS_PLAY_SIGN_CANDIDATE == 'true'
+        env:
+          AXIS_PLAY_UPLOAD_KEYSTORE_BASE64: ${{ secrets.AXIS_PLAY_UPLOAD_KEYSTORE_BASE64 }}
+          AXIS_PLAY_UPLOAD_STORE_PASSWORD: ${{ secrets.AXIS_PLAY_UPLOAD_STORE_PASSWORD }}
+          AXIS_PLAY_UPLOAD_KEY_ALIAS: ${{ secrets.AXIS_PLAY_UPLOAD_KEY_ALIAS }}
+          AXIS_PLAY_UPLOAD_KEY_PASSWORD: ${{ secrets.AXIS_PLAY_UPLOAD_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$AXIS_PLAY_UPLOAD_KEYSTORE_BASE64" || -z "$AXIS_PLAY_UPLOAD_STORE_PASSWORD" || -z "$AXIS_PLAY_UPLOAD_KEY_ALIAS" || -z "$AXIS_PLAY_UPLOAD_KEY_PASSWORD" || -z "$AXIS_PLAY_EXPECTED_UPLOAD_CERT_SHA256" ]]; then
+            echo "::error::Existing Google Play upload key, all passwords, alias and expected Play upload certificate fingerprint are required."
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$AXIS_PLAY_UPLOAD_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/axis-play-upload.jks"
+          actual=$(keytool -list -v -keystore "$RUNNER_TEMP/axis-play-upload.jks" -storepass:env AXIS_PLAY_UPLOAD_STORE_PASSWORD -alias "$AXIS_PLAY_UPLOAD_KEY_ALIAS" | sed -n 's/.*SHA256: *//p' | head -n 1)
+          actual="${actual//:/}"
+          expected="${AXIS_PLAY_EXPECTED_UPLOAD_CERT_SHA256//:/}"
+          if [[ -z "$actual" || "${actual^^}" != "${expected^^}" ]]; then
+            echo "::error::Upload signing certificate does NOT match Play Console. No AAB was signed or published."
+            exit 1
+          fi
+          jarsigner -keystore "$RUNNER_TEMP/axis-play-upload.jks" -storepass:env AXIS_PLAY_UPLOAD_STORE_PASSWORD -keypass:env AXIS_PLAY_UPLOAD_KEY_PASSWORD -signedjar "$RUNNER_TEMP/axis-play-internal-REVIEW.aab" android/app/build/outputs/bundle/release/app-release.aab "$AXIS_PLAY_UPLOAD_KEY_ALIAS" >/dev/null
+          jarsigner -verify "$RUNNER_TEMP/axis-play-internal-REVIEW.aab"
+          echo "AXIS_PLAY_SIGNED_REVIEW_AAB=$RUNNER_TEMP/axis-play-internal-REVIEW.aab" >> "$GITHUB_ENV"
+          echo "- Signed with verified Play upload key; upload requires separate manual approval" >> "$GITHUB_STEP_SUMMARY"
+          rm -f "$RUNNER_TEMP/axis-play-upload.jks"
+      - name: Save SIGNED REVIEW AAB only, never unsigned placeholder
+        if: success() && env.AXIS_PLAY_SIGN_CANDIDATE == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: axis-play-internal-review-aab-DO-NOT-PUBLISH
+          path: ${{ env.AXIS_PLAY_SIGNED_REVIEW_AAB }}
+          if-no-files-found: error
