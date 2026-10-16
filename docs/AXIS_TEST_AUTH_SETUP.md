@@ -1,48 +1,33 @@
-# Axis 3D Test authentication checklist
+# Axis 3D Test authentication and recovery checklist
 
-This document applies ONLY to the **Axis 3D Test** Supabase project. Do not change production Axis.
+Applies ONLY to the isolated **Axis 3D Test** Supabase project, not production Axis.
 
-## Email templates needed for the new Android code-based flows
+## Default Supabase emails (no SMTP setup)
 
-The test APK does **not** handle a web link redirect or Android app-link callback. It verifies a six-digit code INSIDE the app.
+Supabase's default built-in templates send clickable confirmation and recovery **links**. On the user's test project's free configuration, email template editing requires custom SMTP; **do not configure SMTP solely for testing**.
 
-In Supabase > Axis 3D Test > Authentication > Email Templates:
+The test APK supports those unmodified templates:
 
-1. Open **Confirm signup**. Replace its body with:
-
-```html
-<h2>Confirm your Axis 3D Test account</h2>
-<p>Enter this code in the Axis app:</p>
-<p><strong>{{ .Token }}</strong></p>
-<p>If you did not create this account, ignore this message.</p>
-```
-
-2. Open **Reset password**. Replace its body with:
-
-```html
-<h2>Reset your Axis 3D Test password</h2>
-<p>Enter this code in the Axis app:</p>
-<p><strong>{{ .Token }}</strong></p>
-<p>If you did not request a reset, ignore this message.</p>
-```
-
-Do not include `{{ .ConfirmationURL }}` in these test templates; that uses the default localhost redirect instead of the in-app code.
-
-Supabase sends these codes with standard rate limits and expiry. Request a fresh code if it expires.
+- **Sign up:** Create a TEST account in Axis > Cloud. Open the confirmation link from your email in a browser. Return to Axis and sign in with the email and original password. You may see a generic redirect page after confirming; login in Axis still happens separately.
+- **Forgot password:** In Axis > Cloud > Forgot password, enter the test-account email and request a reset. In the email, **long press** the password-reset link and select **Copy link address**. **Do not open it first**; visiting the link consumes the one-time token. Return to Axis and paste the link into the reset form, enter a new password of at least 8 characters and submit. After a successful reset, sign in with the new password.
+- The pasted link must be an HTTPS URL for the exact isolated test Supabase host, with path `/auth/v1/verify`, `type=recovery`, and a valid `token` hash. Axis never navigates to arbitrary pasted links. The recovery verification session is used only to update the password and is not saved as a cloud login.
+- Expired or previously visited links must be re-requested. Default email rate limits apply. Test the flow on disposable test credentials before relying on it.
+- **No Android package ID, Supabase SMTP settings, Site URL, redirect allowlist, or production app modifications are needed for this copy-link fallback.** This is a deliberate manual fallback; an automatic app-link flow requires further isolated redirect configuration and device tests.
 
 ## Test plan
 
-- Create a **separate test account**, confirm using the email code, sign in.
-- Sign out and request a password reset, enter code and a new password, then sign in with the new password.
-- Create a **throwaway** model and back it up, then restore it. Check geometry, settings, and reference images.
-- On the throwaway account ONLY, enter current password and type DELETE, approve the confirmation, and verify both Auth user and backup files disappeared. Local models must remain.
-- Use a second test account to prove it cannot view, restore, modify, or delete another account's backups or Pro entitlement.
-- Keep production Pro/checkout disabled until verified Google Play purchases and server-validated entitlements are implemented.
+- Confirm a **disposable** test account via the default email link and sign in.
+- Sign out, copy (do not open) the default password-recovery email link into Axis, update the password, then sign in using the new password.
+- Keep the existing account and backed-up model intact. For additional backup tests, create a *throwaway* model and back it up, restore it, inspect geometry and reference images.
+- Test account deletion only with a brand-new throwaway account and explicitly approved test data; never delete the existing user's account.
+- With two disposable test accounts, test that neither can see, restore, modify, or delete the other's backups or Pro entitlement.
+- Keep purchases and Pro access disabled until Play purchases are server-verified.
 
 ## Remaining before production
 
-- Email delivery through a production SMTP provider and appropriate rate limits.
-- Security policies, cross-account tests, account deletion integration tests, and recovery UX/device tests.
-- Enable leaked-password protection if the Supabase plan allows it.
-- Implement Google Play Billing purchase-token verification by a trusted server, a verified webhook/RTDN listener, renewals/refunds/cancellations, and an authenticated entitlement response. No test account currently has Pro privileges.
-- Fix pre-existing modeling/typecheck regressions separately. Do not hide them or auto-merge either PR.
+- Improve the UX to launch and securely return from email links directly to the Android app, including redirect allowlist and installed-app verification.
+- Configure production-quality SMTP and email deliverability when ready to serve real users.
+- Finish end-to-end signup, recovery, cross-account RLS, and deletion tests on disposable accounts.
+- Enable leaked-password protection if available.
+- Implement Google Play Billing token verification on a trusted server, RTDN/refunds/renewals and authenticated entitlements before enabling Pro.
+- Fix pre-existing modeling and TypeScript errors without bypassing tests or merging unreviewed work.
