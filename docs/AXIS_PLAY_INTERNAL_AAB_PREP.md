@@ -17,7 +17,7 @@ The isolated GitHub Actions workflow `.github/workflows/axis-play-internal-bundl
 A signed review artifact is forbidden unless **all** of the following are provided on this test repository:
 
 1. Confirm in Play Console > Test and release > App bundle explorer that the intended internal version code is **larger than EVERY version code already uploaded**. Set a GitHub Actions **repository variable** `AXIS_PLAY_INTERNAL_VERSION_CODE` to that code. It must be greater than the source default (25); do not assume 26 works.
-2. Locate the existing **UPLOAD KEY certificate** SHA-256 fingerprint in Play Console (App integrity > App signing, or the current equivalent). It is NOT necessarily the Play **app-signing** certificate. Set repository variable `AXIS_PLAY_EXPECTED_UPLOAD_CERT_SHA256` to that fingerprint.
+2. **UPLOAD KEY certificate fingerprint verified:** `B7:5B:33:41:01:46:16:F1:A3:66:E0:82:60:81:F4:5C:C9:6C:22:08:B6:F7:51:80:A5:30:01:C1:3B:57:1A:1A`. This is the **public upload certificate** shown on Play Console > Protected with Play > App signing, not the Play app-signing certificate. The workflow now pins this fingerprint; no fingerprint variable needs configuring.
 3. Only if the actual **existing Play upload keystore** and its password/alias are available, configure four GitHub Actions **repository secrets**:
    - `AXIS_PLAY_UPLOAD_KEYSTORE_BASE64`: base64 of the **real existing Play upload** .jks or .keystore file, not the Axis TEST .debug key.
    - `AXIS_PLAY_UPLOAD_STORE_PASSWORD`
