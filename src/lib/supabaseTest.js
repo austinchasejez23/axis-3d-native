@@ -114,3 +114,45 @@ export async function signOutOfCloud() {
     catch { /* Local sign-out must still work without a connection. */ }
   }
 }
+
+
+// These flows use a six-digit code INSIDE Axis. No localhost redirect or
+// custom Android URI handler is required. Supabase's email templates must show
+// {{ .Token }} for the sign-up confirmation and password-recovery messages.
+export async function verifySignUpCode(email, code) {
+  const response = await request('/auth/v1/verify', {
+    method: 'POST',
+    body: { email: email.trim(), token: code.trim(), type: 'email' },
+  });
+  return saveSession(response);
+}
+
+export async function requestPasswordResetCode(email) {
+  await request('/auth/v1/recover', {
+    method: 'POST', body: { email: email.trim() },
+  });
+}
+
+export async function resetPasswordWithCode(email, code, newPassword) {
+  if (newPassword.length < 8) throw new Error('Your new password must contain at least 8 characters.');
+  // OTP verifies ownership of the email address and yields a short-lived session.
+  const verification = await request('/auth/v1/verify', {
+    method: 'POST', body: { email: email.trim(), token: code.trim(), type: 'recovery' },
+  });
+  if (!verification.access_token) throw new Error('The reset code did not provide a valid session.');
+  await request('/auth/v1/user', {
+    method: 'PUT', token: verification.access_token, body: { password: newPassword },
+  });
+  // Do not cache tokens from a password recovery or silently grant any Pro access.
+  localStorage.removeItem(SESSION_KEY);
+}
+
+export async function deleteCloudAccount(password, confirmation) {
+  if (confirmation !== 'DELETE' || !password) throw new Error('Enter your current password and type DELETE.');
+  // The Edge Function independently verifies the JWT and the current password.
+  const result = await cloudRequest('/functions/v1/axis-test-delete-account', {
+    method: 'POST', body: { password, confirm: confirmation },
+  });
+  localStorage.removeItem(SESSION_KEY);
+  return result;
+}
