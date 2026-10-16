@@ -14,7 +14,7 @@ const subscription = {
 const check = (type, id, data) => inspectPlayPurchase(type, id, data, time);
 
 assert.deepEqual(check('subs', product, subscription), {
-  accepted: true, reason: 'google_subscription_active', expiry: future,
+  accepted: true, reason: 'google_subscription_active', expiry: new Date(future).toISOString(),
 });
 assert.equal(check('subs', product, { ...subscription, subscriptionState: 'SUBSCRIPTION_STATE_IN_GRACE_PERIOD' }).accepted, true);
 for (const state of [
