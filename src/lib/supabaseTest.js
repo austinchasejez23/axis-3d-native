@@ -116,34 +116,56 @@ export async function signOutOfCloud() {
 }
 
 
-// These flows use a six-digit code INSIDE Axis. No localhost redirect or
-// custom Android URI handler is required. Supabase's email templates must show
-// {{ .Token }} for the sign-up confirmation and password-recovery messages.
-export async function verifySignUpCode(email, code) {
-  const response = await request('/auth/v1/verify', {
-    method: 'POST',
-    body: { email: email.trim(), token: code.trim(), type: 'email' },
-  });
-  return saveSession(response);
-}
-
-export async function requestPasswordResetCode(email) {
+// Supabase's unmodified default emails contain confirmation / recovery LINKS,
+// not the optional {{ .Token }} code. Signup is confirmed in the user's browser,
+// after which they sign in normally. Password recovery works with a copied link,
+// so no custom SMTP, redirect allowlist, or Android URI handler is required.
+export async function requestPasswordResetEmail(email) {
   await request('/auth/v1/recover', {
     method: 'POST', body: { email: email.trim() },
   });
 }
 
-export async function resetPasswordWithCode(email, code, newPassword) {
+// Accept only an ORIGINAL recovery link for this isolated Axis TEST project.
+// Never fetch or navigate to arbitrary user-supplied links; only send the token
+// hash to our own Supabase Auth endpoint over HTTPS.
+export function parseRecoveryEmailLink(link) {
+  if (typeof link !== 'string' || link.trim().length > 8192) {
+    throw new Error('Paste the complete reset link from the email.');
+  }
+  let parsed;
+  try { parsed = new globalThis.URL(link.trim()); }
+  catch { throw new Error('Paste the complete reset link from the email.'); }
+  if (parsed.protocol !== 'https:' || parsed.origin !== URL || parsed.pathname !== '/auth/v1/verify') {
+    throw new Error('This is not an Axis 3D Test password-reset link.');
+  }
+  if (parsed.searchParams.getAll('type').length !== 1 || parsed.searchParams.get('type') !== 'recovery') {
+    throw new Error('This link is not for password recovery.');
+  }
+  const tokens = parsed.searchParams.getAll('token');
+  if (tokens.length !== 1 || !/^[a-zA-Z0-9_-]{16,512}$/.test(tokens[0])) {
+    throw new Error('The reset link is incomplete or invalid.');
+  }
+  return tokens[0];
+}
+
+export async function resetPasswordWithEmailLink(email, link, newPassword) {
   if (newPassword.length < 8) throw new Error('Your new password must contain at least 8 characters.');
-  // OTP verifies ownership of the email address and yields a short-lived session.
+  const token_hash = parseRecoveryEmailLink(link);
   const verification = await request('/auth/v1/verify', {
-    method: 'POST', body: { email: email.trim(), token: code.trim(), type: 'recovery' },
+    method: 'POST', body: { token_hash, type: 'recovery' },
   });
-  if (!verification.access_token) throw new Error('The reset code did not provide a valid session.');
+  if (!verification.access_token || !verification.user?.id || !verification.user.email) {
+    throw new Error('The recovery link did not return a valid account session.');
+  }
+  if (verification.user.email.toLowerCase() !== email.trim().toLowerCase()) {
+    throw new Error('That reset link belongs to a different account email. Request a new link for the email entered above.');
+  }
   await request('/auth/v1/user', {
     method: 'PUT', token: verification.access_token, body: { password: newPassword },
   });
-  // Do not cache tokens from a password recovery or silently grant any Pro access.
+  // Recovery tokens never become the app's normal sign-in session.
+  // An existing cloud session is cleared only after a successful password change.
   localStorage.removeItem(SESSION_KEY);
 }
 
