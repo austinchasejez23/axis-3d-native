@@ -1,26 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ArrowLeft, Cloud, CloudDownload, CloudUpload, Loader2, LogOut, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { listProjects } from '@/lib/storage';
 import { FREE_PROJECT_LIMIT } from '@/lib/proAccess';
-import { getCloudSession, signInWithEmail, signUpWithEmail, signOutOfCloud, verifySignUpCode } from '@/lib/supabaseTest';
+import { getCloudSession, signInWithEmail, signUpWithEmail, signOutOfCloud } from '@/lib/supabaseTest';
 import { listCloudBackups, backupLocalProject, restoreCloudBackup, deleteCloudBackup } from '@/lib/cloudSync';
 import { checkPlayBillingConnection } from '@/lib/playBillingTest';
 
 export default function CloudBackups() {
+  const location = useLocation();
   const [session, setSession] = useState(() => getCloudSession());
   const [mode, setMode] = useState('sign-in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [confirmationPending, setConfirmationPending] = useState(false);
-  const [confirmationCode, setConfirmationCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [remote, setRemote] = useState([]);
   const [local, setLocal] = useState(() => listProjects());
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState(() => location.state?.passwordReset ? 'Password changed. Sign in with your new password.' : '');
   const [billingStatus, setBillingStatus] = useState(null);
   const [billingChecking, setBillingChecking] = useState(false);
 
@@ -63,8 +62,7 @@ export default function CloudBackups() {
       if (mode === 'register') {
         const result = await signUpWithEmail(email, password);
         if (!result.session) {
-          setMessage('Check your email. If it includes a six-digit confirmation code, enter it below. You can also confirm using the emailed link and then sign in.');
-          setConfirmationPending(true);
+          setMessage('Check your email and open the confirmation link. After confirming, return to Axis and sign in. No code is needed.');
           setMode('sign-in');
         } else {
           setSession(result.session);
@@ -80,18 +78,6 @@ export default function CloudBackups() {
     } finally {
       setBusy(false);
     }
-  }
-
-  async function verifyCode(event) {
-    event.preventDefault();
-    setBusy(true); setError(''); setMessage('');
-    try {
-      const next = await verifySignUpCode(email, confirmationCode);
-      setSession(next);
-      setConfirmationPending(false);
-      setPassword(''); setConfirmationCode('');
-    } catch (err) { setError(err.message || 'Confirmation code was not accepted.'); }
-    finally { setBusy(false); }
   }
 
   async function signOut() {
@@ -151,11 +137,6 @@ export default function CloudBackups() {
             <button className={buttonClass + ' w-full bg-white/10'} disabled={busy} type="submit">{busy ? 'Please wait...' : mode === 'register' ? 'Create account' : 'Sign in'}</button>
             <button type="button" className="text-sm text-white/70 underline" onClick={() => { setMode(mode === 'register' ? 'sign-in' : 'register'); setError(''); }}>{mode === 'register' ? 'Already have an account? Sign in' : 'Create a test account instead'}</button>
             <div className="mt-2"><Link to="/forgot-password" className="text-sm text-white/70 underline">Forgot password?</Link></div>
-            {confirmationPending && <div className="mt-4 space-y-2 border-t border-white/20 pt-3">
-              <p className="text-sm text-white/80">Enter your email confirmation code (if supplied in your email).</p>
-              <input aria-label="Six-digit confirmation code" type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoComplete="one-time-code" value={confirmationCode} onChange={e=>setConfirmationCode(e.target.value)} className="h-11 w-full rounded-lg border border-white/20 bg-black px-3 text-white" />
-              <button type="button" onClick={verifyCode} disabled={busy || !/^[0-9]{6}$/.test(confirmationCode)} className={buttonClass + ' w-full'}>Confirm email</button>
-            </div>}
           </form>
         ) : (
           <>
