@@ -2,7 +2,7 @@
 // Disabled without explicit server-side configuration. No Play purchase launch,
 // receipt ledger write, acknowledgement, or Pro entitlement grant exists here.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { inspectPlayPurchase } from "../_shared/playPurchaseRules.mjs";
+import { inspectPlayPurchase } from "./playPurchaseRules.mjs";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
