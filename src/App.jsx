@@ -16,6 +16,7 @@ import About from '@/pages/About';
 import Contact from '@/pages/Contact';
 import PageNotFound from '@/lib/PageNotFound';
 import ProjectLockGate from '@/components/library/ProjectLockGate';
+import CloudBackups from '@/pages/Cloud';
 
 function AppRoutes() {
   const location = useLocation();
@@ -25,6 +26,7 @@ function AppRoutes() {
         <Route path="/" element={<Splash />} />
         <Route path="/library" element={<RouteTransition><Library /></RouteTransition>} />
         <Route path="/modeler" element={<ProjectLockGate><PageTransition><Modeler /></PageTransition></ProjectLockGate>} />
+        <Route path="/cloud" element={<CloudBackups />} />
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/account-deletion" element={<AccountDeletion />} />
