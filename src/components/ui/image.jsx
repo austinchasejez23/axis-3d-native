@@ -4,7 +4,23 @@ import { cn } from '@/lib/utils';
 const FALLBACK = '/media/92bec63fb_file_00000000a990820d8515bede88972084.png';
 
 // Images are bundled/local. Do not request hosted image transformations.
-const Image = React.forwardRef(function Image({
+/**
+ * @typedef {import('react').ImgHTMLAttributes<HTMLImageElement> & {
+ *   fittingType?: 'fit' | 'fill',
+ *   originWidth?: number,
+ *   originHeight?: number,
+ *   focalPointX?: number,
+ *   focalPointY?: number
+ * }} LocalImageProps
+ */
+
+/**
+ * Preserve the standard img props and forwarded ref in this JavaScript
+ * component without introducing a new TypeScript module.
+ * @param {LocalImageProps} props
+ * @param {import('react').ForwardedRef<HTMLImageElement>} ref
+ */
+function ImageElement({
   src, fittingType = 'fill', originWidth, originHeight,
   focalPointX, focalPointY, className, style, onError, ...props
 }, ref) {
@@ -31,6 +47,7 @@ const Image = React.forwardRef(function Image({
       }}
     />
   );
-});
+}
+const Image = React.forwardRef(ImageElement);
 Image.displayName = 'Image';
 export { Image };

@@ -705,7 +705,6 @@ export default function Modeler() {
       }
       const result = await downloadFile(content, `${filename}.${format}`, mimeType);
       if (result === 'shared') toast.success(`${format.toUpperCase()} sent to Android save/share sheet`);
-      else if (result === 'https') toast.message(`${format.toUpperCase()} private download link opened`);
       else toast.message(`${format.toUpperCase()} download attempted. Check Downloads.`);
     } catch (error) {
       console.error('Model export failed:', error);
