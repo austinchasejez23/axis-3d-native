@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "android:sync": "vite build && cap sync android",
     "android:open": "cap open android",
-    "test:standalone": "node scripts/standalone-regression.mjs && node scripts/supabase-test-regression.mjs && node scripts/account-deletion-edge-regression.mjs && node scripts/backup-integrity-regression.mjs && node scripts/play-billing-safety-regression.mjs && node scripts/apk-signing-regression.mjs"
+    "test:standalone": "node scripts/standalone-regression.mjs && node scripts/supabase-test-regression.mjs && node scripts/account-deletion-edge-regression.mjs && node scripts/backup-integrity-regression.mjs && node scripts/play-billing-safety-regression.mjs && node scripts/apk-signing-regression.mjs && node scripts/play-purchase-verifier-regression.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^17.0.0",
