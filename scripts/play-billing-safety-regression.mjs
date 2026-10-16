@@ -22,5 +22,9 @@ assert.doesNotMatch(plugin, /\.consumeAsync\s*\(/);
 assert.match(bridge, /registerPlugin\('AxisPlayBilling'\)/);
 assert.match(bridge, /Capacitor\.isNativePlatform\(\)/);
 assert.match(bridge, /purchasesEnabled:\s*false/);
+assert.match(bridge, /connected\s*\? 'Google Play Billing service ready\.'/,
+  'A successful connection with an empty debug message must not look like a failure.');
+assert.doesNotMatch(bridge, /No response from Google Play Billing/,
+  'Do not conflate an empty optional debug message with a missing native response.');
 assert.match(access, /isPro:\s*false/, 'No unconditional Pro access');
 console.log('Play Billing native connection is read-only; checkout and Pro entitlement remain disabled.');
