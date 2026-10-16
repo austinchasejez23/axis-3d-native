@@ -137,11 +137,11 @@ export default function CloudBackups() {
             <button className={buttonClass + ' w-full bg-white/10'} disabled={busy} type="submit">{busy ? 'Please wait...' : mode === 'register' ? 'Create account' : 'Sign in'}</button>
             <button type="button" className="text-sm text-white/70 underline" onClick={() => { setMode(mode === 'register' ? 'sign-in' : 'register'); setError(''); }}>{mode === 'register' ? 'Already have an account? Sign in' : 'Create a test account instead'}</button>
             <div className="mt-2"><Link to="/forgot-password" className="text-sm text-white/70 underline">Forgot password?</Link></div>
-            {confirmationPending && <form onSubmit={verifyCode} className="mt-4 space-y-2 border-t border-white/20 pt-3">
+            {confirmationPending && <div className="mt-4 space-y-2 border-t border-white/20 pt-3">
               <p className="text-sm text-white/80">Enter your email confirmation code (if supplied in your email).</p>
               <input aria-label="Six-digit confirmation code" type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoComplete="one-time-code" value={confirmationCode} onChange={e=>setConfirmationCode(e.target.value)} className="h-11 w-full rounded-lg border border-white/20 bg-black px-3 text-white" />
-              <button type="submit" disabled={busy} className={buttonClass + ' w-full'}>Confirm email</button>
-            </form>}
+              <button type="button" onClick={verifyCode} disabled={busy || !/^[0-9]{6}$/.test(confirmationCode)} className={buttonClass + ' w-full'}>Confirm email</button>
+            </div>}
           </form>
         ) : (
           <>
