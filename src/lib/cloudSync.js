@@ -77,7 +77,7 @@ export async function restoreCloudBackup(record, maxProjects) {
     id: generateProjectId(), name: name + ' (restored)',
     meshes: scene.meshes, lights: Array.isArray(scene.lights) ? scene.lights : [],
     settings: scene.settings || null,
-    thumbnail: typeof project.thumbnail === 'string' && project.thumbnail.startsWith('data:image/') ? project.thumbnail : null,
+    thumbnail: typeof project.thumbnail === 'string' && project.thumbnail.length < 300000 && /^data:image\/(?:png|jpeg|webp);base64,/i.test(project.thumbnail) ? project.thumbnail : null,
   });
   return name;
 }
