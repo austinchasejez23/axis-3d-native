@@ -1,9 +1,9 @@
 import { listProjects, saveProject, generateProjectId } from './storage';
 import { getMeshes } from './projectStore';
 import { cloudRequest, getCloudIdentity } from './supabaseTest';
+import { BACKUP_MAX_BYTES, serializeBackup, deserializeBackup } from './backupEnvelope';
 
 const BUCKET = 'axis-model-backups';
-const MAX_BYTES = 50 * 1024 * 1024;
 
 function assertUuid(value) {
   if (!/^[a-f\d]{8}-[a-f\d]{4}-[1-8][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(value)) {
@@ -32,12 +32,7 @@ export async function backupLocalProject(localId) {
   if (!scene) throw new Error('Local geometry was not found. Nothing was uploaded.');
   const serializedScene = Array.isArray(scene) ? { meshes: scene, lights: [], settings: null } : scene;
   if (!Array.isArray(serializedScene.meshes)) throw new Error('The local model cannot be backed up safely.');
-  const payload = {
-    schemaVersion: 1,
-    project: { name: local.name, scene: serializedScene },
-  };
-  const json = JSON.stringify(payload);
-  if (new Blob([json]).size > MAX_BYTES) throw new Error('This model exceeds the 50 MB test-backup limit.');
+  const json = await serializeBackup({ name: local.name, scene: serializedScene });
   const filter = encodeURIComponent(localId);
   const rows = await cloudRequest('/rest/v1/axis_cloud_projects?select=id,storage_path&client_project_id=eq.' + filter + '&limit=1');
   const previous = rows?.[0];
@@ -70,12 +65,14 @@ export async function restoreCloudBackup(record, maxProjects) {
   if (record.storage_path !== expected) throw new Error('Unexpected backup path. Restore cancelled.');
   if (listProjects().length >= maxProjects) throw new Error('The Free project limit is reached. No models were overwritten.');
   const response = await cloudRequest(objectEndpoint(expected), { raw: true });
-  const payload = await response.json();
-  if (payload?.schemaVersion !== 1 || !payload?.project || !Array.isArray(payload.project.scene?.meshes)) {
-    throw new Error('This backup is not a supported Axis 3D project.');
-  }
-  const name = String(payload.project.name || record.name || 'Restored model').slice(0, 255);
-  const scene = payload.project.scene;
+  const reportedBytes = Number(response.headers.get('content-length'));
+  if (reportedBytes > BACKUP_MAX_BYTES) throw new Error('This cloud backup exceeds the safe restore size.');
+  // Verify before writing ANY geometry to IndexedDB or touching the library.
+  const project = await deserializeBackup(await response.text());
+  // The model limit may change while an upload/restore is in flight.
+  if (listProjects().length >= maxProjects) throw new Error('The Free project limit is reached. No models were overwritten.');
+  const name = String(project.name || record.name || 'Restored model').slice(0, 255);
+  const scene = project.scene;
   await saveProject({
     id: generateProjectId(), name: name + ' (restored)',
     meshes: scene.meshes, lights: Array.isArray(scene.lights) ? scene.lights : [],
