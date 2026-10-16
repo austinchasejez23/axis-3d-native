@@ -7,7 +7,9 @@ android {
         applicationId "com.base6a5340f43f8fd031c5921680.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 25
+        // Manual Play internal-catalog preparation may supply a unique code.
+        // Defaults stay unchanged for the standalone/debug/test builds.
+        versionCode Integer.parseInt((project.findProperty("axisPlayInternalVersionCode") ?: "25").toString())
         versionName "25.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
