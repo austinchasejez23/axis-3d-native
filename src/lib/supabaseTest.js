@@ -1,4 +1,4 @@
-// Isolated, test-only Supabase integration. No service_role key in the app.
+// Isolated, test-only Supabase integration. No privileged credentials in the app.
 // Auth is optional: local modeling and local saves must work offline.
 const URL = 'https://zjlrwjxolxorrxpolcdf.supabase.co';
 const KEY = 'sb_publishable_GZHhwBl_usG9461NYDHIuQ_5zkBqthr';
