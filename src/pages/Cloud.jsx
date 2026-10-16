@@ -50,7 +50,7 @@ export default function CloudBackups() {
 
   async function submitCredentials(event) {
     event.preventDefault();
-    if (password.length < 8) { setError('Use at least 8 characters for the password.'); return; }
+    if (mode === 'register' && password.length < 8) { setError('Use at least 8 characters for a new password.'); return; }
     setBusy(true);
     setError('');
     setMessage('');
