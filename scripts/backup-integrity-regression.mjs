@@ -4,6 +4,7 @@ import { serializeBackup, deserializeBackup, BACKUP_MAX_BYTES } from '../src/lib
 // No real Supabase requests, accounts, payments or device data in these tests.
 const project = {
   name: 'Test curve 🛠',
+  thumbnail: 'data:image/jpeg;base64,AQIDBA==',
   scene: {
     meshes: [
       {
