@@ -32,7 +32,7 @@ export async function backupLocalProject(localId) {
   if (!scene) throw new Error('Local geometry was not found. Nothing was uploaded.');
   const serializedScene = Array.isArray(scene) ? { meshes: scene, lights: [], settings: null } : scene;
   if (!Array.isArray(serializedScene.meshes)) throw new Error('The local model cannot be backed up safely.');
-  const json = await serializeBackup({ name: local.name, scene: serializedScene });
+  const json = await serializeBackup({ name: local.name, scene: serializedScene, thumbnail: local.thumbnail || null });
   const filter = encodeURIComponent(localId);
   const rows = await cloudRequest('/rest/v1/axis_cloud_projects?select=id,storage_path&client_project_id=eq.' + filter + '&limit=1');
   const previous = rows?.[0];
@@ -77,6 +77,7 @@ export async function restoreCloudBackup(record, maxProjects) {
     id: generateProjectId(), name: name + ' (restored)',
     meshes: scene.meshes, lights: Array.isArray(scene.lights) ? scene.lights : [],
     settings: scene.settings || null,
+    thumbnail: typeof project.thumbnail === 'string' && project.thumbnail.startsWith('data:image/') ? project.thumbnail : null,
   });
   return name;
 }
