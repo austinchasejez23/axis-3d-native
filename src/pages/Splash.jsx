@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/lib/AuthContext';
-import { useProAccess } from '@/lib/ProAccessContext';
-import { prepareLibraryStartup } from '@/lib/libraryStartup';
 
 const VIDEO_URL = '/splash/axis_splash_v3.mp4';
 // A video with no poster draws the browser's own huge grey play button until
@@ -15,11 +12,8 @@ const CREDIT_AT_MS = 4000;
 
 export default function Splash() {
   const navigate = useNavigate();
-  const { isAuthenticated, user, isLoadingAuth, isLoadingPublicSettings } = useAuth();
-  const { isPro } = useProAccess();
   const [creditIn, setCreditIn] = useState(false);
   const [videoEnded, setVideoEnded] = useState(false);
-  const [libraryReady, setLibraryReady] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setCreditIn(true), CREDIT_AT_MS);
@@ -27,19 +21,8 @@ export default function Splash() {
   }, []);
 
   useEffect(() => {
-    if (isLoadingAuth || isLoadingPublicSettings) return;
-    if (!isAuthenticated) { setLibraryReady(true); return; }
-    let cancelled = false;
-    prepareLibraryStartup(user, isPro)
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLibraryReady(true); });
-    return () => { cancelled = true; };
-  }, [isAuthenticated, isLoadingAuth, isLoadingPublicSettings, isPro, user]);
-
-  useEffect(() => {
-    if (!videoEnded || isLoadingAuth || isLoadingPublicSettings || !libraryReady) return;
-    navigate(isAuthenticated ? '/library' : '/login', { state: { fromSplash: true } });
-  }, [videoEnded, libraryReady, isAuthenticated, isLoadingAuth, isLoadingPublicSettings, navigate]);
+    if (videoEnded) navigate('/library', { replace: true, state: { fromSplash: true } });
+  }, [videoEnded, navigate]);
 
   return (
     <motion.div
@@ -59,6 +42,7 @@ export default function Splash() {
           className="absolute inset-0 h-full w-full bg-black object-contain"
           aria-label="AXIS splash animation"
           onEnded={() => setVideoEnded(true)}
+          onError={() => setVideoEnded(true)}
         />
       </div>
 

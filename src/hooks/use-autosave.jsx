@@ -1,8 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { saveProject, listProjects } from '@/lib/storage';
-import { backupProjectToCloud } from '@/lib/cloudBackup';
-import { base44 } from '@/api/base44Client';
 import { isAccountDeletionActive } from '@/lib/accountDeletionState';
 import { theme } from '@/lib/theme';
 
@@ -25,9 +23,6 @@ export default function useAutoSave(managerRef, projectName, onSaved, { isPro = 
   useEffect(() => {
     let pointerDown = false;
     let pending = false;
-    let signedIn = false;
-    let lastCloudSignature = null;
-    base44.auth.isAuthenticated().then((value) => { signedIn = value; });
 
     const sceneSignature = (mgr) => [
       mgr.projectName,
@@ -74,18 +69,6 @@ export default function useAutoSave(managerRef, projectName, onSaved, { isPro = 
         });
     };
 
-    const backupOnClose = () => {
-      if (isAccountDeletionActive()) return;
-      const mgr = managerRef.current;
-      if (!isPro || !signedIn || !mgr || mgr.meshes.length === 0) return;
-      mgr.projectName = projectName || 'Untitled';
-      const signature = sceneSignature(mgr);
-      if (signature === lastCloudSignature) return;
-      lastCloudSignature = signature;
-      const project = { ...mgr.serialize(), thumbnail: mgr.captureThumbnail() };
-      saveProject(project).then(() => backupProjectToCloud(project)).catch(() => {});
-    };
-
     // Establish the initial baseline as soon as the viewport manager exists,
     // before the normal autosave interval begins.
     let baselineFrame;
@@ -99,9 +82,9 @@ export default function useAutoSave(managerRef, projectName, onSaved, { isPro = 
     const onDown = () => { pointerDown = true; };
     const onUp = () => { pointerDown = false; if (pending) persist(); };
     const onHide = () => {
-      if (document.visibilityState === 'hidden') { persist(true); backupOnClose(); }
+      if (document.visibilityState === 'hidden') { persist(true); }
     };
-    const onLeave = () => { persist(true); backupOnClose(); };
+    const onLeave = () => { persist(true); };
 
     window.addEventListener('pointerdown', onDown, true);
     window.addEventListener('pointerup', onUp, true);
@@ -117,7 +100,7 @@ export default function useAutoSave(managerRef, projectName, onSaved, { isPro = 
       document.removeEventListener('visibilitychange', onHide);
       window.removeEventListener('pagehide', onLeave);
       persist(true);
-      backupOnClose();
+     
     };
   }, [managerRef, projectName, onSaved, isPro, onProjectLimit]);
 }

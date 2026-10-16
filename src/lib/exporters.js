@@ -131,24 +131,8 @@ export async function downloadFile(content, filename, mimeType = 'text/plain') {
       }
     }
   }
-  // A native Android WebView may ignore blob: URLs entirely. Fall back to
-  // an HTTPS download URL backed by a private, signed Base44 file.
-  if (isAndroid) {
-    const { base44 } = await import('@/api/base44Client');
-    const file = new File([blob], filename, { type: mimeType });
-    const { file_uri } = await base44.integrations.Core.UploadPrivateFile({ file });
-    if (!file_uri) throw new Error('Could not prepare export for Android download.');
-    const { signed_url } = await base44.integrations.Core.CreateFileSignedUrl({ file_uri });
-    if (!signed_url) throw new Error('Could not create Android download link.');
-    const link = document.createElement('a');
-    link.href = signed_url;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    return 'https';
-  }
+  // No server upload fallback: Android uses the local share sheet when
+  // available, otherwise we request a browser download from a local blob.
   const url = URL.createObjectURL(blob);
   try {
     const a = document.createElement('a');
