@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { inspectPlayPurchase } from '../supabase/functions/_shared/playPurchaseRules.mjs';
+import { inspectPlayPurchase } from '../supabase/functions/axis-test-play-verify/playPurchaseRules.mjs';
 
 const time = Date.parse('2026-10-16T12:00:00Z');
 const future = '2026-11-16T12:00:00Z';
