@@ -72,3 +72,51 @@ jobs:
           name: standalone-axis-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+  baseline-comparison:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out original pre-migration commit
+        uses: actions/checkout@v4
+        with:
+          ref: bc3e7ddf9255b6f45cc46cfd28e2a32836eea952
+          path: before
+      - name: Check out proposed migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: after
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install baseline and migration dependencies
+        run: |
+          npm ci --prefix before
+          npm ci --prefix after
+      - name: Run both original checks without altering their exit codes
+        run: |
+          set +e
+          (cd before && node scripts/boolean-edge-regression.mjs) > before-boolean.log 2>&1
+          echo "BASE_BOOLEAN=$?" >> "$GITHUB_ENV"
+          (cd after && node scripts/boolean-edge-regression.mjs) > after-boolean.log 2>&1
+          echo "AFTER_BOOLEAN=$?" >> "$GITHUB_ENV"
+          (cd before && npm run typecheck) > before-typecheck.log 2>&1
+          echo "BASE_TYPECHECK=$?" >> "$GITHUB_ENV"
+          (cd after && npm run typecheck) > after-typecheck.log 2>&1
+          echo "AFTER_TYPECHECK=$?" >> "$GITHUB_ENV"
+      - name: Compare diagnostic messages and failures to original
+        run: node after/scripts/compare-typecheck.mjs before-typecheck.log after-typecheck.log "$BASE_BOOLEAN" "$AFTER_BOOLEAN"
+      - name: Attach independent baseline evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-vs-migration-diagnostics
+          path: |
+            before-boolean.log
+            after-boolean.log
+            before-typecheck.log
+            after-typecheck.log
+            comparison.md
+      - name: Put comparison into workflow summary
+        if: always()
+        run: if [ -f comparison.md ]; then cat comparison.md >> "$GITHUB_STEP_SUMMARY"; fi
