@@ -54,9 +54,10 @@ assert.equal(signedIn.user.id, fakeUser.id);
 assert.ok(cloud.getCloudSession());
 calls = [];
 await cloud.deleteCloudAccount('test-password','DELETE');
-assert.ok(calls.some(c => c.url.includes('/auth/v1/user')));
 const deletionCall = calls.find(c => c.url.includes('/functions/v1/axis-test-delete-account'));
 assert.ok(deletionCall);
+assert.match(deletionCall.headers.Authorization, /^Bearer /, 'Deletion must forward an authenticated token.');
+assert.equal(deletionCall.method, 'POST');
 assert.equal(JSON.parse(deletionCall.body).confirm,'DELETE');
 assert.equal(cloud.getCloudSession(),null);
 
