@@ -15,12 +15,19 @@ export async function checkPlayBillingConnection() {
   }
   try {
     const response = await nativeBilling.checkConnection();
+    const connected = response.connected === true;
+    const responseCode = Number.isInteger(response.responseCode) ? response.responseCode : null;
+    const diagnostic = typeof response.message === 'string' ? response.message.trim() : '';
     return {
-      connected: response.connected === true,
+      connected,
       purchasesEnabled: false,
       entitlementsEnabled: false,
-      responseCode: response.responseCode,
-      message: response.message || 'No response from Google Play Billing.',
+      responseCode,
+      // BillingClient can legitimately return an empty debug message on success.
+      // Do not show "No response" after a successful native connection.
+      message: diagnostic || (connected
+        ? 'Google Play Billing service ready.'
+        : 'Google Play Billing unavailable (response code ' + (responseCode ?? 'unknown') + ').'),
     };
   } catch (err) {
     return {
