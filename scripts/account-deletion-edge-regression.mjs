@@ -99,5 +99,5 @@ assert(adminDeletes[0].endsWith('/' + currentUser), 'Must only delete authentica
 assert.equal(storageDeletes.filter(x => x.startsWith(currentUser)).length, 107);
 assert(objects.has(otherUser + '/private.json'), 'Other users\' private backups cannot be deleted');
 assert.equal([...objects].filter(x => x.startsWith(currentUser)).length, 0);
-assert(!requestedPaths.some(x => x.includes(otherUser)), 'No other user's data may be requested');
+assert(!requestedPaths.some(x => x.includes(otherUser)), "No other user data may be requested");
 console.log('Account deletion: auth, password, explicit confirmation, failure, pagination and user isolation passed.');
