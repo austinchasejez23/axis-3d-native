@@ -6,8 +6,7 @@ APK instead of over the network.
 
 ## Build it
 
-You need Android Studio (and a JDK 21, which Android Studio bundles). None of
-that exists in the Base44 sandbox, so this has to be done on your machine.
+You need Android Studio (and a JDK 21, which Android Studio bundles). These build tools run on a developer machine or in GitHub Actions.
 
 ```
 npm install
@@ -51,20 +50,21 @@ If you do not have it, there are two ways forward:
 Nothing here forces that decision — the package id is one line if you change
 your mind.
 
-## What still needs a connection
+## Standalone test behavior
 
-Projects already live on the device (IndexedDB), so modelling, saving and
-opening work with no network. The logo, the 15 texture presets and the 7
-reflection environments are now bundled too — they were being fetched from
-`media.base44.com`, and are served from `/media/` inside the app instead.
-The splash video was already local.
+Startup loads the local Library directly, with no account request or backend
+service dependency. Login, registration, Pro checkout, promo management, and
+cloud backups are temporarily disabled. Free-tier project/tool/triangle limits
+still apply; this test does not unlock paid features.
 
-Still online-only:
+Local model data remains in IndexedDB and its Library index remains in
+localStorage, using the original storage identifiers. Reference-image uploads
+are kept in project data on-device. Android export uses local sharing when
+the Web Share API is available; no server-backed download fallback remains.
 
-- **Sign-in, Pro entitlement, cloud backup, promo codes and the contact form**
-  — all go through the Base44 SDK.
-
-That is the remaining piece if you want the modeler usable with no account.
+The package ID above is retained exactly. Debug builds use the existing
+`.debug` suffix so they can be installed beside the release version. Do not
+upload a standalone test artifact to Play without explicit review.
 
 ## Adding or changing a bundled image
 

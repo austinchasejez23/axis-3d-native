@@ -12,7 +12,8 @@
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview",
     "android:sync": "vite build && cap sync android",
-    "android:open": "cap open android"
+    "android:open": "cap open android",
+    "test:standalone": "node scripts/standalone-regression.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^17.0.0",
