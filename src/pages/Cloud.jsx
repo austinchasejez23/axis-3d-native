@@ -6,6 +6,7 @@ import { listProjects } from '@/lib/storage';
 import { FREE_PROJECT_LIMIT } from '@/lib/proAccess';
 import { getCloudSession, signInWithEmail, signUpWithEmail, signOutOfCloud, verifySignUpCode } from '@/lib/supabaseTest';
 import { listCloudBackups, backupLocalProject, restoreCloudBackup, deleteCloudBackup } from '@/lib/cloudSync';
+import { checkPlayBillingConnection } from '@/lib/playBillingTest';
 
 export default function CloudBackups() {
   const [session, setSession] = useState(() => getCloudSession());
@@ -20,6 +21,8 @@ export default function CloudBackups() {
   const [local, setLocal] = useState(() => listProjects());
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [billingStatus, setBillingStatus] = useState(null);
+  const [billingChecking, setBillingChecking] = useState(false);
 
   const refresh = useCallback(async () => {
     setLocal(listProjects());
@@ -118,6 +121,17 @@ export default function CloudBackups() {
         <p className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-white/75">
           Axis works offline without signing in. Backups happen only when you tap Backup. Restoring always creates a new local model; it never overwrites an existing one.
         </p>
+
+        <section className="space-y-2 rounded-lg border border-white/15 bg-white/5 p-3 text-sm">
+          <h2 className="font-semibold">Google Play Billing connection (test only)</h2>
+          <p className="text-white/65">This checks the Android billing service. Purchases and Pro unlocks remain disabled.</p>
+          <button type="button" disabled={billingChecking} className="min-h-10 rounded-lg border border-white/20 px-3 text-white disabled:opacity-40" onClick={async () => {
+            setBillingChecking(true);
+            try { setBillingStatus(await checkPlayBillingConnection()); }
+            finally { setBillingChecking(false); }
+          }}>{billingChecking ? 'Checking...' : 'Check billing connection'}</button>
+          {billingStatus && <p role="status" className="text-white/75">{billingStatus.connected ? 'Connected' : 'Not connected'}: {billingStatus.message} Purchases disabled.</p>}
+        </section>
 
         {error && <p role="alert" className="rounded-lg border border-red-400/40 bg-red-900/30 p-3 text-sm text-red-100">{error}</p>}
         {message && <p role="status" className="rounded-lg border border-white/20 p-3 text-sm">{message}</p>}
