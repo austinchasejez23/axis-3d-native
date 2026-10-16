@@ -1,7 +1,7 @@
 name: Standalone test isolation
 on:
   pull_request:
-    branches: [main]
+    branches: [main, chore/standalone-without-base44]
   workflow_dispatch:
 
 jobs:
@@ -62,14 +62,48 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+      # Each hosted runner is new. Android's auto-generated ~/.android/debug.keystore
+      # changes every run, preventing users from installing over the previous APK.
+      # Repository secrets provide a persistent key; do not upload random-key APKs.
+      - name: Prepare persistent Axis TEST signing key
+        env:
+          AXIS_TEST_KEYSTORE_BASE64: ${{ secrets.AXIS_TEST_KEYSTORE_BASE64 }}
+          AXIS_TEST_STORE_PASSWORD: ${{ secrets.AXIS_TEST_STORE_PASSWORD }}
+          AXIS_TEST_KEY_ALIAS: ${{ secrets.AXIS_TEST_KEY_ALIAS }}
+          AXIS_TEST_KEY_PASSWORD: ${{ secrets.AXIS_TEST_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          if [[ -z "$AXIS_TEST_KEYSTORE_BASE64" || -z "$AXIS_TEST_STORE_PASSWORD" || -z "$AXIS_TEST_KEY_ALIAS" || -z "$AXIS_TEST_KEY_PASSWORD" ]]; then
+            echo "::warning title=Stable Axis test signing not configured::Configure the four AXIS_TEST_* repository secrets. This build will compile but will NOT publish an uninstall-to-update debug APK."
+            echo "AXIS_STABLE_DEBUG=false" >> "$GITHUB_ENV"
+          else
+            umask 077
+            printf '%s' "$AXIS_TEST_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/axis-test-debug.jks"
+            if [[ ! -s "$RUNNER_TEMP/axis-test-debug.jks" ]]; then
+              echo "::error::The test signing keystore is empty or invalid."
+              exit 1
+            fi
+            echo "AXIS_TEST_KEYSTORE_PATH=$RUNNER_TEMP/axis-test-debug.jks" >> "$GITHUB_ENV"
+            echo "AXIS_STABLE_DEBUG=true" >> "$GITHUB_ENV"
+          fi
       - name: Compile Android debug build
+        env:
+          AXIS_TEST_STORE_PASSWORD: ${{ secrets.AXIS_TEST_STORE_PASSWORD }}
+          AXIS_TEST_KEY_ALIAS: ${{ secrets.AXIS_TEST_KEY_ALIAS }}
+          AXIS_TEST_KEY_PASSWORD: ${{ secrets.AXIS_TEST_KEY_PASSWORD }}
         run: |
           chmod +x android/gradlew
           cd android && ./gradlew --no-daemon assembleDebug
+      - name: Inspect persistent test APK signature
+        if: env.AXIS_STABLE_DEBUG == 'true'
+        run: |
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs android/app/build/outputs/apk/debug/app-debug.apk
       - uses: actions/upload-artifact@v4
-        if: success()
+        # Never distribute random-key APKs: those force an uninstall and erase
+        # local IndexedDB models before the next update.
+        if: success() && env.AXIS_STABLE_DEBUG == 'true'
         with:
-          name: standalone-axis-debug-apk
+          name: standalone-axis-stable-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 

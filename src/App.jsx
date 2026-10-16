@@ -16,6 +16,8 @@ import About from '@/pages/About';
 import Contact from '@/pages/Contact';
 import PageNotFound from '@/lib/PageNotFound';
 import ProjectLockGate from '@/components/library/ProjectLockGate';
+import CloudBackups from '@/pages/Cloud';
+import PasswordRecovery from '@/pages/PasswordRecovery';
 
 function AppRoutes() {
   const location = useLocation();
@@ -25,14 +27,15 @@ function AppRoutes() {
         <Route path="/" element={<Splash />} />
         <Route path="/library" element={<RouteTransition><Library /></RouteTransition>} />
         <Route path="/modeler" element={<ProjectLockGate><PageTransition><Modeler /></PageTransition></ProjectLockGate>} />
+        <Route path="/cloud" element={<CloudBackups />} />
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/account-deletion" element={<AccountDeletion />} />
         {/* Legacy entry points never contact the retired authentication server. */}
         <Route path="/login" element={<Navigate to="/library" replace />} />
         <Route path="/register" element={<Navigate to="/library" replace />} />
-        <Route path="/forgot-password" element={<Navigate to="/library" replace />} />
-        <Route path="/reset-password" element={<Navigate to="/library" replace />} />
+        <Route path="/forgot-password" element={<PasswordRecovery />} />
+        <Route path="/reset-password" element={<PasswordRecovery />} />
         <Route path="*" element={<PageNotFound />} />
       </Routes>
     </AnimatePresence>
