@@ -13,6 +13,13 @@ assert.match(deletion, /body\.confirm !== "DELETE"/, 'Deletion must require expl
 assert.match(deletion, /\/auth\/v1\/admin\/users\//, 'Deletion should use the server-side admin API.');
 assert.match(main, /PasswordRecovery/);
 assert.match(main, /AccountDeletion/);
+const cloudPage = readFileSync('src/pages/Cloud.jsx','utf8');
+const recoveryPage = readFileSync('src/pages/PasswordRecovery.jsx','utf8');
+assert.match(cloudPage, /open the confirmation link/, 'Default signup email links must be supported');
+assert.doesNotMatch(cloudPage, /Six-digit email code/, 'Do not prompt for a code absent from default templates');
+assert.match(recoveryPage, /Copy link address/, 'Recovery UI must explain how to copy default email links');
+assert.doesNotMatch(recoveryPage, /six-digit code/i, 'Default recovery email does not include an OTP code');
+
 
 const memory = new Map();
 globalThis.localStorage = {
@@ -39,15 +46,37 @@ globalThis.fetch = async (url, options = {}) => {
 };
 
 const cloud = await import('../src/lib/supabaseTest.js');
-await cloud.requestPasswordResetCode(fakeUser.email);
+await cloud.requestPasswordResetEmail(fakeUser.email);
 assert.equal(calls.at(-1).method, 'POST');
 assert.match(calls.at(-1).url, /\/auth\/v1\/recover/);
-await cloud.resetPasswordWithCode(fakeUser.email,'123456','secure-new-password');
+
+const tokenHash = 'a'.repeat(64);
+const validLink = 'https://zjlrwjxolxorrxpolcdf.supabase.co/auth/v1/verify?type=recovery&token=' + tokenHash + '&redirect_to=https%3A%2F%2Fexample.invalid';
+const beforeBadLinks = calls.length;
+assert.equal(cloud.parseRecoveryEmailLink(validLink), tokenHash);
+for (const link of [
+  'https://evil.invalid/auth/v1/verify?type=recovery&token=' + tokenHash,
+  'http://zjlrwjxolxorrxpolcdf.supabase.co/auth/v1/verify?type=recovery&token=' + tokenHash,
+  'https://zjlrwjxolxorrxpolcdf.supabase.co/auth/v1/other?type=recovery&token=' + tokenHash,
+  'https://zjlrwjxolxorrxpolcdf.supabase.co/auth/v1/verify?type=email&token=' + tokenHash,
+  'https://zjlrwjxolxorrxpolcdf.supabase.co/auth/v1/verify?type=recovery&token=',
+  'https://zjlrwjxolxorrxpolcdf.supabase.co/auth/v1/verify?type=recovery&token=' + tokenHash + '&token=' + tokenHash,
+  'not an email link',
+]) {
+  assert.throws(() => cloud.parseRecoveryEmailLink(link), Error, 'Malformed or other-project recovery links must be rejected');
+}
+await assert.rejects(
+  cloud.resetPasswordWithEmailLink(fakeUser.email, 'https://evil.invalid/?token=' + tokenHash, 'secure-new-password'),
+  /not an Axis 3D Test/,
+);
+assert.equal(calls.length, beforeBadLinks, 'Invalid links cannot trigger any network activity');
+
+await cloud.resetPasswordWithEmailLink(fakeUser.email, validLink, 'secure-new-password');
 assert.match(calls.at(-2).url, /\/auth\/v1\/verify/);
-assert.equal(JSON.parse(calls.at(-2).body).type, 'recovery');
+assert.deepEqual(JSON.parse(calls.at(-2).body), { token_hash: tokenHash, type: 'recovery' });
 assert.match(calls.at(-1).url, /\/auth\/v1\/user/);
 assert.equal(calls.at(-1).method, 'PUT');
-assert.equal(cloud.getCloudSession(),null);
+assert.equal(cloud.getCloudSession(), null, 'Recovery must not grant persistent login or Pro privileges');
 
 const signedIn = await cloud.signInWithEmail(fakeUser.email,'test-password');
 assert.equal(signedIn.user.id, fakeUser.id);
@@ -61,4 +90,4 @@ assert.equal(deletionCall.method, 'POST');
 assert.equal(JSON.parse(deletionCall.body).confirm,'DELETE');
 assert.equal(cloud.getCloudSession(),null);
 
-console.log('Isolated auth, password recovery, protected deletion request, and Pro-lock regression checks passed.');
+console.log('Default email-link recovery (with origin and token checks), protected deletion, and Pro-lock regression checks passed.');
