@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Search, Loader2 } from 'lucide-react';
+import { ArrowLeft, Search, Loader2, Cloud } from 'lucide-react';
 import usePullToRefresh from '@/hooks/use-pull-to-refresh';
 import { toast } from 'sonner';
 import { listProjects } from '@/lib/storage';
@@ -75,6 +75,7 @@ export default function Library() {
       <div className="sticky top-0 z-30 bg-zinc-950 px-4 pt-[calc(env(safe-area-inset-top,0px)+1.25rem)] pb-3 border-b border-white/10">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h1 className="min-w-0 truncate text-xl font-bold text-white">My Models</h1>
+          <button type="button" onClick={() => navigate("/cloud")} className="ml-auto flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-white/20 px-3 text-xs text-white" aria-label="Open cloud backups"><Cloud className="h-4 w-4" />Cloud</button>
           <LibraryMenu open={actions.menuOpen} onOpenChange={actions.setMenuOpen} count={actions.selected.length} locked={actions.selected.some(project => project.locked)} allLocked={actions.selected.length > 0 && actions.selected.every(project => project.locked)} busy={actions.busy} onCopy={() => actions.copy()} onDelete={() => actions.requestDelete()} onLock={actions.lock} onMove={() => actions.setDialog({ type: 'move' })} />
         </div>
         {activeFolder && <div className="mb-3 flex min-w-0 items-center gap-2"><button type="button" onClick={() => openFolder(null)} aria-label="Back to My Models" className="flex h-9 shrink-0 items-center gap-1 rounded-lg border border-border px-2"><ArrowLeft className="h-4 w-4" />My Models</button><span className="truncate text-sm">{activeFolder.name}</span></div>}
