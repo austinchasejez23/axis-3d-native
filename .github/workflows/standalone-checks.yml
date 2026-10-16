@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  verify:
+  web:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,20 +16,45 @@ jobs:
       - run: npm ci
       - name: Validate standalone guarantees
         run: npm run test:standalone
-      - name: Run modeling regression tests
-        run: |
-          for test in scripts/*-regression.mjs; do
-            echo "Running $test"
-            node "$test"
-          done
       - name: Lint source
         run: npm run lint
       - name: Typecheck
+        if: always()
         run: npm run typecheck
       - name: Build web bundle
+        if: always()
         run: npm run build
-      - name: Build isolated Android debug APK
-        run: npx cap sync android
+
+  modeling-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Run ALL modeling regression scripts, collecting failures
+        run: |
+          status=0
+          for test in scripts/*-regression.mjs; do
+            echo "::group::$test"
+            node "$test" || status=1
+            echo "::endgroup::"
+          done
+          exit "$status"
+
+  android-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Build web assets and sync Capacitor
+        run: npm run android:sync
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
