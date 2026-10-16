@@ -111,8 +111,14 @@
     overscroll-behavior-y: none;
   }
 
+  /* Full-screen routes slide by 24px. Keep the uncovered first frame black
+     instead of exposing the light-theme body's white background during load. */
+  html, body, #root {
+    background-color: #000;
+  }
+
   body {
-    @apply bg-background text-foreground font-body;
+    @apply text-foreground font-body;
     font-weight: 600;
   }
 
