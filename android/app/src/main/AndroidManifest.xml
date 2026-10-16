@@ -38,4 +38,6 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Required for Play Console to recognize the bundled Billing Library. -->
+    <uses-permission android:name="com.android.vending.BILLING" />
 </manifest>
