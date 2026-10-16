@@ -17,7 +17,7 @@ This work is intentionally isolated to **Axis 3D Test** and draft PR #2, based o
 - It refuses to call Google unless server-only `AXIS_TEST_PLAY_VERIFY_ENABLED=true` AND `AXIS_TEST_PLAY_PRODUCTS` AND `AXIS_TEST_PLAY_SERVICE_ACCOUNT_JSON` are configured. Do **not** enable these until the Play Console catalog and restricted service account have been reviewed.
 - The allowlist `AXIS_TEST_PLAY_PRODUCTS` uses comma-separated exact type/SKU tuples such as `subs:YOUR_REAL_SUBSCRIPTION_ID,inapp:YOUR_REAL_ONE_TIME_ID`. These are **examples of configuration format, not actual Axis SKUs**.
 - The verifier exchanges the service-account signing key for a scoped Google OAuth token, then checks Google Android Publisher `purchases.subscriptionsv2.get` or `purchases.products.get` without any write actions.
-- The pure `_shared/playPurchaseRules.mjs` denies unknown products and unauthorized states. `scripts/play-purchase-verifier-regression.mjs` covers inactive, pending, unacknowledged, mismatched, and expired purchases.
+- The pure `axis-test-play-verify/playPurchaseRules.mjs` denies unknown products and unauthorized states. `scripts/play-purchase-verifier-regression.mjs` covers inactive, pending, unacknowledged, mismatched, and expired purchases.
 - **The verifier NEVER grants Pro, writes entitlements, records tokens, starts purchases, or acknowledges orders.** Even a good Google result is insufficient without one-user receipt binding, replay protection, ledger reconciliation, acknowledgement, RTDN, and revocation handling.
 - Do not paste Play service account credentials into ChatGPT, source files or the Android app. Store them as encrypted Supabase secrets when configuration is approved.
 
