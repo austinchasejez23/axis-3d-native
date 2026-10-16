@@ -11,6 +11,16 @@ This work is intentionally isolated to **Axis 3D Test** and draft PR #2, based o
 - `axis_pro_entitlements` is still server-controlled and empty. The actual app context still returns `isPro: false` with Free-tier limits.
 - CI rejects adding a client purchase launch/acknowledgement or unconditional Pro grants before verification is ready.
 
+## Read-only verification staging (still OFF by default)
+
+- `axis-test-play-verify` is an authenticated Supabase Edge Function for the **TEST** project. It validates the bearer token against Supabase Auth.
+- It refuses to call Google unless server-only `AXIS_TEST_PLAY_VERIFY_ENABLED=true` AND `AXIS_TEST_PLAY_PRODUCTS` AND `AXIS_TEST_PLAY_SERVICE_ACCOUNT_JSON` are configured. Do **not** enable these until the Play Console catalog and restricted service account have been reviewed.
+- The allowlist `AXIS_TEST_PLAY_PRODUCTS` uses comma-separated exact type/SKU tuples such as `subs:YOUR_REAL_SUBSCRIPTION_ID,inapp:YOUR_REAL_ONE_TIME_ID`. These are **examples of configuration format, not actual Axis SKUs**.
+- The verifier exchanges the service-account signing key for a scoped Google OAuth token, then checks Google Android Publisher `purchases.subscriptionsv2.get` or `purchases.products.get` without any write actions.
+- The pure `_shared/playPurchaseRules.mjs` denies unknown products and unauthorized states. `scripts/play-purchase-verifier-regression.mjs` covers inactive, pending, unacknowledged, mismatched, and expired purchases.
+- **The verifier NEVER grants Pro, writes entitlements, records tokens, starts purchases, or acknowledges orders.** Even a good Google result is insufficient without one-user receipt binding, replay protection, ledger reconciliation, acknowledgement, RTDN, and revocation handling.
+- Do not paste Play service account credentials into ChatGPT, source files or the Android app. Store them as encrypted Supabase secrets when configuration is approved.
+
 ## Important package distinction
 
 The debug APK has `applicationIdSuffix ".debug"`; its installed package is `com.base6a5340f43f8fd031c5921680.app.debug`, while the production Play listing is `com.base6a5340f43f8fd031c5921680.app`.
