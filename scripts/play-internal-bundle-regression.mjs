@@ -23,6 +23,8 @@ assert.match(workflow, /AXIS_PLAY_INTERNAL_VERSION_CODE/,
   'Do not invent an upload version code.');
 assert.match(workflow, /AXIS_PLAY_EXPECTED_UPLOAD_CERT_SHA256/,
   'Refuse an unknown Play signing identity.');
+assert.match(workflow, /B7:5B:33:41:01:46:16:F1:A3:66:E0:82:60:81:F4:5C:C9:6C:22:08:B6:F7:51:80:A5:30:01:C1:3B:57:1A:1A/,
+  'The expected upload key must be pinned to the public Play Console SHA-256 certificate.');
 for (const secret of ['AXIS_PLAY_UPLOAD_KEYSTORE_BASE64','AXIS_PLAY_UPLOAD_STORE_PASSWORD','AXIS_PLAY_UPLOAD_KEY_ALIAS','AXIS_PLAY_UPLOAD_KEY_PASSWORD']) {
   assert.match(workflow, new RegExp('secrets\\.' + secret), 'Missing upload-key secret ' + secret);
 }
