@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { base44 } from '@/api/base44Client';
 import { Hand } from 'lucide-react';
 import ThreeViewport from '@/components/modeler/ThreeViewport';
 import TopBar from '@/components/modeler/TopBar';
@@ -706,7 +705,6 @@ export default function Modeler() {
       }
       const result = await downloadFile(content, `${filename}.${format}`, mimeType);
       if (result === 'shared') toast.success(`${format.toUpperCase()} sent to Android save/share sheet`);
-      else if (result === 'https') toast.message(`${format.toUpperCase()} private download link opened`);
       else toast.message(`${format.toUpperCase()} download attempted. Check Downloads.`);
     } catch (error) {
       console.error('Model export failed:', error);
@@ -717,9 +715,16 @@ export default function Modeler() {
   const handleAddReference = useCallback(async (file) => {
     setAddingReference(true);
     try {
-      const { file_url } = await base44.integrations.Core.UploadPublicFile({ file });
-      if (!file_url || !managerRef.current) throw new Error('Could not add reference image.');
-      managerRef.current.addReferenceImage(file_url);
+      if (!file || !file.type.startsWith('image/')) throw new Error('Choose a reference image.');
+      const localDataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('Could not read reference image.'));
+        reader.readAsDataURL(file);
+      });
+      if (typeof localDataUrl !== 'string' || !managerRef.current) throw new Error('Could not add reference image.');
+      // Persist the image with the project in IndexedDB, never on a server.
+      managerRef.current.addReferenceImage(localDataUrl);
     } catch (error) {
       toast.error(error?.message || 'Could not add reference image.');
     } finally {

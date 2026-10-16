@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { listProjects, deleteProject, duplicateProject, assertProjectsUnlocked, setProjectsLocked, moveProjects } from '@/lib/storage';
-import { deleteCloudBackup } from '@/lib/cloudBackup';
 import { FREE_PROJECT_LIMIT } from '@/lib/proAccess';
-export default function useLibraryActions({ projects, user, isPro, openUpgrade, refresh }) {
+export default function useLibraryActions({ projects, isPro, openUpgrade, refresh }) {
   const [ids, setIds] = useState([]), [selecting, setSelecting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false), [dialog, setDialog] = useState(null), [busy, setBusy] = useState(false);
   const selected = projects.filter(project => ids.includes(project.id));
@@ -30,7 +29,6 @@ export default function useLibraryActions({ projects, user, isPro, openUpgrade, 
   const remove = () => run(async () => {
     assertProjectsUnlocked(dialog.projects.map(project => project.id));
     for (const project of dialog.projects) {
-      if (user) await deleteCloudBackup(project.id);
       await deleteProject(project.id);
     }
     setDialog(null); clear(); toast.success('Selected models deleted');
