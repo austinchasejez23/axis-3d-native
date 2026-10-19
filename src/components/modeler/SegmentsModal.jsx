@@ -47,7 +47,7 @@ export default function SegmentsModal({ values, onChange, onApply, onCancel }) {
 
   const commit = (draft = text) => {
     const next = Object.fromEntries(axes.map((axis) => [axis, Math.max(minFor(axis), parseInt(draft[axis], 10) || 1)]));
-    setText(Object.fromEntries(axes.map((axis) => [axis, String(next[axis])])));
+    setText({ x: String(next.x), y: String(next.y), z: String(next.z) });
     if (axes.some((axis) => next[axis] !== values[axis])) onChange({ ...values, ...next });
   };
 
