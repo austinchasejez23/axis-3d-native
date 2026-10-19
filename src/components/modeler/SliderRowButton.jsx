@@ -41,7 +41,7 @@ export default function SliderRowButton({ label, value, display, min = 0, max = 
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className="gs-slider cursor-pointer touch-none"
-        style={{ width, '--gs-accent': highlightColor, '--gs-pct': `${pct}%` }}
+        style={/** @type {import('react').CSSProperties & { '--gs-accent': string, '--gs-pct': string }} */ ({ width, '--gs-accent': highlightColor, '--gs-pct': `${pct}%` })}
       />
     );
     const valueSpan = (
@@ -87,7 +87,7 @@ export default function SliderRowButton({ label, value, display, min = 0, max = 
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className="gs-slider cursor-pointer touch-none"
-        style={{ width: length, '--gs-accent': highlightColor, '--gs-pct': `${pct}%` }}
+        style={/** @type {import('react').CSSProperties & { '--gs-accent': string, '--gs-pct': string }} */ ({ width: length, '--gs-accent': highlightColor, '--gs-pct': `${pct}%` })}
       />
       {side === 'right' && valueLabel}
     </div>
