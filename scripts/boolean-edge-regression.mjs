@@ -60,9 +60,9 @@ if (s.flipped) {
     const normal = result.getFaceNormal(fi);
     for (const tri of result.getFaceTriangleIndices(fi)) {
       const points = tri.map(vi => result.getVertex(face[vi]));
-      const a = new THREE.Vector3(points[0].x, points[0].y, points[0].z);
-      const b = new THREE.Vector3(points[1].x, points[1].y, points[1].z);
-      const cc = new THREE.Vector3(points[2].x, points[2].y, points[2].z);
+      const a = new THREE.Vector3(Math.fround(points[0].x), Math.fround(points[0].y), Math.fround(points[0].z));
+      const b = new THREE.Vector3(Math.fround(points[1].x), Math.fround(points[1].y), Math.fround(points[1].z));
+      const cc = new THREE.Vector3(Math.fround(points[2].x), Math.fround(points[2].y), Math.fround(points[2].z));
       const cross = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(cc, a));
       if (cross.lengthSq() >= 1e-18 && cross.dot(normal) < -1e-9) {
         console.log('FLIPPED_TRIANGLE', JSON.stringify({
