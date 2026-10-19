@@ -14,7 +14,7 @@ export function applySceneExtrude(SceneManager) {
     if (!sel.meshId || sel.type !== 'face' || sel.indices.length === 0) return;
     const mesh = this.getMesh(sel.meshId);
     if (!mesh) return;
-    const preSnapshot = { meshes: this.meshes.map(m => m.clone()), selection: { ...this.selection, indices: [...this.selection.indices] } };
+    const preSnapshot = this.captureSnapshot();
     const ek = edgeKey;
     const selSet = new Set(sel.indices);
     const edgeFaces = new Map();
@@ -129,7 +129,7 @@ export function applySceneExtrude(SceneManager) {
     const mesh = this.getMesh(sel.meshId);
     if (!mesh) return;
     if (this.multiSelect) this.exitMultiSelect();
-    const preSnapshot = { meshes: this.meshes.map(m => m.clone()), selection: { ...sel, indices: [...sel.indices] } };
+    const preSnapshot = this.captureSnapshot();
     const edges = mesh.getEdges();
     const selected = sel.indices.map((i) => edges[i]).filter(Boolean);
     if (selected.length === 0) return;
