@@ -64,4 +64,23 @@ assert.match(androidBuild, /task\.dependsOn\(verifyAxisUploadKey\)/);
 assert.match(androidBuild, /BC:50:EE:20:4E:11:C9:66:CC:48:E6:EC:0B:D2:5D:7D:5E:07:96:9D:F1:81:99:1C:3D:B4:80:E6:7D:D9:2D:5F/);
 assert.match(read('.gitignore'), /^\*\.jks$/m);
 assert.match(read('android/.gitignore'), /^\*\.jks$/m);
+// The TypeScript extension contract must stay connected to real runtime
+// implementations. A declaration alone cannot install a modeling tool.
+const sceneManagerSource = read('src/lib/SceneManager.js');
+const extensionContract = read('src/lib/SceneManager.extensions.d.ts');
+const declaredExtensions = [...extensionContract.matchAll(/\/\*\* Implemented by ([\w.-]+) \*\/\s*([\w$]+)\s*\(/g)];
+assert.ok(declaredExtensions.length >= 150, 'SceneManager extension contract unexpectedly shrank');
+const moduleSources = new Map();
+for (const [, moduleName, method] of declaredExtensions) {
+  if (!moduleSources.has(moduleName)) moduleSources.set(moduleName, read('src/lib/' + moduleName));
+  const implementation = moduleSources.get(moduleName);
+  assert.ok(
+    implementation.includes('P.' + method + ' =') ||
+    implementation.includes('SceneManager.prototype.' + method + ' ='),
+    moduleName + '.' + method + ' is declared but not implemented'
+  );
+}
+for (const required of ['applySceneSelection', 'applySceneGestures', 'applySceneLights', 'applySceneUndo']) {
+  assert.ok(sceneManagerSource.includes(required + '(SceneManager)'), required + ' was not installed');
+}
 console.log('Standalone isolation, Free entitlement, package ID and local storage checks passed.');
