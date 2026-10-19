@@ -85,9 +85,16 @@ export function applySceneLights(SceneManager) {
     // of sight, so turning default off brings them back untouched.
     const custom = !theme.defaultLightingEnabled;
     object.visible = custom;
-    object.color.set(record.color);
-    const power = record.intensity * record.colorIntensity;
-    object.intensity = power * (record.type === 'directional' ? 2.2 : 55);
+    // Color intensity means color SATURATION, not brightness. Mix a neutral
+    // white light toward the selected hue, keeping its average channel energy
+    // constant so increasing saturation does not dim the entire scene.
+    const saturation = clamp(record.colorIntensity ?? 1, 0, 1);
+    const color = new THREE.Color(0xffffff).lerp(new THREE.Color(record.color || '#ffffff'), saturation);
+    const channelMean = (color.r + color.g + color.b) / 3;
+    if (channelMean > 1e-6) color.multiplyScalar(1 / channelMean);
+    object.color.copy(color);
+    // Only the Intensity slider changes light power.
+    object.intensity = clamp(record.intensity ?? 1.5, 0, 5) * (record.type === 'directional' ? 2.2 : 55);
     object.castShadow = custom && !!record.shadows;
     object.shadow.intensity = clamp(record.shadowIntensity, 0, 1);
     object.shadow.radius = record.type === 'point' ? clamp(record.radius * 2, 0, 10) : 3;
@@ -155,25 +162,22 @@ export function applySceneLights(SceneManager) {
 
   P.applyLighting = function () {
     if (this.dirLight) this.dirLight.intensity = 0;
-    // Default lighting is the fixed studio wash: ambient, a sky/ground
-    // hemisphere, a soft side fill and the environment map. On, it keeps every
-    // face readable while the editable lights supply the key, color and
-    // shadows. Off, NOTHING lights the scene except the lights the user
-    // placed, so turning those down leaves the model nearly black.
+    // Studio lighting is a complete neutral setup. Custom lights replace its
+    // strong key, not all illumination: a restrained neutral fill remains so
+    // shaded sides are legible and metallic materials still have an environment
+    // to reflect. Setting these to zero made metal/chrome surfaces black.
     const base = theme.defaultLightingEnabled;
-    if (this.ambientLight) this.ambientLight.intensity = base ? 0.47 : 0;
+    if (this.ambientLight) this.ambientLight.intensity = base ? 0.47 : 0.22;
     if (this.hemiLight) {
-      this.hemiLight.intensity = base ? 0.8 : 0;
+      this.hemiLight.intensity = base ? 0.8 : 0.38;
       this.hemiLight.color.set(0xffffff);
       this.hemiLight.groundColor.set(0x888888);
     }
     if (this.fillLight) {
-      this.fillLight.intensity = base ? 0.75 : 0;
+      this.fillLight.intensity = base ? 0.75 : 0.25;
       this.fillLight.color.set(0xffffff);
     }
-    // The environment map lights glossy surfaces as much as any lamp does, so
-    // it has to go with the rest or the model keeps glowing in the dark.
-    this.scene.environmentIntensity = base ? 1.2 : 0;
+    this.scene.environmentIntensity = base ? 1.2 : 0.85;
     for (const light of this.sceneLights || []) this._syncSceneLight(light);
   };
   P.setLightingEdit = function (active) {
