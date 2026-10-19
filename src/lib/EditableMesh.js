@@ -21,6 +21,12 @@ export class EditableMesh {
     this.primitiveType = null;
     this.segments = null;
     this.smoothShading = false;
+    // Imported triangle meshes can display only feature/crease edges without
+    // removing any underlying editable topology.
+    this.importedFeatureEdges = false;
+    // Geometry-only file imports initially display as neutral wireframes.
+    // The faces remain editable and available to modeling tools.
+    this.importedWireframeOnly = false;
     this.clearCoatEnabled = false;
     this.clearCoatIntensity = 0.5;
     this.material = null;
@@ -152,7 +158,7 @@ export class EditableMesh {
       // NOW (while its geometry is fresh) and the verdict is locked — diagonal
       // edges go into hiddenEdges forever, real edges into visibleEdges forever.
       // Deforming the mesh later can never flip either verdict.
-      if (e.faces.length === 2 && !visible.has(key)) {
+      if (!this.importedWireframeOnly && e.faces.length === 2 && !visible.has(key)) {
         if (this.edgeIsTriangulationDiagonal(e.v1, e.v2, e.faces[0], e.faces[1])) {
           this.hiddenEdges.push({ v1: e.v1, v2: e.v2 });
           continue;
@@ -635,15 +641,24 @@ export class EditableMesh {
     }
     const edgeMap = this._ensureEdgeFaceMap();
     const positions = [];
+    const featureNormals = this.importedFeatureEdges
+      ? this.faces.map((_, fi) => this.getFaceNormal(fi)) : null;
+    // 25° keeps sharp CAD edges and open boundaries visible without drawing
+    // a triangulation grid over every curved imported surface.
+    const featureThreshold = Math.cos(THREE.MathUtils.degToRad(25));
     const hidden = this._hiddenEdgeMap();
     const shownKeys = new Set();
     const visible = this._visibleEdgeSet();
     for (const { v1, v2, faces } of edgeMap.values()) {
       const key = `${v1},${v2}`;
       if (hidden.has(key) && this._hiddenApplies(hidden.get(key), faces)) continue;
+      // Keep triangle edges available to modeling tools; only the displayed
+      // imported wireframe suppresses smooth triangulation seams.
+      if (featureNormals && faces.length === 2 &&
+          featureNormals[faces[0]].dot(featureNormals[faces[1]]) > featureThreshold) continue;
       // Same one-time permanent classification as getEdges: first sighting
       // decides forever. Diagonals never appear, real edges never vanish.
-      if (faces.length === 2 && !visible.has(key)) {
+      if (!this.importedWireframeOnly && faces.length === 2 && !visible.has(key)) {
         if (this.edgeIsTriangulationDiagonal(v1, v2, faces[0], faces[1])) {
           this.hiddenEdges.push({ v1, v2 });
           continue;
@@ -684,6 +699,8 @@ export class EditableMesh {
     m.segments = this.segments ? { ...this.segments } : null;
     m.primitiveParams = this.primitiveParams ? { ...this.primitiveParams } : null;
     m.smoothShading = this.smoothShading;
+    m.importedFeatureEdges = this.importedFeatureEdges;
+    m.importedWireframeOnly = this.importedWireframeOnly;
     m.clearCoatEnabled = this.clearCoatEnabled;
     m.clearCoatIntensity = this.clearCoatIntensity;
     m.material = this.material ? { ...this.material } : null;
@@ -728,6 +745,8 @@ export class EditableMesh {
       visible: this.visible, locked: this.locked, color: this.color,
       primitiveType: this.primitiveType, segments: this.segments, primitiveParams: this.primitiveParams,
       smoothShading: this.smoothShading,
+      importedFeatureEdges: this.importedFeatureEdges,
+      importedWireframeOnly: this.importedWireframeOnly,
       clearCoatEnabled: this.clearCoatEnabled,
       clearCoatIntensity: this.clearCoatIntensity,
       material: this.material ? { ...this.material } : null,
@@ -772,6 +791,8 @@ export class EditableMesh {
     m.segments = data.segments || null;
     m.primitiveParams = data.primitiveParams || null;
     m.smoothShading = data.smoothShading || false;
+    m.importedFeatureEdges = !!data.importedFeatureEdges;
+    m.importedWireframeOnly = !!data.importedWireframeOnly;
     m.clearCoatEnabled = data.clearCoatEnabled || false;
     m.clearCoatIntensity = data.clearCoatIntensity ?? 0.5;
     m.material = data.material || null;
