@@ -14,7 +14,17 @@ const MIDDLE = 2;
 //   shadows     edge fades (shadowWidth / shadowAlpha) hinting the strip loops;
 //               they span the whole outer box, padding from `className` included
 // The ref exposes step(-1 | 1): move one item and center it.
-const LoopingScroller = forwardRef(function LoopingScroller(
+const LoopingScroller = forwardRef(/** @param {{
+  children?: import('react').ReactNode,
+  swipe?: boolean,
+  snapCenter?: boolean,
+  shadows?: boolean,
+  shadowWidth?: number,
+  shadowAlpha?: number,
+  className?: string,
+  itemClass?: string,
+  innerClass?: string,
+}} props */ function LoopingScroller(
   { children, swipe = true, snapCenter = false, shadows = false, shadowWidth = 16, shadowAlpha = 0.6, className = '', itemClass = '', innerClass = '' },
   ref,
 ) {
