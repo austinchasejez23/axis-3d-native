@@ -46,6 +46,16 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // CI can use one persistent DEBUG signing identity stored in GitHub Secrets.
+    // This does not change the Play signing configuration, package ID, or release.
+    signingConfigs {
+        axisStableDebug {
+            storeFile file(System.getenv("AXIS_TEST_KEYSTORE_PATH") ?: "missing-axis-test-key.jks")
+            storePassword System.getenv("AXIS_TEST_STORE_PASSWORD") ?: ""
+            keyAlias System.getenv("AXIS_TEST_KEY_ALIAS") ?: ""
+            keyPassword System.getenv("AXIS_TEST_KEY_PASSWORD") ?: ""
+        }
+    }
     buildTypes {
         // The Play build and this one share an application id, and Android
         // refuses to install over an app signed with a different key. The
@@ -54,6 +64,11 @@ android {
         // uploads to Play still carry the real id.
         debug {
             applicationIdSuffix ".debug"
+            // Local developers can still use Android's normal debug signer,
+            // but CI never distributes an APK signed with an ephemeral key.
+            if (System.getenv("AXIS_TEST_KEYSTORE_PATH")) {
+                signingConfig signingConfigs.axisStableDebug
+            }
         }
         release {
             if (axisSigningReady) {
@@ -77,6 +92,8 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    // Read-only native Billing connectivity; purchases remain feature-disabled.
+    implementation "com.android.billingclient:billing:9.1.0"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

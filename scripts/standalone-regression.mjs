@@ -76,7 +76,8 @@ for (const [, moduleName, method] of declaredExtensions) {
   const implementation = moduleSources.get(moduleName);
   assert.ok(
     implementation.includes('P.' + method + ' =') ||
-    implementation.includes('SceneManager.prototype.' + method + ' ='),
+    implementation.includes('SceneManager.prototype.' + method + ' =') ||
+    implementation.includes('SceneManagerClass.prototype.' + method + ' ='),
     moduleName + '.' + method + ' is declared but not implemented'
   );
 }

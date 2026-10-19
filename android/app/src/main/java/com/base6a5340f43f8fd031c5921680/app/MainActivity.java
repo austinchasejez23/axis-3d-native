@@ -7,6 +7,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(AxisFilesPlugin.class);
+        registerPlugin(AxisPlayBillingPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
