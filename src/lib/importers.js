@@ -56,6 +56,28 @@ export async function importModelFile(file) {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', child.geometry.attributes.position.clone());
       if (child.geometry.index) geo.setIndex(child.geometry.index.clone());
+      // A reflected transform (negative scale on an odd number of axes)
+      // reverses triangle orientation when baked into positions. Compensate
+      // for that reversal so the editable mesh keeps its outward-facing
+      // surfaces. Otherwise mirrored GLB/FBX parts can appear black or
+      // disappear with backface culling. Never change the source geometry.
+      if (child.matrixWorld.determinant() < 0) {
+        const indices = geo.getIndex();
+        if (indices) {
+          for (let i = 0; i + 2 < indices.count; i += 3) {
+            const second = indices.getX(i + 1);
+            indices.setX(i + 1, indices.getX(i + 2));
+            indices.setX(i + 2, second);
+          }
+        } else {
+          const pos = geo.getAttribute('position');
+          for (let i = 0; i + 2 < pos.count; i += 3) {
+            const x = pos.getX(i + 1), y = pos.getY(i + 1), z = pos.getZ(i + 1);
+            pos.setXYZ(i + 1, pos.getX(i + 2), pos.getY(i + 2), pos.getZ(i + 2));
+            pos.setXYZ(i + 2, x, y, z);
+          }
+        }
+      }
       geo.applyMatrix4(child.matrixWorld);
       const mesh = EditableMesh.fromGeometry(geo, child.name || file.name);
       geo.dispose();
