@@ -53,6 +53,29 @@ const tool=EditableMesh.fromGeometry(new THREE.CylinderGeometry(.62,.62,2.4,12),
 const before=volume(base);
 const result=base.clone();let ok=false,error='';try{ok=localBoolean(mgr,result,tool,'subtract')}catch(e){error=e.stack||String(e)}
 const s=stats(result);
+if (s.flipped) {
+  let renderTriangleIndex = 0;
+  for (let fi = 0; fi < result.faces.length; fi++) {
+    const face = result.faces[fi];
+    const normal = result.getFaceNormal(fi);
+    for (const tri of result.getFaceTriangleIndices(fi)) {
+      const points = tri.map(vi => result.getVertex(face[vi]));
+      const a = new THREE.Vector3(points[0].x, points[0].y, points[0].z);
+      const b = new THREE.Vector3(points[1].x, points[1].y, points[1].z);
+      const cc = new THREE.Vector3(points[2].x, points[2].y, points[2].z);
+      const cross = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(cc, a));
+      if (cross.lengthSq() >= 1e-18 && cross.dot(normal) < -1e-9) {
+        console.log('FLIPPED_TRIANGLE', JSON.stringify({
+          z, y, fi, renderTriangleIndex, face, tri,
+          normal: normal.toArray(), cross: cross.toArray(),
+          points: points.map(p => ({ id: p.id, x: p.x, y: p.y, z: p.z })),
+          boundary: face.map(id => result.getVertex(id)),
+        }));
+      }
+      renderTriangleIndex++;
+    }
+  }
+}
 if (s.deg) {
   // Diagnostic only: preserve the failing assertion and identify the original
   // editable face producing each zero-area rendered triangle.
