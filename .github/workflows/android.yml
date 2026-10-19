@@ -34,9 +34,9 @@ jobs:
       - name: Set versionCode from the run number
         run: |
           CODE=$(( 24 + ${{ github.run_number }} ))
-          sed -i "s/versionCode .*/versionCode $CODE/" android/app/build.gradle
-          sed -i "s/versionName .*/versionName \"$CODE.0\"/" android/app/build.gradle
-          grep -E "versionCode|versionName" android/app/build.gradle
+          echo "AXIS_VERSION_CODE=$CODE" >> "$GITHUB_ENV"
+          echo "AXIS_VERSION_NAME=$CODE.0" >> "$GITHUB_ENV"
+          echo "versionCode $CODE"
 
       - name: Build the web app into the native project
         run: |
