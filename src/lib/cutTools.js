@@ -177,6 +177,7 @@ function mergeCommonPolygon(mesh, e1, e2) {
 // Walk the edge ring from the tapped edge: in each quad the cut continues on
 // the opposite side, at the same position along it.
 export function buildCutLoopPlan(mesh, a0, b0, t, mode = 'follow') {
+  /** @type {Array<{ loop: number[]; from: number[]; to: number[]; fromT?: number; toT?: number }>} */
   const segments = [];
   const quadSeen = new Set();
   const edgeSeen = new Set();
