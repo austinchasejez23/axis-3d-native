@@ -6,7 +6,7 @@ import TransformValueRow from './TransformValueRow';
 
 // Editable position / rotation / scale for the selected object. Values update
 // the object live; Apply commits a single undoable step, Cancel reverts.
-export default function TransformDrawer({ meshId, managerRef, onClose, onApplied, onRegisterApply, focus, hud }) {
+export default function TransformDrawer({ meshId, managerRef, onClose, onApplied = undefined, onRegisterApply, focus, hud }) {
   // focus = { section: 'position' | 'rotation' | 'scale', index: 0 | 1 | 2 }
   const isFocused = (section, index) => !!focus && focus.section === section && focus.index === index;
   const { uiColor, highlightColor, unit } = useTheme();
