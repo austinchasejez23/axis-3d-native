@@ -66,6 +66,20 @@ jobs:
         run: |
           chmod +x android/gradlew
           cd android && ./gradlew --no-daemon assembleDebug
+      - name: Prove release signing refuses missing key material
+        run: |
+          unset AXIS_UPLOAD_KEYSTORE AXIS_UPLOAD_STORE_PASSWORD AXIS_UPLOAD_KEY_PASSWORD AXIS_VERSION_CODE
+          cd android
+          if ./gradlew --no-daemon :app:verifyAxisUploadKey > signing-rejection.log 2>&1; then
+            echo "::error::Release signing verification unexpectedly accepted missing credentials"
+            exit 1
+          fi
+          grep -Fq 'Release signing requires AXIS_UPLOAD_KEYSTORE' signing-rejection.log || {
+            echo "::error::Release signing failed for an unexpected reason"
+            tail -n 15 signing-rejection.log
+            exit 1
+          }
+          echo 'Release signing correctly rejected missing credentials.'
       - uses: actions/upload-artifact@v4
         if: success()
         with:
