@@ -45,7 +45,7 @@ declare module './SceneManager.js' {
     _cameraHandoffGuard?: { x: number; y: number } | null;
     _cameraOrbitVelocity?: object | null;
     _cameraLastMoveAt?: number | null;
-    _paintStroke?: object | null;
+    _paintStroke?: { screenRadius?: number } | null;
     _cameraTwoFingerFrame?: number | null;
     triangleLimit?: number;
     _camRaf?: number;
