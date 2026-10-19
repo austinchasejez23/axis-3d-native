@@ -39,7 +39,7 @@ function makeGizmo(data) {
 export function applySceneLights(SceneManager) {
   const P = SceneManager.prototype;
 
-  P._createSceneLight = function (source) {
+  P._createSceneLight = /** @this {import('./SceneManager.js').SceneManager} */ function (source) {
     const data = { ...defaults(source?.type), ...source };
     data.type = TYPES.has(data.type) ? data.type : 'spot';
     data.position = [...(data.position || [3, 5, 4])];
@@ -61,7 +61,7 @@ export function applySceneLights(SceneManager) {
     return record;
   };
 
-  P._disposeSceneLight = function (record) {
+  P._disposeSceneLight = /** @this {import('./SceneManager.js').SceneManager} */ function (record) {
     this.scene.remove(record.object, record.gizmo, record.guide);
     record.guide.geometry.dispose();
     record.guide.material.dispose();
@@ -70,7 +70,7 @@ export function applySceneLights(SceneManager) {
     record.object.dispose?.();
   };
 
-  P._syncSceneLight = function (record) {
+  P._syncSceneLight = /** @this {import('./SceneManager.js').SceneManager} */ function (record) {
     const { object, gizmo } = record;
     object.position.fromArray(record.position);
     gizmo.position.fromArray(record.position);
@@ -131,15 +131,15 @@ export function applySceneLights(SceneManager) {
     this._reflectionDirty = true;
   };
 
-  P._emitSceneLights = function () { this.cb.onLightsChange?.(this.getLightingState()); };
-  P.getLightingState = function () {
+  P._emitSceneLights = /** @this {import('./SceneManager.js').SceneManager} */ function () { this.cb.onLightsChange?.(this.getLightingState()); };
+  P.getLightingState = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     const lights = (this.sceneLights || []).map(plain);
     const selectedIndex = Math.max(0, lights.findIndex((light) => light.id === this.selectedLightId));
     return { lights, selectedIndex, selected: lights[selectedIndex] || null };
   };
-  P.serializeSceneLights = function () { return (this.sceneLights || []).map(plain); };
+  P.serializeSceneLights = /** @this {import('./SceneManager.js').SceneManager} */ function () { return (this.sceneLights || []).map(plain); };
 
-  P.resetSceneLights = function (saved) {
+  P.resetSceneLights = /** @this {import('./SceneManager.js').SceneManager} */ function (saved) {
     for (const light of this.sceneLights || []) this._disposeSceneLight(light);
     const source = saved?.length ? saved : [defaults('directional')];
     this.sceneLights = source.map((light) => this._createSceneLight(light));
@@ -149,18 +149,18 @@ export function applySceneLights(SceneManager) {
     this.applyShadows();
     this._emitSceneLights();
   };
-  P.restoreSceneLights = function (saved, selectedId) {
+  P.restoreSceneLights = /** @this {import('./SceneManager.js').SceneManager} */ function (saved, selectedId) {
     this.resetSceneLights(saved);
     if (saved?.some((light) => light.id === selectedId)) this.selectedLightId = selectedId;
     for (const light of this.sceneLights) this._syncSceneLight(light);
     this._emitSceneLights();
   };
-  P.disposeSceneLights = function () {
+  P.disposeSceneLights = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     for (const light of this.sceneLights || []) this._disposeSceneLight(light);
     this.sceneLights = [];
   };
 
-  P.applyLighting = function () {
+  P.applyLighting = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (this.dirLight) this.dirLight.intensity = 0;
     // Studio lighting is a complete neutral setup. Custom lights replace its
     // strong key, not all illumination: a restrained neutral fill remains so
@@ -180,14 +180,14 @@ export function applySceneLights(SceneManager) {
     this.scene.environmentIntensity = base ? 1.2 : 0.85;
     for (const light of this.sceneLights || []) this._syncSceneLight(light);
   };
-  P.setLightingEdit = function (active) {
+  P.setLightingEdit = /** @this {import('./SceneManager.js').SceneManager} */ function (active) {
     this.lightingEdit = !!active;
     this.setHighlightsHidden?.(!!active);
     if (active && !this.selectedLightId) this.selectedLightId = this.sceneLights[0]?.id || null;
     for (const light of this.sceneLights || []) this._syncSceneLight(light);
     this._emitSceneLights();
   };
-  P.updateSceneLightGizmos = function () {
+  P.updateSceneLightGizmos = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (!this.lightingEdit) return;
     for (const light of this.sceneLights) {
       const distance = this.camera.position.distanceTo(light.gizmo.position);
@@ -195,8 +195,8 @@ export function applySceneLights(SceneManager) {
       light.gizmo.scale.setScalar(scale);
     }
   };
-  P.getSelectedSceneLight = function () { return this.sceneLights?.find((light) => light.id === this.selectedLightId) || null; };
-  P.selectSceneLight = function (id) {
+  P.getSelectedSceneLight = /** @this {import('./SceneManager.js').SceneManager} */ function () { return this.sceneLights?.find((light) => light.id === this.selectedLightId) || null; };
+  P.selectSceneLight = /** @this {import('./SceneManager.js').SceneManager} */ function (id) {
     if (!this.sceneLights?.some((light) => light.id === id)) return false;
     this.selectedLightId = id;
     for (const light of this.sceneLights) this._syncSceneLight(light);
@@ -206,11 +206,11 @@ export function applySceneLights(SceneManager) {
   // Touching a light means you want your own lighting, so default lighting
   // steps aside rather than silently swallowing the edit. Selecting a light
   // is not an edit and leaves the toggle alone.
-  P._leaveDefaultLighting = function () {
+  P._leaveDefaultLighting = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (theme.defaultLightingEnabled) theme.set({ defaultLightingEnabled: false });
   };
-  P.beginSceneLightControl = function () { this.pushUndo(); };
-  P.updateSelectedSceneLight = function (patch, recordUndo = false) {
+  P.beginSceneLightControl = /** @this {import('./SceneManager.js').SceneManager} */ function () { this.pushUndo(); };
+  P.updateSelectedSceneLight = /** @this {import('./SceneManager.js').SceneManager} */ function (patch, recordUndo = false) {
     const light = this.getSelectedSceneLight();
     if (!light) return;
     this._leaveDefaultLighting();
@@ -235,7 +235,7 @@ export function applySceneLights(SceneManager) {
     this.editVersion = (this.editVersion || 0) + 1;
     this._emitSceneLights();
   };
-  P.duplicateSelectedSceneLight = function () {
+  P.duplicateSelectedSceneLight = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     const light = this.getSelectedSceneLight();
     if (!light) return;
     this._leaveDefaultLighting();
@@ -248,7 +248,7 @@ export function applySceneLights(SceneManager) {
     this.selectSceneLight(duplicate.id);
     this.applyShadows();
   };
-  P.deleteSelectedSceneLight = function () {
+  P.deleteSelectedSceneLight = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (this.sceneLights.length <= 1) return false;
     const light = this.getSelectedSceneLight();
     if (!light) return false;
@@ -264,7 +264,7 @@ export function applySceneLights(SceneManager) {
     return true;
   };
 
-  P.pickSceneLight = function (x, y) {
+  P.pickSceneLight = /** @this {import('./SceneManager.js').SceneManager} */ function (x, y) {
     if (!this.lightingEdit) return null;
     const ndc = this.screenToNDC(x, y);
     this.pointer.set(ndc.x, ndc.y);
@@ -280,8 +280,8 @@ export function applySceneLights(SceneManager) {
     }
     return null;
   };
-  P.isPointOverSelectedSceneLight = function (x, y) { return this.pickSceneLight(x, y) === this.selectedLightId; };
-  P.translateSelectedSceneLight = function (delta) {
+  P.isPointOverSelectedSceneLight = /** @this {import('./SceneManager.js').SceneManager} */ function (x, y) { return this.pickSceneLight(x, y) === this.selectedLightId; };
+  P.translateSelectedSceneLight = /** @this {import('./SceneManager.js').SceneManager} */ function (delta) {
     const light = this.getSelectedSceneLight();
     if (!light) return;
     this._leaveDefaultLighting();
@@ -290,7 +290,7 @@ export function applySceneLights(SceneManager) {
     this._syncSceneLight(light);
     this._emitSceneLights();
   };
-  P.rotateSelectedSceneLight = function (angle) {
+  P.rotateSelectedSceneLight = /** @this {import('./SceneManager.js').SceneManager} */ function (angle) {
     const light = this.getSelectedSceneLight();
     if (!light || light.type === 'point') return;
     this._leaveDefaultLighting();
@@ -303,7 +303,7 @@ export function applySceneLights(SceneManager) {
     this._emitSceneLights();
   };
 
-  P.beginSceneLightGesture = function (e) {
+  P.beginSceneLightGesture = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
     if (!this.lightingEdit) return false;
     if (this.pointers.size === 1) {
       const id = this.pickSceneLight(e.clientX, e.clientY);
@@ -338,7 +338,7 @@ export function applySceneLights(SceneManager) {
     return true;
   };
 
-  P.updateSceneLightGesture = function (e) {
+  P.updateSceneLightGesture = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
     if (!this.gesture?.startsWith('light_')) return false;
     const pointer = this.pointers.get(e.pointerId);
     if (this.gesture === 'light_orbit_pending' && this.movedSignificantly) this.gesture = 'light_orbit';
@@ -384,14 +384,14 @@ export function applySceneLights(SceneManager) {
     else if (g.mode === 'intensity') this.updateSelectedSceneLight({ intensity: g.intensity * Math.exp(-dy / 120) });
     return true;
   };
-  P.finishSceneLightGesture = function () {
+  P.finishSceneLightGesture = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (!this.gesture?.startsWith('light_')) return false;
     if (this.pointers.size === 0) { this.gesture = null; this.gestureData = null; }
     else { this.gesture = 'light_paused'; this.gestureData = null; }
     return true;
   };
 
-  P.beginSceneLightMouse = function (e) {
+  P.beginSceneLightMouse = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
     if (!this.lightingEdit) return false;
     const id = e.button === 0 ? this.pickSceneLight(e.clientX, e.clientY) : null;
     if (id) {
@@ -402,7 +402,7 @@ export function applySceneLights(SceneManager) {
     }
     return true;
   };
-  P.updateSceneLightMouse = function (e) {
+  P.updateSceneLightMouse = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
     const m = this.mouse;
     if (!m?.mode?.startsWith('light_')) return false;
     if (Math.hypot(e.clientX - m.startX, e.clientY - m.startY) > 4) m.moved = true;
@@ -420,5 +420,5 @@ export function applySceneLights(SceneManager) {
     m.lastX = e.clientX; m.lastY = e.clientY;
     return true;
   };
-  P.finishSceneLightMouse = function () { return !!this.mouse?.mode?.startsWith('light_'); };
+  P.finishSceneLightMouse = /** @this {import('./SceneManager.js').SceneManager} */ function () { return !!this.mouse?.mode?.startsWith('light_'); };
 }
