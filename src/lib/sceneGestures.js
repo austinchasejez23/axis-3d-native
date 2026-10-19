@@ -9,7 +9,7 @@ import { beginCameraTouch, endCameraTouch } from '@/lib/cameraTouchSession';
 export function applySceneGestures(SceneManager) {
   const P = SceneManager.prototype;
 
-  P.setupEvents = function () {
+  P.setupEvents = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     const el = this.renderer.domElement;
     el.style.touchAction = 'none';
     el.addEventListener('pointerdown', (e) => this.onPointerDown(e));
@@ -30,7 +30,7 @@ export function applySceneGestures(SceneManager) {
 
   // Sculpt strokes are shared by touch and mouse. Begin returns true when the
   // press landed on an editable mesh; the FIRST mesh touched owns the stroke.
-  P.beginSculptStroke = function (x, y) {
+  P.beginSculptStroke = /** @this {import('./SceneManager.js').SceneManager} */ function (x, y) {
     const ndc = this.screenToNDC(x, y);
     const hits = this.raycastMeshes(ndc.x, ndc.y);
     if (hits.length === 0) return false;
@@ -59,7 +59,7 @@ export function applySceneGestures(SceneManager) {
     return true;
   };
 
-  P.moveSculptStroke = function (x, y) {
+  P.moveSculptStroke = /** @this {import('./SceneManager.js').SceneManager} */ function (x, y) {
     const stroke = this.sculptStroke;
     if (!stroke) return;
     const mesh = this.getMesh(stroke.meshId);
@@ -82,7 +82,7 @@ export function applySceneGestures(SceneManager) {
     if (this.selection.meshId === stroke.meshId) this.updateHighlights();
   };
 
-  P.onPointerDown = function (e) {
+  P.onPointerDown = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
     if (e.pointerType === 'mouse') return this.onMouseDown(e);
     e.preventDefault();
     try { this.renderer.domElement.setPointerCapture(e.pointerId); } catch {}
@@ -363,7 +363,7 @@ export function applySceneGestures(SceneManager) {
     }
   };
 
-  P.onPointerMove = function (e) {
+  P.onPointerMove = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
     if (e.pointerType === 'mouse') return this.onMouseMove(e);
     if (!this.pointers.has(e.pointerId)) return;
     if (this.cameraGesture && this._cameraTouchFrozen) return;
@@ -749,7 +749,7 @@ export function applySceneGestures(SceneManager) {
     }
   };
 
-  P.onPointerUp = function (e) {
+  P.onPointerUp = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
     if (e.pointerType === 'mouse') return this.onMouseUp(e);
     // A finger that never pressed DOWN on the canvas must not be treated as a
     // canvas tap. Dismiss overlays close their layer on press and then unmount,
@@ -969,7 +969,7 @@ export function applySceneGestures(SceneManager) {
 
   // Coalesce interleaved pointer events so pan and dolly use both fingers'
   // latest positions together once per frame.
-  P.scheduleCameraTwoFinger = function () {
+  P.scheduleCameraTwoFinger = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (this._cameraTwoFingerFrame) return;
     this._cameraTwoFingerFrame = requestAnimationFrame(() => {
       this._cameraTwoFingerFrame = null;
@@ -978,7 +978,7 @@ export function applySceneGestures(SceneManager) {
   };
 
   // Two-finger midpoint pan plus distance-ratio dolly; twist does not orbit.
-  P.applyCameraTwoFinger = function () {
+  P.applyCameraTwoFinger = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (this.gesture !== 'camera_two' || this.pointers.size !== 2 || this._cameraTouchFrozen) return;
     const g = this.gestureData;
     if (!g) return;
@@ -993,7 +993,7 @@ export function applySceneGestures(SceneManager) {
     g.lastDist = dist;
   };
 
-  P.updateMarquee = function () {
+  P.updateMarquee = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (!this.gestureData) return;
     const rect = this.renderer.domElement.getBoundingClientRect();
     const x = this.gestureData.startX - rect.left;
@@ -1003,7 +1003,7 @@ export function applySceneGestures(SceneManager) {
     this.cb.onMarqueeChange?.({ x, y, w, h });
   };
 
-  P.applyMarquee = function () {
+  P.applyMarquee = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (!this.gestureData) return;
     const rect = this.renderer.domElement.getBoundingClientRect();
     const sx = this.gestureData.startX, sy = this.gestureData.startY;
