@@ -3,7 +3,7 @@ name: Android build
 # Tap "Run workflow" on this file in the GitHub mobile app, or push to main.
 # The debug APK needs no signing key: download it from the run's Artifacts and
 # install it straight on the phone. The signed release bundle for Play is only
-# built once the four signing secrets exist.
+# built once the signing secrets exist.
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ jobs:
     # Job level, so the `if` guards below can read it. A step's own `env` is
     # not in scope for that step's `if`.
     env:
-      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      KEYSTORE_FILE_KEY: ${{ secrets.KEYSTORE_FILE_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -66,11 +66,13 @@ jobs:
 
       # Everything below is skipped until the signing secrets are added.
       - name: Restore the upload keystore
-        if: env.KEYSTORE_BASE64 != ''
-        # Phone copy/paste can add spaces or line breaks; base64 ignores none of them.
+        # android/upload.jks.enc is the upload keystore encrypted with AES-256.
+        # Only the KEYSTORE_FILE_KEY secret can decrypt it.
+        if: env.KEYSTORE_FILE_KEY != ''
         run: |
-          printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > android/upload.jks
-          echo "Restored keystore: $(wc -c < android/upload.jks) bytes"
+          printf '%s' "$KEYSTORE_FILE_KEY" | tr -d '[:space:]' > /tmp/axis-file-key
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in android/upload.jks.enc -out android/upload.jks -pass file:/tmp/axis-file-key
+          rm -f /tmp/axis-file-key
 
       - name: Signed release bundle
         if: hashFiles('android/upload.jks') != ''
