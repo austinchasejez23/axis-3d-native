@@ -14,7 +14,7 @@ function Chevron({ dir }) {
 // only the chevrons move it, one slider per tap. The ends fade out exactly as
 // in the Material and Texture tabs, with the chevrons sitting on the faded
 // padding so they never cover a slider.
-const LoopingSliderScroller = forwardRef(function LoopingSliderScroller({ children }, outerRef) {
+const LoopingSliderScroller = forwardRef(/** @param {{ children?: import('react').ReactNode }} props */ function LoopingSliderScroller({ children }, outerRef) {
   const ref = useRef(null);
   useImperativeHandle(outerRef, () => ({ goTo: (i) => ref.current?.goTo(i) }), []);
   const chevron = 'absolute inset-y-0 z-20 w-6 flex items-center text-white/80 active:scale-90 active:text-white';
