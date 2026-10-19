@@ -100,8 +100,12 @@ jobs:
         if: always()
         run: rm -f android/upload.jks
 
-      - uses: actions/upload-artifact@v4
+      - name: Name the bundle after its version
         if: hashFiles('android/app/build/outputs/bundle/release/app-release.aab') != ''
+        run: cp android/app/build/outputs/bundle/release/app-release.aab "AXIS-$AXIS_VERSION_CODE-signed.aab"
+
+      - uses: actions/upload-artifact@v4
+        if: hashFiles('AXIS-*-signed.aab') != ''
         with:
-          name: axis-release-aab
-          path: android/app/build/outputs/bundle/release/app-release.aab
+          name: AXIS-${{ env.AXIS_VERSION_CODE }}-signed-aab
+          path: AXIS-*-signed.aab
