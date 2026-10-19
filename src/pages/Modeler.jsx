@@ -748,6 +748,9 @@ export default function Modeler() {
         await new Promise((r) => setTimeout(r, 0));
       }
       if (meshes[0]) managerRef.current?.setSelection({ meshId: meshes[0].id, type: 'object', indices: [] });
+      // Preserve the original CAD dimensions and reframe the camera.
+      managerRef.current?.frameScene();
+      toast.success(`Imported ${meshes.length} object${meshes.length === 1 ? '' : 's'} from ${file.name}`);
       setLibraryOpen(false);
     } catch (err) {
       toast.error(err?.message || 'Import failed');
