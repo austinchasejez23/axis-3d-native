@@ -53,6 +53,30 @@ const tool=EditableMesh.fromGeometry(new THREE.CylinderGeometry(.62,.62,2.4,12),
 const before=volume(base);
 const result=base.clone();let ok=false,error='';try{ok=localBoolean(mgr,result,tool,'subtract')}catch(e){error=e.stack||String(e)}
 const s=stats(result);
+if (s.deg) {
+  // Diagnostic only: preserve the failing assertion and identify the original
+  // editable face producing each zero-area rendered triangle.
+  let renderTriangleIndex = 0;
+  for (let fi = 0; fi < result.faces.length; fi++) {
+    const face = result.faces[fi];
+    for (const tri of result.getFaceTriangleIndices(fi)) {
+      const points = tri.map(vi => result.getVertex(face[vi]));
+      const a = new THREE.Vector3(points[0].x, points[0].y, points[0].z);
+      const b = new THREE.Vector3(points[1].x, points[1].y, points[1].z);
+      const cc = new THREE.Vector3(points[2].x, points[2].y, points[2].z);
+      const areaSquared = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(cc, a)).lengthSq();
+      if (areaSquared < 1e-18) {
+        console.log('DEGENERATE_TRIANGLE', JSON.stringify({
+          z, y, fi, renderTriangleIndex, face, tri,
+          points: points.map(p => ({ id: p.id, x: p.x, y: p.y, z: p.z })),
+          boundary: face.map(id => result.getVertex(id)),
+          areaSquared
+        }));
+      }
+      renderTriangleIndex++;
+    }
+  }
+}
 const vm=new Map(result.vertices.map(v=>[v.id,v]));let longOblique=0;
 for(const e of result.getEdges()){const a=vm.get(e.v1),b=vm.get(e.v2);if(Math.abs(a.y-.5)>1e-5||Math.abs(b.y-.5)>1e-5)continue;
 const dx=Math.abs(a.x-b.x),dz=Math.abs(a.z-b.z);if(dx>.2&&dz>.2&&Math.hypot(dx,dz)>1.1){longOblique++;if(process.env.AXIS_BOOLEAN_DEBUG&&z===1.15&&y===.3){let efaces=[];result.faces.forEach((f,fi)=>{for(let j=0;j<f.length;j++)if((f[j]===e.v1&&f[(j+1)%f.length]===e.v2)||(f[j]===e.v2&&f[(j+1)%f.length]===e.v1))efaces.push({fi,face:f.map(id=>[id,vm.get(id)?.x,vm.get(id)?.y,vm.get(id)?.z])});});console.log('LONG_OBLIQUE',e.v1,e.v2,a,b,JSON.stringify(efaces));}}
