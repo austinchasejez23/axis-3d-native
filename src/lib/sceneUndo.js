@@ -7,7 +7,7 @@ import { capturePaintPatches, applyPaintPatches } from './paintLayer';
 export function applySceneUndo(SceneManager) {
   const P = SceneManager.prototype;
 
-  P.captureSnapshot = function () {
+  P.captureSnapshot = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     return {
       meshes: this.meshes.map((m) => m.clone()),
       selection: { ...this.selection, indices: [...this.selection.indices] },
@@ -19,7 +19,7 @@ export function applySceneUndo(SceneManager) {
     };
   };
 
-  P.pushUndoSnapshot = function (snapshot) {
+  P.pushUndoSnapshot = /** @this {import('./SceneManager.js').SceneManager} */ function (snapshot) {
     // Cheap monotonic marker of "the scene was edited", so autosave can detect
     // changes without serializing the whole model.
     this.editVersion = (this.editVersion || 0) + 1;
@@ -28,7 +28,7 @@ export function applySceneUndo(SceneManager) {
     this.redoStack = [];
   };
 
-  P.selectionChanged = function (before) {
+  P.selectionChanged = /** @this {import('./SceneManager.js').SceneManager} */ function (before) {
     const a = before.selection, b = this.selection;
     if (a.meshId !== b.meshId || a.type !== b.type || a.indices.length !== b.indices.length) return true;
     if (a.indices.some((v, i) => v !== b.indices[i])) return true;
@@ -37,13 +37,13 @@ export function applySceneUndo(SceneManager) {
     return false;
   };
 
-  P.pushUndo = function () {
+  P.pushUndo = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     // Each new gesture starts its rotation snapping from zero.
     this._angleResidual = 0;
     this.pushUndoSnapshot(this.captureSnapshot());
   };
 
-  P.restoreSnapshot = function (snapshot) {
+  P.restoreSnapshot = /** @this {import('./SceneManager.js').SceneManager} */ function (snapshot) {
     this.editVersion = (this.editVersion || 0) + 1;
     this.meshes = snapshot.meshes.map((m) => m.clone());
     for (const mesh of this.meshes) {
@@ -76,7 +76,7 @@ export function applySceneUndo(SceneManager) {
     this.cb.onMultiSelectChange?.(this.multiSelect);
   };
 
-  P.undo = function () {
+  P.undo = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (this.undoStack.length === 0) return false;
     this.endPaintStroke?.();
     const current = this.captureSnapshot();
@@ -88,7 +88,7 @@ export function applySceneUndo(SceneManager) {
     return true;
   };
 
-  P.redo = function () {
+  P.redo = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (this.redoStack.length === 0) return false;
     const current = this.captureSnapshot();
     const target = this.redoStack.pop();
@@ -98,7 +98,7 @@ export function applySceneUndo(SceneManager) {
     return true;
   };
 
-  P.lockSelection = function () {
+  P.lockSelection = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     const ids = this.isGroupMode() ? [...this.selectedMeshIds] : (this.selection.meshId ? [this.selection.meshId] : []);
     if (ids.length === 0) return false;
     for (const id of ids) { const m = this.getMesh(id); if (m) m.locked = true; }
@@ -107,18 +107,18 @@ export function applySceneUndo(SceneManager) {
     return true;
   };
 
-  P.unlockAll = function () {
+  P.unlockAll = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     let any = false;
     for (const m of this.meshes) { if (m.locked) { m.locked = false; any = true; } }
     this.cb.onLockChange?.();
     return any;
   };
 
-  P.hasLockedObjects = function () { return this.meshes.some((m) => m.locked); };
+  P.hasLockedObjects = /** @this {import('./SceneManager.js').SceneManager} */ function () { return this.meshes.some((m) => m.locked); };
 
   // Object-level transform for the Transform drawer: live preview (no undo per
   // edit); the drawer pushes a single pre-edit snapshot on Apply.
-  P.getObjectTransform = function (meshId) {
+  P.getObjectTransform = /** @this {import('./SceneManager.js').SceneManager} */ function (meshId) {
     const mesh = this.getMesh(meshId);
     if (!mesh) return null;
     const toDeg = (r) => (r * 180) / Math.PI;
@@ -129,7 +129,7 @@ export function applySceneUndo(SceneManager) {
     };
   };
 
-  P.getSelectionTransform = function (meshId) {
+  P.getSelectionTransform = /** @this {import('./SceneManager.js').SceneManager} */ function (meshId) {
     const transform = this.getObjectTransform(meshId);
     if (!transform) return null;
     if (this.isGroupMode()) {
@@ -155,7 +155,7 @@ export function applySceneUndo(SceneManager) {
     };
   };
 
-  P.setSelectionPositionLive = function (position) {
+  P.setSelectionPositionLive = /** @this {import('./SceneManager.js').SceneManager} */ function (position) {
     if (this.isGroupMode()) {
       const center = this.getGroupCenter();
       if (!center) return;
@@ -165,7 +165,7 @@ export function applySceneUndo(SceneManager) {
     this.setObjectPositionLive(position[0], position[1], position[2]);
   };
 
-  P.setObjectTransformLive = function (meshId, { position, rotation, scale }) {
+  P.setObjectTransformLive = /** @this {import('./SceneManager.js').SceneManager} */ function (meshId, { position, rotation, scale }) {
     const mesh = this.getMesh(meshId);
     if (!mesh || mesh.locked) return;
     if (position) mesh.position.set(position[0], position[1], position[2]);
