@@ -30,7 +30,7 @@ import { collectGlDiagnostics } from '@/lib/glDiagnostics';
  */
 
 /** @type {import('react').ForwardRefRenderFunction<SceneManager, ThreeViewportProps>} */
-const renderThreeViewport = ({ onStatsChange, onTriangleCountChange, onHudChange, onMarqueeChange, onSelectionChange, onBeforeSelectionTap, onSelectionTap, onMultiSelectChange, onDrawChange, onLockChange, onSelectionModeChange, onCutChange, onAddVertexChange, onEmptyTap, onGraphicsError, onPrecisionPoint, onLightsChange, onTriangleLimit, onReady }, ref) => {
+const RenderThreeViewport = ({ onStatsChange, onTriangleCountChange, onHudChange, onMarqueeChange, onSelectionChange, onBeforeSelectionTap, onSelectionTap, onMultiSelectChange, onDrawChange, onLockChange, onSelectionModeChange, onCutChange, onAddVertexChange, onEmptyTap, onGraphicsError, onPrecisionPoint, onLightsChange, onTriangleLimit, onReady }, ref) => {
   const containerRef = useRef();
   /** @type {import('react').MutableRefObject<SceneManager | null>} */
   const managerRef = useRef(null);
@@ -115,6 +115,6 @@ const renderThreeViewport = ({ onStatsChange, onTriangleCountChange, onHudChange
   );
 };
 
-const ThreeViewport = forwardRef(renderThreeViewport);
+const ThreeViewport = forwardRef(RenderThreeViewport);
 ThreeViewport.displayName = 'ThreeViewport';
 export default ThreeViewport;
