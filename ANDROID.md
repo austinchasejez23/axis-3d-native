@@ -86,8 +86,8 @@ cd android
 
 Replace the placeholders privately. Do not paste passwords into chat, CI logs,
 committed shell scripts, or public issue comments. The variables must be set
-in the environment where Gradle runs; the Android Studio signing wizard is a
-separate flow and does not invoke this custom verification task.
+in the environment where Gradle runs. Use the documented Gradle CLI signing
+path; Android Studio's signing wizard is not part of this tested flow.
 
 The Gradle release task **fails closed** if signing material or a version code
 is missing, the key is inaccessible, or the certificate SHA-256 differs from
