@@ -1,7 +1,7 @@
 import { useTheme } from '@/lib/theme';
 
 // Horizontal sheet slider: label on the left, value on the right, track below.
-export default function InlineSlider({ label, value, display, min = 0, max = 100, step = 1, onChange, hue = false, width = 128, grow = false, compact = false, onActiveChange, disabled = false }) {
+export default function InlineSlider({ label, value, display = undefined, min = 0, max = 100, step = 1, onChange, hue = false, width = 128, grow = false, compact = false, onActiveChange = undefined, disabled = false }) {
   const { highlightColor } = useTheme();
   const pct = Math.max(0, Math.min(100, ((value - min) / (max - min || 1)) * 100));
   return (
