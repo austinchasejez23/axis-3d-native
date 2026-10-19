@@ -55,7 +55,7 @@ import useKeyboardViewport from '@/hooks/use-keyboard-viewport';
 
 export default function Modeler() {
   const navigate = useNavigate();
-  const managerRef = useRef();
+  const managerRef = useRef(/** @type {import('@/lib/SceneManager').SceneManager | null} */ (null));
   const toolPromptTimer = useRef(null);
   const renderBoostNoticeTimer = useRef(null);
   const segmentSnapshotRef = useRef(null);
