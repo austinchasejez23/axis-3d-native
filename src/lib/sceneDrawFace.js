@@ -36,10 +36,10 @@ function buildPreview(manager, record) {
 
 export default function applySceneDrawFace(SceneManager) {
   const P = SceneManager.prototype;
-  P.emitDrawState = function (nearStart = false) {
+  P.emitDrawState = /** @this {import('./SceneManager.js').SceneManager} */ function (nearStart = false) {
     this.cb.onDrawChange?.({ points: [...this.drawScreenPts], active: true, kind: this.drawMode, axis: this.drawAxis, nearStart });
   };
-  P.enterDrawMode = function (kind) {
+  P.enterDrawMode = /** @this {import('./SceneManager.js').SceneManager} */ function (kind) {
     this.exitDrawMode();
     this.drawMode = kind;
     this.drawPreviews = [];
@@ -54,13 +54,13 @@ export default function applySceneDrawFace(SceneManager) {
     this.gestureData = null;
     this.setDrawPlaneAxis(ax >= ay && ax >= az ? 'x' : ay >= az ? 'y' : 'z');
   };
-  P.alignDrawCameraToPlane = function () {
+  P.alignDrawCameraToPlane = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     const normal = this.drawPlaneNormal;
     if (!normal) return;
     const theta = Math.abs(normal.y) > 0 ? this.cameraTheta : Math.atan2(normal.x, normal.z);
     this.setCameraOrbit(this.cameraDist, theta, Math.asin(normal.y));
   };
-  P.setDrawPlaneAxis = function (axis) {
+  P.setDrawPlaneAxis = /** @this {import('./SceneManager.js').SceneManager} */ function (axis) {
     if (!this.drawMode || !['x', 'y', 'z'].includes(axis)) return;
     const direction = new THREE.Vector3();
     this.camera.getWorldDirection(direction);
@@ -73,28 +73,28 @@ export default function applySceneDrawFace(SceneManager) {
     updateDrawFaceGrid(this);
     this.emitDrawState();
   };
-  P.setDrawGridEnabled = function (enabled) {
+  P.setDrawGridEnabled = /** @this {import('./SceneManager.js').SceneManager} */ function (enabled) {
     this.drawGridEnabled = !!enabled && this.drawMode === 'face';
     updateDrawFaceGrid(this);
   };
-  P.setDrawStraighten = function (enabled) {
+  P.setDrawStraighten = /** @this {import('./SceneManager.js').SceneManager} */ function (enabled) {
     this.drawStraighten = !!enabled;
     if (!this.drawStraighten) this.drawAlign = false;
     for (const record of this.drawPreviews || []) buildPreview(this, record);
   };
-  P.setDrawAlign = function (enabled) {
+  P.setDrawAlign = /** @this {import('./SceneManager.js').SceneManager} */ function (enabled) {
     this.drawAlign = this.drawStraighten && !!enabled;
     for (const record of this.drawPreviews || []) buildPreview(this, record);
   };
-  P.getDrawPlane = function () {
+  P.getDrawPlane = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     return new THREE.Plane().setFromNormalAndCoplanarPoint(this.drawPlaneNormal || new THREE.Vector3(0, 1, 0), this.cameraTarget);
   };
-  P.beginDrawFaceStroke = function (x, y) {
+  P.beginDrawFaceStroke = /** @this {import('./SceneManager.js').SceneManager} */ function (x, y) {
     this.drawScreenPts = [];
     this.drawWorldPts = [];
     this.appendDrawFacePoint(x, y);
   };
-  P.appendDrawFacePoint = function (x, y) {
+  P.appendDrawFacePoint = /** @this {import('./SceneManager.js').SceneManager} */ function (x, y) {
     const last = this.drawScreenPts[this.drawScreenPts.length - 1];
     if (last && Math.hypot(x - last.x, y - last.y) <= 6) return;
     const world = this.rayToPlane(x, y, this.getDrawPlane());
@@ -104,7 +104,7 @@ export default function applySceneDrawFace(SceneManager) {
     const first = this.drawScreenPts[0];
     this.emitDrawState(this.drawScreenPts.length > 4 && Math.hypot(x - first.x, y - first.y) < 24);
   };
-  P.finishDrawFaceStroke = function (x, y) {
+  P.finishDrawFaceStroke = /** @this {import('./SceneManager.js').SceneManager} */ function (x, y) {
     const first = this.drawScreenPts[0];
     if (first && this.drawScreenPts.length > 4 && Math.hypot(x - first.x, y - first.y) < 24) this.completeDrawFace();
     // An incomplete stroke is discarded, but the tool stays open for another try.
@@ -112,13 +112,13 @@ export default function applySceneDrawFace(SceneManager) {
     this.drawWorldPts = [];
     this.emitDrawState();
   };
-  P.completeDrawFace = function () {
+  P.completeDrawFace = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (this.drawWorldPts.length < 3) return;
     const record = { screen: [...this.drawScreenPts], world: this.drawWorldPts.map((p) => p.clone()), axis: this.drawAxis };
     buildPreview(this, record);
     if (record.mesh) this.drawPreviews.push(record);
   };
-  P.confirmDrawFaces = function () {
+  P.confirmDrawFaces = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     const meshes = (this.drawPreviews || []).map((record) => record.mesh).filter(Boolean);
     const total = [...this.meshes, ...meshes].reduce((sum, mesh) => sum + mesh.getTriangleCount(), 0);
     if (this.triangleLimit && total > this.triangleLimit) { this.cb.onTriangleLimit?.(); return; }
@@ -132,7 +132,7 @@ export default function applySceneDrawFace(SceneManager) {
     this.exitDrawMode();
     this.updateStats();
   };
-  P.exitDrawMode = function () {
+  P.exitDrawMode = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     const closingLabel = this.drawMode === 'face' ? 'Draw face' : null;
     for (const record of this.drawPreviews || []) disposePreview(this, record);
     this.drawPreviews = [];
