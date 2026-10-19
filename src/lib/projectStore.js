@@ -16,8 +16,22 @@ function openDb() {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      // When the database is upgraded by another tab or WebView, reopen it
+      // rather than keeping a closed handle for every future save attempt.
+      db.onversionchange = () => {
+        db.close();
+        dbPromise = null;
+      };
+      resolve(db);
+    };
     req.onerror = () => reject(req.error);
+  }).catch((error) => {
+    // An intermittent storage-open failure must not permanently break all
+    // future Library saves for the rest of the Android app session.
+    dbPromise = null;
+    throw error;
   });
   return dbPromise;
 }
