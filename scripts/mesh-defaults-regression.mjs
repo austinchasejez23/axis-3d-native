@@ -32,6 +32,16 @@ try {
   assert.notEqual(copied.primitiveParams, mesh.primitiveParams);
   assert.equal(copied.textureMergeColor, true);
 
+  // Undo snapshots use clone(); losing this flag changes paint-wire rendering.
+  mesh._paintDense = true;
+  mesh.paintWireEdges = [{ v1: 1, v2: 2 }];
+  const paintedCopy = mesh.clone();
+  assert.equal(paintedCopy._paintDense, true);
+  assert.deepEqual(paintedCopy.paintWireEdges, mesh.paintWireEdges);
+  assert.notEqual(paintedCopy.paintWireEdges, mesh.paintWireEdges);
+  mesh._paintDense = false;
+  mesh.paintWireEdges = null;
+
   const restored = EditableMesh.deserialize(mesh.serialize());
   assert.deepEqual(restored.primitiveParams, mesh.primitiveParams);
   assert.equal(restored.textureMergeColor, true);
