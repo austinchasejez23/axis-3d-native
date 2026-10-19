@@ -704,6 +704,7 @@ export default function Modeler() {
         else throw new Error(`Unsupported export format: ${format}`);
       }
       const result = await downloadFile(content, `${filename}.${format}`, mimeType);
+      if (result === 'saved') toast.success(`${format.toUpperCase()} saved successfully`);
       if (result === 'shared') toast.success(`${format.toUpperCase()} sent to Android save/share sheet`);
       else toast.message(`${format.toUpperCase()} download attempted. Check Downloads.`);
     } catch (error) {
