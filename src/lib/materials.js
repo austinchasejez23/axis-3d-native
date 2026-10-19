@@ -240,6 +240,10 @@ export function createMaterial(mesh, viewportMode = {}) {
   // Boost keeps open surfaces double-sided, but closed solids only shade their
   // outward-facing triangles. Disabling the toggle restores the original view.
   mat.side = theme.renderBoostEnabled && isClosedSurface(mesh) ? THREE.FrontSide : THREE.DoubleSide;
+  // Geometry-only imports start as actual wireframes. Their invisible depth
+  // surface still handles front/back edge occlusion and remains raycastable;
+  // no source shading, reflections or source color is drawn.
+  if (mesh.importedWireframeOnly) mat.colorWrite = false;
   mat.needsUpdate = true;
   return objectShadowMaterial(mat);
 }
@@ -315,9 +319,11 @@ export function applyShadows(sm) {
     sm.shadowGround.visible = on;
     sm.shadowGround.material.opacity = on ? intensity : 0;
   }
-  for (const obj of sm.threeObjects.values()) {
-    obj.mesh.receiveShadow = on;
-    obj.mesh.castShadow = on;
+  for (const [id, obj] of sm.threeObjects) {
+    const geometryOnly = !!sm.getMesh(id)?.importedWireframeOnly;
+    // Imported wireframe meshes neither cast nor receive scene shadows.
+    obj.mesh.receiveShadow = on && !geometryOnly;
+    obj.mesh.castShadow = on && !geometryOnly;
     if (obj.material) obj.material.needsUpdate = true;
   }
 }
@@ -329,6 +335,7 @@ export function applyShine(sm) {
     obj.material.dispose();
     obj.material = createMaterial(mesh, sm.viewportDisplayMode);
     obj.mesh.material = obj.material;
+    if (mesh.importedWireframeOnly) obj.material.colorWrite = !obj.wireframe?.visible;
   }
   if (sm.refreshReflectionEnvMaps) sm.refreshReflectionEnvMaps();
   // Fill levels and environment strength are owned by the lighting controls, so
@@ -338,9 +345,13 @@ export function applyShine(sm) {
 
 // Toggle every object's wireframe overlay visibility from the theme setting.
 export function applyWireframe(sm) {
-  const on = !!theme.wireframeEnabled;
-  for (const obj of sm.threeObjects.values()) {
-    if (obj.wireframe) obj.wireframe.visible = on;
+  const on = !!theme.wireframeEnabled && !sm.wireframesHidden;
+  for (const [id, obj] of sm.threeObjects) {
+    const mesh = sm.getMesh(id);
+    if (obj.wireframe) obj.wireframe.visible = on && !obj.focusProxyGeometry;
+    // When wireframe is manually hidden, show the neutral editable solid so
+    // the geometry doesn't disappear. Restore wire-only when shown again.
+    if (obj.material && mesh?.importedWireframeOnly) obj.material.colorWrite = !obj.wireframe?.visible;
   }
 }
 
@@ -351,5 +362,6 @@ export function updateObjectMaterial(sm, meshId) {
   obj.material.dispose();
   obj.material = createMaterial(mesh);
   obj.mesh.material = obj.material;
+  if (mesh.importedWireframeOnly) obj.material.colorWrite = !obj.wireframe?.visible;
   if (sm.refreshReflectionEnvMaps) sm.refreshReflectionEnvMaps();
 }
