@@ -14,7 +14,7 @@ import { listProjects } from '@/lib/storage';
 
 // Unified slim row: icon + label, no fill, tight padding. Width is driven by
 // content (no fixed width), so the drawer is only as wide as its text.
-function DrawerRow({ icon: Icon, label, color, onClick, chevron, compactRight = false }) {
+function DrawerRow({ icon: Icon, label, color, onClick, chevron = false, compactRight = false }) {
   return (
     <button
       onClick={onClick}
@@ -267,7 +267,6 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
               onChange={(v) => setColor(screen, v)}
               defaultColor={defaultFor(screen)}
               highlightColor={highlightColor}
-              panelStyle={panelStyle}
             />
           </div>
         );
