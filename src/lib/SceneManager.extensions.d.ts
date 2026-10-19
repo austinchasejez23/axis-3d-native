@@ -28,6 +28,25 @@ export interface SceneLightRecord {
 declare module './SceneManager.js' {
   interface SceneManager {
     // Optional state populated by attached modules or UI callbacks.
+    // Gesture state created by the touch/camera helpers after construction.
+    cameraGesture?: boolean;
+    _cameraTouchFrozen?: boolean;
+    _quickTapCamera?: {
+      theta: number;
+      phi: number;
+      target: import('three').Vector3;
+      distance: number;
+    } | null;
+    _resumeObjectGesture?: boolean;
+    measureMode?: boolean;
+    _radialArray?: object | null;
+    _msPainted?: boolean;
+    _msManipulated?: boolean;
+    _cameraHandoffGuard?: { x: number; y: number } | null;
+    _cameraOrbitVelocity?: object | null;
+    _cameraLastMoveAt?: number | null;
+    _paintStroke?: object | null;
+    _cameraTwoFingerFrame?: number | null;
     triangleLimit?: number;
     _camRaf?: number;
     _cancelCameraOnBlur?: () => void;
