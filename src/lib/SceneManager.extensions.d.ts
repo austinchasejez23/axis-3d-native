@@ -22,12 +22,73 @@ export interface SceneSnapshot {
 export interface SceneLightRecord {
   id: string;
   type: string;
-  [key: string]: unknown;
+  position: number[];
+  rotation: number[];
+  intensity: number;
+  radius: number;
+  range: number;
+  shadows: boolean;
+  shadowIntensity: number;
+  color: string;
+  colorIntensity: number;
+  object: import('three').Light;
+  target: import('three').Object3D | null;
+  gizmo: import('three').Group;
+  guide: import('three').Object3D;
+}
+export interface DrawFacePreview {
+  screen: Array<{ x: number; y: number }>;
+  world: import('three').Vector3[];
+  axis: string;
+  mesh?: import('./EditableMesh.js').EditableMesh;
+  object?: import('three').Object3D | null;
+}
+export interface RadialArrayState {
+  sourceId: number;
+  sourceBase: import('./EditableMesh.js').EditableMesh;
+  before: SceneSnapshot;
+  previewIds: number[];
+  adjustment: import('three').Matrix4;
+  options?: {
+    count: number;
+    axis: string;
+    follow: boolean;
+    radius: number;
+  };
 }
 
 declare module './SceneManager.js' {
   interface SceneManager {
     // Optional state populated by attached modules or UI callbacks.
+    // Preview and input state populated lazily by individual modeling tools.
+    cutPreviewGroup?: import('three').Group | null;
+    drawAxis?: 'x' | 'y' | 'z';
+    drawPreviews?: DrawFacePreview[];
+    drawGridEnabled?: boolean;
+    drawStraighten?: boolean;
+    drawAlign?: boolean;
+    drawPlaneNormal?: import('three').Vector3 | null;
+    sceneLights?: SceneLightRecord[];
+    selectedLightId?: string | null;
+    lightingEdit?: boolean;
+    mouse?: {
+      button: number;
+      startX: number;
+      startY: number;
+      lastX: number;
+      lastY: number;
+      moved: boolean;
+      mode: string;
+      [key: string]: any;
+    } | null;
+    editVersion?: number;
+    measurePoints?: import('three').Vector3[];
+    _wheelActive?: boolean;
+    _wheelTimer?: ReturnType<typeof setTimeout>;
+    targetMergePair?: { meshId: number; sourceId: number | null; targetId: number } | null;
+    _cameraFocusPoint?: import('three').Vector3 | null;
+    _cameraFocusRadius?: number;
+    _angleResidual?: number;
     // Gesture state created by the touch/camera helpers after construction.
     cameraGesture?: boolean;
     _cameraTouchFrozen?: boolean;
@@ -39,7 +100,7 @@ declare module './SceneManager.js' {
     } | null;
     _resumeObjectGesture?: boolean;
     measureMode?: boolean;
-    _radialArray?: object | null;
+    _radialArray?: RadialArrayState | null;
     _msPainted?: boolean;
     _msManipulated?: boolean;
     _cameraHandoffGuard?: { x: number; y: number } | null;
