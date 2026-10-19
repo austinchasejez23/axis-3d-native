@@ -1,14 +1,44 @@
 apply plugin: 'com.android.application'
 
+// Release signing values are supplied by the developer's environment.
+// Never check a keystore or passwords into Git.
+def axisKeystorePath = System.getenv('AXIS_UPLOAD_KEYSTORE')
+def axisStorePassword = System.getenv('AXIS_UPLOAD_STORE_PASSWORD')
+def axisKeyPassword = System.getenv('AXIS_UPLOAD_KEY_PASSWORD')
+def axisKeyAlias = System.getenv('AXIS_UPLOAD_KEY_ALIAS') ?: 'axis'
+def axisVersionCodeEnv = System.getenv('AXIS_VERSION_CODE')
+def axisVersionNameEnv = System.getenv('AXIS_VERSION_NAME')
+def axisSigningReady = [axisKeystorePath, axisStorePassword, axisKeyPassword].every { it != null && !it.isEmpty() }
+
+if (axisVersionCodeEnv && !(axisVersionCodeEnv ==~ /[1-9][0-9]*/)) {
+    throw new GradleException('AXIS_VERSION_CODE must be a positive integer')
+}
+
+// Google Play's approved upload-key certificate as of 2026-10-19.
+// This is a PUBLIC certificate fingerprint, not the private key.
+def axisUploadFingerprint = 'BC:50:EE:20:4E:11:C9:66:CC:48:E6:EC:0B:D2:5D:7D:5E:07:96:9D:F1:81:99:1C:3D:B4:80:E6:7D:D9:2D:5F'
+
 android {
     namespace = "com.base6a5340f43f8fd031c5921680.app"
     compileSdk = rootProject.ext.compileSdkVersion
+    signingConfigs {
+        if (axisSigningReady) {
+            axisUpload {
+                storeFile file(axisKeystorePath)
+                storePassword axisStorePassword
+                keyAlias axisKeyAlias
+                keyPassword axisKeyPassword
+                storeType 'pkcs12'
+            }
+        }
+    }
     defaultConfig {
         applicationId "com.base6a5340f43f8fd031c5921680.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 25
-        versionName "25.0"
+        // CI/debug retains 25; release signing requires an explicit Play-safe code.
+        versionCode axisVersionCodeEnv ? axisVersionCodeEnv.toInteger() : 25
+        versionName axisVersionNameEnv ?: "${axisVersionCodeEnv ?: '25'}.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -26,6 +56,9 @@ android {
             applicationIdSuffix ".debug"
         }
         release {
+            if (axisSigningReady) {
+                signingConfig signingConfigs.axisUpload
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
@@ -59,4 +92,42 @@ try {
     }
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
+
+// A signed release must use the currently approved Play upload certificate.
+// Missing credentials fail closed; debug builds do not require release secrets.
+def verifyAxisUploadKey = tasks.register('verifyAxisUploadKey') {
+    doLast {
+        if (!axisSigningReady) {
+            throw new GradleException('Release signing requires AXIS_UPLOAD_KEYSTORE, AXIS_UPLOAD_STORE_PASSWORD and AXIS_UPLOAD_KEY_PASSWORD')
+        }
+        if (!axisVersionCodeEnv) {
+            throw new GradleException('Set AXIS_VERSION_CODE higher than every versionCode already uploaded to Play')
+        }
+        def signingFile = project.file(axisKeystorePath)
+        if (!signingFile.isFile()) {
+            throw new GradleException('AXIS_UPLOAD_KEYSTORE does not point to a file')
+        }
+        def keyStore = java.security.KeyStore.getInstance('PKCS12')
+        signingFile.withInputStream { stream ->
+            keyStore.load(stream, axisStorePassword.toCharArray())
+        }
+        if (!keyStore.isKeyEntry(axisKeyAlias) ||
+                !(keyStore.getKey(axisKeyAlias, axisKeyPassword.toCharArray()) instanceof java.security.PrivateKey)) {
+            throw new GradleException('The configured alias does not contain an accessible private signing key')
+        }
+        def certificate = keyStore.getCertificate(axisKeyAlias)
+        def digest = java.security.MessageDigest.getInstance('SHA-256').digest(certificate.getEncoded())
+        def fingerprint = digest.collect { String.format('%02X', it & 0xff) }.join(':')
+        if (fingerprint != axisUploadFingerprint) {
+            throw new GradleException("Upload certificate SHA-256 mismatch: expected ${axisUploadFingerprint}, got ${fingerprint}")
+        }
+        logger.lifecycle('Axis upload certificate verified against Google Play fingerprint')
+    }
+}
+
+tasks.configureEach { task ->
+    if (task.name in ['assembleRelease', 'bundleRelease']) {
+        task.dependsOn(verifyAxisUploadKey)
+    }
 }
