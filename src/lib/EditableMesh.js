@@ -454,7 +454,11 @@ export class EditableMesh {
       const cx = dy * ez - dz * ey;
       const cy = dz * ex - dx * ez;
       const cz = dx * ey - dy * ex;
-      return cx * cx + cy * cy + cz * cz >= 1e-18;
+      // Float32 packing can flip an almost-collinear triangle's winding,
+      // even when the original double-precision polygon is well oriented.
+      // Never display a triangle facing opposite the editable face normal.
+      return cx * cx + cy * cy + cz * cz >= 1e-18 &&
+        cx * normal.x + cy * normal.y + cz * normal.z > 0;
     };
     const fan = [];
     for (let i = 1; i < pts.length - 1; i++) fan.push([0, i, i + 1]);
