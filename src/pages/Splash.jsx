@@ -9,6 +9,8 @@ const VIDEO_URL = '/splash/axis_splash_v3.mp4';
 const BLANK_POSTER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 const CREDIT_URL = '/media/4557d27b8_Picsart_26-08-20_14-42-35-065.jpg';
 const CREDIT_AT_MS = 4000;
+// Prevent stalled Android WebView video playback from trapping users at startup.
+const MAX_SPLASH_MS = 12000;
 
 export default function Splash() {
   const navigate = useNavigate();
@@ -17,6 +19,13 @@ export default function Splash() {
 
   useEffect(() => {
     const timer = setTimeout(() => setCreditIn(true), CREDIT_AT_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // If WebView never reports playback completion, still open the local library.
+  // No network service or authentication is required to continue.
+  useEffect(() => {
+    const timer = setTimeout(() => setVideoEnded(true), MAX_SPLASH_MS);
     return () => clearTimeout(timer);
   }, []);
 
