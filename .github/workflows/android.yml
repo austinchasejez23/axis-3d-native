@@ -72,14 +72,16 @@ jobs:
       - name: Signed release bundle
         if: hashFiles('android/upload.jks') != ''
         env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          AXIS_UPLOAD_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          AXIS_UPLOAD_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          AXIS_UPLOAD_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
-          cd android && ./gradlew --no-daemon bundleRelease \
-            -Pandroid.injected.signing.store.file=$PWD/upload.jks \
-            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
-            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
-            -Pandroid.injected.signing.key.password="$KEYSTORE_PASSWORD"
+          export AXIS_UPLOAD_KEYSTORE="$PWD/android/upload.jks"
+          cd android && ./gradlew --no-daemon bundleRelease
+
+      - name: Remove the restored keystore
+        if: always()
+        run: rm -f android/upload.jks
 
       - uses: actions/upload-artifact@v4
         if: hashFiles('android/app/build/outputs/bundle/release/app-release.aab') != ''
