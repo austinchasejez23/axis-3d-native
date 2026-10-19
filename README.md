@@ -29,8 +29,13 @@ triangle and tool restrictions still apply. You cannot manage or delete any
 production account through this test build.
 
 Reference images are read directly from the selected device file and saved
-inside local project data. Existing projects with remote reference-image URLs
-may still need their original remote image source to display.
+inside local project data. Standalone Android builds now contain an Android
+Storage Access Framework save plugin, so exports use the system Save As picker
+and report success only after the file is written. File import still uses the
+Android file chooser. Imported CAD meshes preserve their original dimensions
+and are geometry-only neutral wireframes, with no source material/texture data.
+Existing projects with remote reference-image URLs may still need their original
+remote image source to display.
 
 To verify isolation and run modeling regression tests:
 
