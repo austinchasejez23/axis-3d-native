@@ -153,6 +153,35 @@ assert.deepEqual(colored.vertexColors, {});
 assert.equal(EditableMesh.deserialize(colored.serialize()).color, 0xaeb4bc);
 console.log('PASS: colored metallic GLB imports geometry only, no source appearance');
 
+ 
+// A reflected node transform (such as a mirrored CAD assembly component)
+// flips vertex handedness. Baking it into local geometry must also correct
+// face winding so the imported surface remains front-facing in Axis.
+const mirroredJson = structuredClone(glbJson);
+mirroredJson.nodes[0].scale = [-1, 1, 1];
+const mirrorJsonBytes = new TextEncoder().encode(JSON.stringify(mirroredJson));
+const mirrorJsonPadded = new Uint8Array(Math.ceil(mirrorJsonBytes.length / 4) * 4).fill(32);
+mirrorJsonPadded.set(mirrorJsonBytes);
+const mirrorGlb = new Uint8Array(20 + mirrorJsonPadded.length + binaryChunk.length);
+const mirrorView = new DataView(mirrorGlb.buffer);
+mirrorView.setUint32(0, 0x46546c67, true);
+mirrorView.setUint32(4, 2, true);
+mirrorView.setUint32(8, mirrorGlb.length, true);
+mirrorView.setUint32(12, mirrorJsonPadded.length, true);
+mirrorView.setUint32(16, 0x4e4f534a, true);
+mirrorGlb.set(mirrorJsonPadded, 20);
+mirrorGlb.set(binaryChunk, 20 + mirrorJsonPadded.length);
+const [mirrored] = await importModelFile(makeFile('mirrored.glb', mirrorGlb));
+assert.equal(mirrored.faces.length, original.faces.length);
+approx(span(mirrored, 'x'), 20, 'Mirrored import X dimensions');
+approx(span(mirrored, 'y'), 40, 'Mirrored import Y dimensions');
+assert.ok(mirrored.vertices.every(v => v.x < 0), 'Mirrored X coordinates were not baked');
+assert.ok(mirrored.getFaceNormal(0).z > 0.99,
+  'Mirrored transform reversed front-facing triangle winding');
+assert.equal(mirrored.importedWireframeOnly, true);
+assert.equal(mirrored.mapTexture, null);
+console.log('PASS: mirrored GLB transform retains dimensions and front-facing geometry-only mesh');
+
 // Browser fallback is an explicit download request (not proof that Android
 // saved a file). The native Android save path is covered by the Capacitor
 // plugin registration regression and Android Gradle compilation.
