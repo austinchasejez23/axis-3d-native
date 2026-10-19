@@ -67,7 +67,10 @@ jobs:
       # Everything below is skipped until the signing secrets are added.
       - name: Restore the upload keystore
         if: env.KEYSTORE_BASE64 != ''
-        run: echo "$KEYSTORE_BASE64" | base64 -d > android/upload.jks
+        # Phone copy/paste can add spaces or line breaks; base64 ignores none of them.
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > android/upload.jks
+          echo "Restored keystore: $(wc -c < android/upload.jks) bytes"
 
       - name: Signed release bundle
         if: hashFiles('android/upload.jks') != ''
