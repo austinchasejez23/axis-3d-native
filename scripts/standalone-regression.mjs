@@ -47,4 +47,16 @@ assert.match(nativeFilePlugin, /openOutputStream\(uri, "w"\)/,
 assert.match(exporter, /AxisFiles\.saveFile\(/);
 assert.match(exporter, /return 'saved'/);
 assert.doesNotMatch(read('vite.config.js'), /@base44/);
+// A release candidate must use the new, approved Play upload key without
+// embedding signing credentials or accidentally changing the production ID.
+const androidBuild = read('android/app/build.gradle');
+assert.match(androidBuild, /AXIS_UPLOAD_KEYSTORE/);
+assert.match(androidBuild, /AXIS_UPLOAD_STORE_PASSWORD/);
+assert.match(androidBuild, /AXIS_UPLOAD_KEY_PASSWORD/);
+assert.match(androidBuild, /AXIS_VERSION_CODE/);
+assert.match(androidBuild, /verifyAxisUploadKey/);
+assert.match(androidBuild, /task\.dependsOn\(verifyAxisUploadKey\)/);
+assert.match(androidBuild, /BC:50:EE:20:4E:11:C9:66:CC:48:E6:EC:0B:D2:5D:7D:5E:07:96:9D:F1:81:99:1C:3D:B4:80:E6:7D:D9:2D:5F/);
+assert.match(read('.gitignore'), /^\*\.jks$/m);
+assert.match(read('android/.gitignore'), /^\*\.jks$/m);
 console.log('Standalone isolation, Free entitlement, package ID and local storage checks passed.');
