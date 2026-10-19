@@ -84,6 +84,18 @@ jobs:
           export AXIS_UPLOAD_KEYSTORE="$PWD/android/upload.jks"
           cd android && ./gradlew --no-daemon bundleRelease
 
+      - name: Check which key signed the bundle
+        if: hashFiles('android/app/build/outputs/bundle/release/app-release.aab') != ''
+        run: |
+          AAB=android/app/build/outputs/bundle/release/app-release.aab
+          keytool -printcert -jarfile "$AAB" | tee signer.txt
+          echo "::notice title=Bundle signer::$(grep -m1 -E 'SHA1:' signer.txt | xargs)"
+          grep -q 'SHA1: 56:87:72:61:66:85:E6:86:C0:32:C7:5F:E5:4C:1E:B9:EE:43:C4:1E' signer.txt || {
+            echo "::error::Bundle is not signed with the Play upload key"
+            rm -f "$AAB"
+            exit 1
+          }
+
       - name: Remove the restored keystore
         if: always()
         run: rm -f android/upload.jks
