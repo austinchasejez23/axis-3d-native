@@ -821,7 +821,7 @@ export default function Modeler() {
   return (
     <div
       className="axis-modeler fixed left-0 right-0 top-0 overflow-hidden bg-black select-none"
-      style={{ '--axis-ui-color': uiColor, '--axis-safe-bottom': '0px', height: `${workspaceHeight}px` }}
+      style={/** @type {import('react').CSSProperties & { '--axis-ui-color': string, '--axis-safe-bottom': string }} */ ({ '--axis-ui-color': uiColor, '--axis-safe-bottom': '0px', height: `${workspaceHeight}px` })}
     >
       <ThreeViewport
         ref={managerRef}
@@ -1017,7 +1017,6 @@ export default function Modeler() {
       <GeneralToolGrid
         clearSelectionToken={toolSelectionClearTick}
         onClose={() => setToolsOpen(false)}
-        onTool={handleTool}
         onAddReference={handleAddReference}
 
         onMaterial={() => {
@@ -1076,8 +1075,6 @@ export default function Modeler() {
         open={libraryOpen}
         onClose={() => setLibraryOpen(false)}
         onSelectShape={handleSelectShape}
-        segments={segments}
-        onSegmentsChange={(v) => { toolMemory.primitiveSegments = v; setSegments(v); }}
         managerRef={managerRef}
       />
 
@@ -1119,16 +1116,13 @@ export default function Modeler() {
           managerRef={managerRef}
           onClose={closeMaterials}
           onBack={() => { closeMaterials(); setToolsOpen(true); }}
-          open={surfaceSub}
           onOpenChange={setSurfaceSub}
           section={surfaceSection}
           onSectionChange={setSurfaceSection}
           selectionMode={selectionMode}
           onSelectionMode={enterObjectMode}
-          pickerOpen={pickerOpen}
           onPickerOpenChange={setPickerOpen}
           paintTool={paintTool}
-          lastVertexTool={lastVertexPaintTool}
           paintColor={paintColor}
           paintSize={paintSize}
           onPaintSize={setPaintSize}
