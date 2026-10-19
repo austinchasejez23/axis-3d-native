@@ -3,11 +3,39 @@ import { SceneManager } from '@/lib/SceneManager';
 import GraphicsDiagnostics from './GraphicsDiagnostics';
 import { collectGlDiagnostics } from '@/lib/glDiagnostics';
 
-const ThreeViewport = forwardRef(({ onStatsChange, onTriangleCountChange, onHudChange, onMarqueeChange, onSelectionChange, onBeforeSelectionTap, onSelectionTap, onMultiSelectChange, onDrawChange, onLockChange, onSelectionModeChange, onCutChange, onAddVertexChange, onEmptyTap, onGraphicsError, onPrecisionPoint, onLightsChange, onReady }, ref) => {
+/**
+ * Event callbacks for the actual renderer-to-React boundary. Keep this list
+ * aligned with the SceneManager callback wiring below; callback payloads are
+ * intentionally heterogeneous (selection, HUD, graphics diagnostics, etc.).
+ * @typedef {object} ThreeViewportProps
+ * @property {(payload: any) => void} [onStatsChange]
+ * @property {(payload: any) => void} [onTriangleCountChange]
+ * @property {(payload: any) => void} [onHudChange]
+ * @property {(payload: any) => void} [onMarqueeChange]
+ * @property {(payload: any) => void} [onSelectionChange]
+ * @property {(payload: any) => void} [onBeforeSelectionTap]
+ * @property {(payload: any) => void} [onSelectionTap]
+ * @property {(payload: any) => void} [onMultiSelectChange]
+ * @property {(payload: any) => void} [onDrawChange]
+ * @property {(payload: any) => void} [onSelectionModeChange]
+ * @property {(payload: any) => void} [onCutChange]
+ * @property {(payload: any) => void} [onAddVertexChange]
+ * @property {(payload: any) => void} [onGraphicsError]
+ * @property {(payload: any) => void} [onPrecisionPoint]
+ * @property {(payload: any) => void} [onLightsChange]
+ * @property {() => void} [onLockChange]
+ * @property {() => void} [onEmptyTap]
+ * @property {(manager: SceneManager) => void} [onReady]
+ */
+
+/** @type {import('react').ForwardRefRenderFunction<SceneManager, ThreeViewportProps>} */
+const renderThreeViewport = ({ onStatsChange, onTriangleCountChange, onHudChange, onMarqueeChange, onSelectionChange, onBeforeSelectionTap, onSelectionTap, onMultiSelectChange, onDrawChange, onLockChange, onSelectionModeChange, onCutChange, onAddVertexChange, onEmptyTap, onGraphicsError, onPrecisionPoint, onLightsChange, onReady }, ref) => {
   const containerRef = useRef();
-  const managerRef = useRef();
+  /** @type {import('react').MutableRefObject<SceneManager | null>} */
+  const managerRef = useRef(null);
   const recoveryRef = useRef(null);
   const restartTimerRef = useRef(null);
+  /** @type {import('react').MutableRefObject<ThreeViewportProps>} */
   const cbRef = useRef({});
   const [diagnostics, setDiagnostics] = useState(null);
   const [rendererGeneration, setRendererGeneration] = useState(0);
@@ -47,7 +75,8 @@ const ThreeViewport = forwardRef(({ onStatsChange, onTriangleCountChange, onHudC
       return;
     }
     managerRef.current = manager;
-    if (ref) ref.current = manager;
+    if (typeof ref === 'function') ref(manager);
+    else if (ref) ref.current = manager;
     cbRef.current.onGraphicsError?.(null);
     // Restore a populated scene after graphics recovery. A context can fail
     // during the constructor before startup adds its cube; that produces an
@@ -70,7 +99,9 @@ const ThreeViewport = forwardRef(({ onStatsChange, onTriangleCountChange, onHudC
       cancelAnimationFrame(raf);
       clearTimeout(restartTimerRef.current);
       manager.dispose();
-      if (ref) ref.current = null;
+      managerRef.current = null;
+      if (typeof ref === 'function') ref(null);
+      else if (ref) ref.current = null;
     };
   }, [ref, rendererGeneration]);
 
@@ -80,7 +111,8 @@ const ThreeViewport = forwardRef(({ onStatsChange, onTriangleCountChange, onHudC
       <GraphicsDiagnostics lines={diagnostics} />
     </>
   );
-});
+};
 
+const ThreeViewport = forwardRef(renderThreeViewport);
 ThreeViewport.displayName = 'ThreeViewport';
 export default ThreeViewport;
