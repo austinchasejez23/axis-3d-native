@@ -303,7 +303,7 @@ declare module './SceneManager.js' {
     /** Implemented by sceneMeasure.js */
     setMeasureMode(active: boolean): any;
     /** Implemented by sceneUndo.js */
-    setObjectTransformLive(meshId: number, options?: any, rotation: any, options?: any): any;
+    setObjectTransformLive(meshId: number, transform: { position?: import('three').Vector3; rotation?: import('three').Euler; scale?: import('three').Vector3 }): void;
     /** Implemented by sceneReflections.js */
     setReflection(meshId: number, cfg: any): any;
     /** Implemented by sceneReflections.js */
@@ -345,7 +345,7 @@ declare module './SceneManager.js' {
     /** Implemented by sceneGestures.js */
     updateMarquee(): any;
     /** Implemented by sceneRadialArray.js */
-    updateRadialArray(options?: any, axis?: string, follow?: boolean, radius?: number): any;
+    updateRadialArray(options?: { count?: number; axis?: 'x' | 'y' | 'z'; follow?: boolean; radius?: number }): void;
     /** Implemented by sceneReflections.js */
     updateReflections(): any;
     /** Implemented by sceneLights.js */
