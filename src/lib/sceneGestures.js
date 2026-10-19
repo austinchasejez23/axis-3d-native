@@ -7,7 +7,9 @@ import { beginCameraTouch, endCameraTouch } from '@/lib/cameraTouchSession';
 // Touch gesture handling for SceneManager, extracted so SceneManager.js stays
 // within the file size limit. Behavior is unchanged from when it lived inline.
 export function applySceneGestures(SceneManager) {
-  const P = SceneManager.prototype;
+  // The methods are installed on a real SceneManager instance, not on a
+  // standalone function object. Type their `this` receiver accordingly.
+  const P = /** @type {import('./SceneManager').SceneManager} */ (SceneManager.prototype);
 
   P.setupEvents = function () {
     const el = this.renderer.domElement;
