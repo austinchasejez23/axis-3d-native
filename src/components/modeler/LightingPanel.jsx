@@ -18,7 +18,7 @@ export default function LightingPanel({ state, managerRef, onClose }) {
   const { uiColor, highlightColor, defaultLightingEnabled } = useTheme();
   const [opening] = useState(() => {
     const manager = managerRef.current;
-    return manager ? { lights: manager.serializeSceneLights(), selectedId: manager.selectedLightId } : null;
+    return manager ? { lights: manager.serializeSceneLights(), selectedId: manager.selectedLightId, defaultLightingEnabled: theme.defaultLightingEnabled } : null;
   });
   // Small color wheel that pops up at the left, above the panel (the phone's
   // own color picker covered the whole viewport).
@@ -42,11 +42,16 @@ export default function LightingPanel({ state, managerRef, onClose }) {
   const begin = (active) => { if (active) manager?.beginSceneLightControl(); };
   const change = (patch, recordUndo = false) => manager?.updateSelectedSceneLight(patch, recordUndo);
   const cancel = () => {
-    if (manager && opening && JSON.stringify(manager.serializeSceneLights()) !== JSON.stringify(opening.lights)) {
-      manager.pushUndo();
-      manager.restoreSceneLights(opening.lights, opening.selectedId);
-      manager.applyShadows();
-      manager.editVersion = (manager.editVersion || 0) + 1;
+    if (manager && opening) {
+      const lightsChanged = JSON.stringify(manager.serializeSceneLights()) !== JSON.stringify(opening.lights);
+      const modeChanged = theme.defaultLightingEnabled !== opening.defaultLightingEnabled;
+      if (lightsChanged || modeChanged) {
+        manager.pushUndo();
+        if (lightsChanged) manager.restoreSceneLights(opening.lights, opening.selectedId);
+        if (modeChanged) theme.set({ defaultLightingEnabled: opening.defaultLightingEnabled });
+        manager.applyShadows();
+        manager.editVersion = (manager.editVersion || 0) + 1;
+      }
     }
     onClose();
   };
@@ -121,7 +126,7 @@ export default function LightingPanel({ state, managerRef, onClose }) {
             disabled={!light.shadows} onChange={(value) => change({ shadowIntensity: value / 100 })} onActiveChange={begin} />
           <InlineSlider grow compact hue label="Hue" value={hue} display={`${hue}°`} min={0} max={360}
             onChange={(value) => change({ color: hsvToHex(value, 100, 100) })} onActiveChange={begin} />
-          <InlineSlider grow compact label="Color intensity" value={Math.round(light.colorIntensity * 100)} display={`${Math.round(light.colorIntensity * 100)}%`} min={0} max={100}
+          <InlineSlider grow compact label="Color strength" value={Math.round(light.colorIntensity * 100)} display={`${Math.round(light.colorIntensity * 100)}%`} min={0} max={100}
             onChange={(value) => change({ colorIntensity: value / 100 })} onActiveChange={begin} />
         </div>
 
