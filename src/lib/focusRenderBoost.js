@@ -30,12 +30,16 @@ export function applyFocusRenderBoost(SceneManager) {
         obj.focusProxyGeometry = makeProxy(mesh);
         obj.mesh.geometry = obj.focusProxyGeometry;
         obj.wireframe.visible = false;
+        // The performance proxy must not vanish when the actual geometry is
+        // configured for wire-only drawing.
+        if (mesh.importedWireframeOnly) obj.material.colorWrite = true;
       } else if (!reduce && obj.focusProxyGeometry) {
         obj.mesh.geometry = obj.focusDetailGeometry;
         obj.focusProxyGeometry.dispose();
         obj.focusProxyGeometry = null;
         obj.focusDetailGeometry = null;
         obj.wireframe.visible = theme.wireframeEnabled !== false && !this.wireframesHidden;
+        if (mesh.importedWireframeOnly) obj.material.colorWrite = !obj.wireframe.visible;
         if (obj.wireframeStale) this._refreshWireframe(obj, mesh);
       }
     }
