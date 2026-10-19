@@ -14,7 +14,7 @@ export function applySceneSelection(SceneManager) {
   const P = SceneManager.prototype;
 
   // === SELECTION ===
-  P.setSelectionMode = function (mode) {
+  P.setSelectionMode = /** @this {import('./SceneManager.js').SceneManager} */ function (mode) {
     if (this.extrudeDrag) this.commitExtrudeDrag();
     if (this.drawMode) this.exitDrawMode();
     if (this.cutMode) this.exitCutMode();
@@ -24,7 +24,7 @@ export function applySceneSelection(SceneManager) {
     this.clearSelection();
   };
 
-  P.setSelection = function (sel) {
+  P.setSelection = /** @this {import('./SceneManager.js').SceneManager} */ function (sel) {
     // Edge mode only ever holds edges: a face OR whole-object selection coming
     // from a tool or a stale action is rejected.
     if (this.selectionMode === 'edge' && (sel.type === 'face' || sel.type === 'object')) {
@@ -64,7 +64,7 @@ export function applySceneSelection(SceneManager) {
     this.updateStats();
   };
 
-  P.clearSelection = function () {
+  P.clearSelection = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     this.targetMergePair = null;
     this.selection = { meshId: null, type: this.selectionMode, indices: [] };
     this.selectedMeshIds = [];
@@ -73,14 +73,14 @@ export function applySceneSelection(SceneManager) {
     this.updateStats();
   };
 
-  P.enterMultiSelect = function () {
+  P.enterMultiSelect = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (this.extrudeDrag?.kind === 'edge') return;
     this.multiSelect = true;
     this.cb.onMultiSelectChange?.(true);
     this.updateStats();
   };
 
-  P.exitMultiSelect = function () {
+  P.exitMultiSelect = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     // Only turns off the paint-add "staging" mode. The selected group itself
     // (selectedMeshIds) is left untouched, so a multi-selection survives being
     // manipulated or acted on instead of collapsing to a single object.
@@ -90,11 +90,11 @@ export function applySceneSelection(SceneManager) {
     this.updateStats();
   };
 
-  P.isGroupMode = function () {
+  P.isGroupMode = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     return this.selectionMode === 'object' && this.selectedMeshIds.length > 1;
   };
 
-  P.getGroupCenter = function () {
+  P.getGroupCenter = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (this.selectedMeshIds.length === 0) return null;
     const c = new THREE.Vector3();
     let n = 0;
@@ -108,7 +108,7 @@ export function applySceneSelection(SceneManager) {
   };
 
   // Object-mode multi-select: tap to toggle an object in/out of the group.
-  P.toggleObjectAtScreenPoint = function (clientX, clientY) {
+  P.toggleObjectAtScreenPoint = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
     const { x, y } = this.screenToNDC(clientX, clientY);
     const hits = this.raycastMeshes(x, y);
     if (hits.length === 0) return false;
@@ -129,7 +129,7 @@ export function applySceneSelection(SceneManager) {
     return true;
   };
 
-  P.toggleSelectionAtScreenPoint = function (clientX, clientY) {
+  P.toggleSelectionAtScreenPoint = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
     const { x, y } = this.screenToNDC(clientX, clientY);
     const mode = this.selectionMode;
     const before = this.captureSnapshot();
@@ -186,14 +186,14 @@ export function applySceneSelection(SceneManager) {
     return hit;
   };
 
-  P.screenToNDC = function (clientX, clientY) {
+  P.screenToNDC = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
     const rect = this.renderer.domElement.getBoundingClientRect();
     const x = ((clientX - rect.left) / rect.width) * 2 - 1;
     const y = -((clientY - rect.top) / rect.height) * 2 + 1;
     return { x, y };
   };
 
-  P.raycastMeshes = function (ndcX, ndcY) {
+  P.raycastMeshes = /** @this {import('./SceneManager.js').SceneManager} */ function (ndcX, ndcY) {
     this.pointer.set(ndcX, ndcY);
     this.raycaster.setFromCamera(this.pointer, this.camera);
     const meshes = [];
@@ -206,7 +206,7 @@ export function applySceneSelection(SceneManager) {
     return this.raycaster.intersectObjects(meshes, false);
   };
 
-  P.isWorldPointVisible = function (point) {
+  P.isWorldPointVisible = /** @this {import('./SceneManager.js').SceneManager} */ function (point) {
     const direction = point.clone().sub(this.camera.position), distance = direction.length();
     if (distance < 1e-6) return true;
     this.raycaster.set(this.camera.position, direction.normalize());
@@ -215,7 +215,7 @@ export function applySceneSelection(SceneManager) {
     return !first || first.distance >= distance - Math.max(0.025, this.cameraDist * 0.006);
   };
 
-  P.findClosestVertex = function (ndcX, ndcY, threshold = 0.08) {
+  P.findClosestVertex = /** @this {import('./SceneManager.js').SceneManager} */ function (ndcX, ndcY, threshold = 0.08) {
     let closest = null;
     let closestDist = threshold;
     for (const mesh of this.meshes) {
@@ -236,7 +236,7 @@ export function applySceneSelection(SceneManager) {
     return closest;
   };
 
-  P.findClosestEdge = function (ndcX, ndcY, threshold = 0.08) {
+  P.findClosestEdge = /** @this {import('./SceneManager.js').SceneManager} */ function (ndcX, ndcY, threshold = 0.08) {
     let closest = null;
     let closestDist = threshold;
     for (const mesh of this.meshes) {
@@ -271,7 +271,7 @@ export function applySceneSelection(SceneManager) {
   // Returns true only if the tap actually landed on an already-selected element
   // and removed it. False means "nothing of mine was there" — the caller should
   // fall through to a normal select so tapping NEAR a selection still works.
-  P.deselectAtPoint = function (clientX, clientY) {
+  P.deselectAtPoint = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
     const sel = this.selection;
     const mesh = this.getMesh(sel.meshId);
     if (!mesh) return false;
@@ -310,7 +310,7 @@ export function applySceneSelection(SceneManager) {
     return false;
   };
 
-  P.selectAtScreenPoint = function (clientX, clientY) {
+  P.selectAtScreenPoint = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
     const { x, y } = this.screenToNDC(clientX, clientY);
     const mode = this.selectionMode;
     // A live topology preview must be cancelled before a new edge is selected.
@@ -373,7 +373,7 @@ export function applySceneSelection(SceneManager) {
   // Paint-add selection (multi-select drag): add the element under the finger to
   // the current selection, respecting the active mode. Sub-object selection stays
   // on a single mesh; hitting a different mesh switches to it.
-  P.selectAtPointAdd = function (clientX, clientY) {
+  P.selectAtPointAdd = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
     const { x, y } = this.screenToNDC(clientX, clientY);
     const mode = this.selectionMode;
     if (mode === 'object') {
@@ -422,7 +422,7 @@ export function applySceneSelection(SceneManager) {
     return true;
   };
 
-  P.findMeshIdByObject = function (obj) {
+  P.findMeshIdByObject = /** @this {import('./SceneManager.js').SceneManager} */ function (obj) {
     for (const [id, data] of this.threeObjects) {
       if (data.mesh === obj) return id;
     }
@@ -432,14 +432,14 @@ export function applySceneSelection(SceneManager) {
   // Map a raycast hit's triangle index to a mesh face index. N-gon faces
   // (e.g. from Create-Face-by-Border) fan-triangulate into several buffer
   // triangles, so the hit's faceIndex doesn't equal the mesh face index.
-  P.faceIndexFromHit = function (hit) {
+  P.faceIndexFromHit = /** @this {import('./SceneManager.js').SceneManager} */ function (hit) {
     const meshId = this.findMeshIdByObject(hit.object);
     const mesh = this.getMesh(meshId);
     const faceIndex = mesh ? mesh.getFaceIndexFromTriangle(hit.faceIndex) : hit.faceIndex;
     return { meshId, faceIndex };
   };
 
-  P.isPointOverSelection = function (clientX, clientY) {
+  P.isPointOverSelection = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
     const { x, y } = this.screenToNDC(clientX, clientY);
     if (this.isGroupMode()) {
       const hits = this.raycastMeshes(x, y);
@@ -525,7 +525,7 @@ export function applySceneSelection(SceneManager) {
   // distance of any selected element's projected geometry prioritizes the
   // selection (translate) over camera orbit, so a gesture near a thin edge or
   // face boundary still grabs the selection instead of orbiting.
-  P.isPointNearSelection = function (clientX, clientY, buffer = 0.12) {
+  P.isPointNearSelection = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY, buffer = 0.12) {
     const { x, y } = this.screenToNDC(clientX, clientY);
     // Segments of the selection's OWN outline (not a bounding box — a box let a
     // gesture in empty space beside the object still grab and move it).
@@ -583,7 +583,7 @@ export function applySceneSelection(SceneManager) {
     return false;
   };
 
-  P.selectInMarquee = function (screenRect) {
+  P.selectInMarquee = /** @this {import('./SceneManager.js').SceneManager} */ function (screenRect) {
     const mode = this.selectionMode;
     const { x: x0, y: y0, w, h } = screenRect;
     const x1 = x0 + w, y1 = y0 + h;
