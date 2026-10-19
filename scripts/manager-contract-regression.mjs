@@ -66,6 +66,15 @@ assert.ok(clazz, 'SceneManager class was not found by TypeScript');
 const checker = program.getTypeChecker();
 const instanceSymbol = checker.getSymbolAtLocation(clazz.name);
 const instance = checker.getDeclaredTypeOfSymbol(instanceSymbol);
+const contractFile = program.getSourceFiles().find(f => f.fileName.endsWith('/src/lib/SceneManager.extensions.d.ts'));
+assert.ok(contractFile, 'TypeScript did not load the SceneManager augmentation file');
+const contractIssues = program.getSemanticDiagnostics(contractFile);
+if (contractIssues.length) {
+  console.log('SCENEMANAGER_CONTRACT_DIAGNOSTICS', contractIssues.slice(0, 20).map(d => ({
+    code: d.code, message: ts.flattenDiagnosticMessageText(d.messageText, '\n')
+  })));
+}
+console.log('SCENEMANAGER_TYPED_PROPS', checker.getPropertiesOfType(instance).slice(0, 20).map(prop => prop.name));
 for (const name of ['setupEvents', 'setSelection', 'pushUndo', 'applyLighting']) {
   assert.ok(
     checker.getPropertyOfType(instance, name),
