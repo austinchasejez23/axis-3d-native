@@ -764,6 +764,7 @@ export class EditableMesh {
     // Shared by reference: undo snapshots revert paint through pixel patches.
     m.paintLayer = this.paintLayer;
     m.paintWireEdges = this.paintWireEdges?.map(e => ({ ...e })) || null;
+    m._paintDense = this._paintDense;
     m.explicitEdges = this.explicitEdges.map(e => ({ ...e }));
     m.hiddenEdges = this.hiddenEdges.map(e => ({ ...e }));
     m.visibleEdges = this.visibleEdges.map(e => ({ ...e }));
