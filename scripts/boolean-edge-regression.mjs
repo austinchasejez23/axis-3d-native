@@ -84,15 +84,18 @@ if (s.deg) {
     const face = result.faces[fi];
     for (const tri of result.getFaceTriangleIndices(fi)) {
       const points = tri.map(vi => result.getVertex(face[vi]));
-      const a = new THREE.Vector3(points[0].x, points[0].y, points[0].z);
-      const b = new THREE.Vector3(points[1].x, points[1].y, points[1].z);
-      const cc = new THREE.Vector3(points[2].x, points[2].y, points[2].z);
+      // The actual GPU vertex attribute is Float32. A triangle can have
+      // nonzero double-precision area yet collapse once packed for rendering.
+      // Print the *same coordinates* stats() checks, or CI failures are silent.
+      const f32 = p => new THREE.Vector3(Math.fround(p.x), Math.fround(p.y), Math.fround(p.z));
+      const a = f32(points[0]), b = f32(points[1]), cc = f32(points[2]);
       const areaSquared = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(cc, a)).lengthSq();
       if (areaSquared < 1e-18) {
         console.log('DEGENERATE_TRIANGLE', JSON.stringify({
           z, y, fi, renderTriangleIndex, face, tri,
           points: points.map(p => ({ id: p.id, x: p.x, y: p.y, z: p.z })),
           boundary: face.map(id => result.getVertex(id)),
+          float32Points: [a,b,cc].map(p => p.toArray()),
           areaSquared
         }));
       }
