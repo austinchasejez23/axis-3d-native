@@ -31,5 +31,10 @@ assert.match(read('src/lib/ProAccessContext.jsx'), /isPro:\s*false/);
 assert.match(read('src/lib/projectStore.js'), /indexedDB\.open/);
 assert.match(read('src/lib/storage.js'), /forge3d_projects/);
 assert.match(read('src/pages/Splash.jsx'), /navigate\('\/library'/);
+const splash = read('src/pages/Splash.jsx');
+assert.match(splash, /setTimeout\\(\\(\\) => setVideoEnded\\(true\\), MAX_SPLASH_MS\\)/,
+  'Android video playback must have a bounded splash fallback');
+assert.match(splash, /onError=\\{\\(\\) => setVideoEnded\\(true\\)\\}/,
+  'Video decoding failure must not strand the user');
 assert.doesNotMatch(read('vite.config.js'), /@base44/);
 console.log('Standalone isolation, Free entitlement, package ID and local storage checks passed.');
