@@ -3,7 +3,7 @@ name: Android build
 # Tap "Run workflow" on this file in the GitHub mobile app, or push to main.
 # The debug APK needs no signing key: download it from the run's Artifacts and
 # install it straight on the phone. The signed release bundle for Play is only
-# built once the three signing secrets exist.
+# built once the four signing secrets exist.
 
 on:
   workflow_dispatch:
