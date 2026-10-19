@@ -36,6 +36,11 @@ assert.match(splash, /setTimeout\(\(\) => setVideoEnded\(true\), MAX_SPLASH_MS\)
   'Android video playback must have a bounded splash fallback');
 assert.match(splash, /onError=\{\(\) => setVideoEnded\(true\)\}/,
   'Video decoding failure must not strand the user');
+// Free-tier limits must not silently fail. The SceneManager enforces the cap
+// and ThreeViewport must relay the event to the existing upgrade explanation.
+const viewport = read('src/components/modeler/ThreeViewport.jsx');
+assert.match(viewport, /onTriangleLimit:\s*\(\) => cbRef\.current\.onTriangleLimit\?\.\(\)/);
+assert.match(read('src/pages/Modeler.jsx'), /onTriangleLimit=\{\(\) => openUpgrade\(/);
 const nativeMain = read('android/app/src/main/java/com/base6a5340f43f8fd031c5921680/app/MainActivity.java');
 const nativeFilePlugin = read('android/app/src/main/java/com/base6a5340f43f8fd031c5921680/app/AxisFilesPlugin.java');
 const exporter = read('src/lib/exporters.js');
