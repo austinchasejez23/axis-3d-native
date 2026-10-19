@@ -3,7 +3,7 @@ import ProBadge from '@/components/pro/ProBadge';
 
 // Tool icons are transparent. A shared backdrop is painted behind contiguous
 // occupied slots by GlassToolRow, and follows tool rearrangement.
-export default function GridToolButton({ icon: Icon, label, announceLabel, mode, active, locked, onClick, fullWidth, nowrap, iconClassName = 'w-7 h-7', labelClassName = 'text-[8px]', iconStrokeWidth = 1.3 }) {
+export default function GridToolButton({ icon: Icon, label, announceLabel = undefined, mode = undefined, active = false, locked = false, onClick = undefined, fullWidth = false, nowrap = false, iconClassName = 'w-7 h-7', labelClassName = 'text-[8px]', iconStrokeWidth = 1.3 }) {
   const { uiColor, highlightColor, toolLabelsEnabled } = useTheme();
   return (
     <button
