@@ -44,7 +44,7 @@ const TITLES = {
   gridColor: 'Grid color',
 };
 
-export default function MenuDrawer({ open, onClose, backRef, projectName, onRename, onNewProject, onSaveProject, onExport, onLibrary, onImport, onImportFromLibrary, currentProjectId, onGuide, onLighting, display, isPro, onProLock, initialScreen, onConsumeInitialScreen }) {
+export default function MenuDrawer({ open, onClose, backRef, projectName, onRename, onNewProject, onSaveProject, onExport, onLibrary, onImport, onImportFromLibrary, currentProjectId, onGuide, onLighting, display, isPro, onProLock, initialScreen = null, onConsumeInitialScreen = undefined }) {
   const { uiColor, highlightColor, backgroundColor } = useTheme();
   // Navigation stack: every sub-menu REPLACES the one before it in the same
   // spot, and the header's back chevron steps back exactly one level.
