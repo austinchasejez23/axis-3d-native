@@ -750,7 +750,8 @@ export default function Modeler() {
       }
       if (meshes[0]) managerRef.current?.setSelection({ meshId: meshes[0].id, type: 'object', indices: [] });
       // Preserve the original CAD dimensions and reframe the camera.
-      managerRef.current?.frameScene();
+      const importManager = /** @type {import('@/lib/SceneManager').SceneManager | undefined} */ (managerRef.current);
+      importManager?.frameScene();
       toast.success(`Imported ${meshes.length} object${meshes.length === 1 ? '' : 's'} from ${file.name}`);
       setLibraryOpen(false);
     } catch (err) {
