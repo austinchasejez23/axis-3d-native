@@ -7,13 +7,13 @@ import * as THREE from 'three';
 // with the project) to avoid bloating local storage with base64 image data.
 
 export function applySceneTexture(SceneManagerClass) {
-  SceneManagerClass.prototype.applyTextureToSelection = function (file) {
+  SceneManagerClass.prototype.applyTextureToSelection = /** @this {import('./SceneManager.js').SceneManager} */ function (file) {
     return this.applyTextureUrl(URL.createObjectURL(file), true);
   };
 
   // Shared loader used by both the local-file upload and the preset library.
   // objectUrl marks blob URLs so they get revoked when the texture is cleared.
-  SceneManagerClass.prototype.applyTextureUrl = function (url, objectUrl = false) {
+  SceneManagerClass.prototype.applyTextureUrl = /** @this {import('./SceneManager.js').SceneManager} */ function (url, objectUrl = false) {
     const sel = this.selection;
     const ids = this.targetMeshIds();
     if (ids.length === 0 || sel.type !== 'object') return false;
@@ -57,7 +57,7 @@ export function applySceneTexture(SceneManagerClass) {
 
   // UV tool: switch how UVs are projected onto the selected object(s) and
   // rebuild so the mapped texture re-wraps immediately.
-  SceneManagerClass.prototype.setUVMode = function (mode) {
+  SceneManagerClass.prototype.setUVMode = /** @this {import('./SceneManager.js').SceneManager} */ function (mode) {
     const ids = this.targetMeshIds();
     if (ids.length === 0) return false;
     this.pushUndo();
@@ -71,7 +71,7 @@ export function applySceneTexture(SceneManagerClass) {
     return true;
   };
 
-  SceneManagerClass.prototype.setTextureScale = function (meshId, scale) {
+  SceneManagerClass.prototype.setTextureScale = /** @this {import('./SceneManager.js').SceneManager} */ function (meshId, scale) {
     const mesh = this.getMesh(meshId);
     if (!mesh) return;
     mesh.textureTransform = { ...(mesh.textureTransform || { rotation: 0 }), scale };
@@ -81,7 +81,7 @@ export function applySceneTexture(SceneManagerClass) {
     }
   };
 
-  SceneManagerClass.prototype.setTextureRotation = function (meshId, rad) {
+  SceneManagerClass.prototype.setTextureRotation = /** @this {import('./SceneManager.js').SceneManager} */ function (meshId, rad) {
     const mesh = this.getMesh(meshId);
     if (!mesh) return;
     mesh.textureTransform = { ...(mesh.textureTransform || { scale: 1 }), rotation: rad };
@@ -94,7 +94,7 @@ export function applySceneTexture(SceneManagerClass) {
 
   // Seamless tiling: MirrorWrapping reflects each tile so opposite edges always
   // match — no hard seam for any image (repetition becomes mirrored instead).
-  SceneManagerClass.prototype.setTextureMirror = function (meshId, on) {
+  SceneManagerClass.prototype.setTextureMirror = /** @this {import('./SceneManager.js').SceneManager} */ function (meshId, on) {
     const mesh = this.getMesh(meshId);
     if (!mesh) return;
     mesh.textureTransform = { ...(mesh.textureTransform || { scale: 1, rotation: 0 }), mirror: !!on };
@@ -106,7 +106,7 @@ export function applySceneTexture(SceneManagerClass) {
     }
   };
 
-  SceneManagerClass.prototype.clearTexture = function () {
+  SceneManagerClass.prototype.clearTexture = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     const ids = this.targetMeshIds();
     if (ids.length === 0) return;
     this.pushUndo();
@@ -121,7 +121,7 @@ export function applySceneTexture(SceneManagerClass) {
     this.updateHighlights();
   };
 
-  SceneManagerClass.prototype.resetSurfaceAppearance = function () {
+  SceneManagerClass.prototype.resetSurfaceAppearance = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     const ids = this.targetMeshIds();
     if (ids.length === 0) return false;
     this.pushUndo();
