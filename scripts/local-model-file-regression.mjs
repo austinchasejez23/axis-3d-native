@@ -153,35 +153,45 @@ assert.deepEqual(colored.vertexColors, {});
 assert.equal(EditableMesh.deserialize(colored.serialize()).color, 0xaeb4bc);
 console.log('PASS: colored metallic GLB imports geometry only, no source appearance');
 
+// Browser fallback is an explicit download request (not proof that Android
+// saved a file). The native Android save path is covered by the Capacitor
+// plugin registration regression and Android Gradle compilation.
 const originalNavigator = globalThis.navigator;
 const originalWindow = globalThis.window;
+const originalDocument = globalThis.document;
+const originalCreateObjectURL = URL.createObjectURL;
+const originalRevokeObjectURL = URL.revokeObjectURL;
+const originalSetTimeout = globalThis.setTimeout;
 try {
   Object.defineProperty(globalThis, 'navigator', {
     configurable: true, value: { userAgent: 'Mozilla/5.0 (Linux; Android 16; wv)' },
   });
   Object.defineProperty(globalThis, 'window', { configurable: true, value: {} });
-  await assert.rejects(
-    downloadFile('mesh bytes', 'part.obj', 'text/plain'),
-    /cannot save local exports yet/,
-  );
-
-  const saved = [];
-  globalThis.window.showSaveFilePicker = async () => ({
-    createWritable: async () => ({
-      write: async (blob) => saved.push(await blob.text()),
-      close: async () => {},
+  let clicked = 0;
+  let revoked = 0;
+  globalThis.document = {
+    body: { appendChild: () => {} },
+    createElement: () => ({
+      click: () => { clicked++; },
+      remove: () => {},
     }),
-  });
-  assert.equal(await downloadFile('mesh bytes', 'part.obj'), 'saved');
-  assert.deepEqual(saved, ['mesh bytes']);
+  };
+  URL.createObjectURL = () => 'blob:local-test';
+  URL.revokeObjectURL = () => { revoked++; };
+  globalThis.setTimeout = (callback, ms, ...args) =>
+    ms === 60000 ? callback() : originalSetTimeout(callback, ms, ...args);
 
-  delete globalThis.window.showSaveFilePicker;
+  assert.equal(await downloadFile('mesh bytes', 'part.obj', 'text/plain'), 'requested');
+  assert.equal(clicked, 1, 'Browser fallback must initiate a real download');
+  assert.equal(revoked, 1, 'Temporary blob URL must be reclaimed');
+  console.log('PASS: browser fallback requests actual download instead of reporting saved');
+
   globalThis.navigator.share = async (data) => {
     assert.equal(data.files[0].name, 'part.obj');
   };
   globalThis.navigator.canShare = () => true;
   assert.equal(await downloadFile('mesh bytes', 'part.obj'), 'shared');
-  console.log('PASS: real save/share APIs and no false WebView download success');
+  console.log('PASS: Android web share API fallback returns confirmed share result');
 } finally {
   Object.defineProperty(globalThis, 'navigator', {
     configurable: true, value: originalNavigator,
@@ -189,4 +199,9 @@ try {
   Object.defineProperty(globalThis, 'window', {
     configurable: true, value: originalWindow,
   });
+  if (originalDocument === undefined) delete globalThis.document;
+  else globalThis.document = originalDocument;
+  URL.createObjectURL = originalCreateObjectURL;
+  URL.revokeObjectURL = originalRevokeObjectURL;
+  globalThis.setTimeout = originalSetTimeout;
 }
