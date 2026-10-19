@@ -59,8 +59,12 @@ still apply; this test does not unlock paid features.
 
 Local model data remains in IndexedDB and its Library index remains in
 localStorage, using the original storage identifiers. Reference-image uploads
-are kept in project data on-device. Android export uses local sharing when
-the Web Share API is available; no server-backed download fallback remains.
+are kept in project data on-device. Android export uses a registered Capacitor
+plugin (AxisFilesPlugin) and ACTION_CREATE_DOCUMENT to open Android's Save As
+picker, then writes model bytes directly to the chosen document. Save succeeds
+only after Android finishes writing the file. No storage permission or Base44
+service is required. Native exports are currently behind the same Free/Pro
+entitlement restrictions as the modeling app; this migration does not unlock Pro.
 
 The package ID above is retained exactly. Debug builds use the existing
 `.debug` suffix so they can be installed beside the release version. Do not
