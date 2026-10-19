@@ -1036,8 +1036,6 @@ export default function Modeler() {
           setSculptOpen(true);
           setSculptPanelOpen(true);
         }}
-        multiSelect={multiSelect}
-        onToggleMultiSelect={handleToggleMultiSelect}
         onExitMultiSelect={() => managerRef.current?.exitMultiSelect()}
         onConvert={(type) => {
           const manager = managerRef.current;
