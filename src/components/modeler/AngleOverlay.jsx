@@ -6,7 +6,7 @@ import * as THREE from 'three';
 // label at the edge midpoint.
 export default function AngleOverlay({ managerRef, enabled }) {
   const [label, setLabel] = useState(null);
-  const raf = useRef();
+  const raf = useRef(0);
   const lastKey = useRef('');
   const labelRef = useRef(null);
   labelRef.current = label;
