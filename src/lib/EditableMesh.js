@@ -20,6 +20,7 @@ export class EditableMesh {
     this.color = 0xaeb4bc;
     this.primitiveType = null;
     this.segments = null;
+    this.primitiveParams = null; // primitive-specific editable settings
     this.smoothShading = false;
     // Imported triangle meshes can display only feature/crease edges without
     // removing any underlying editable topology.
@@ -48,10 +49,12 @@ export class EditableMesh {
     this.chamPrimary = '#ff0000';
     this.chamSecondary = '#00aaff';
     this.chamIntensity = 0;
+    this.textureMergeColor = false;
     this.vertexColors = {};
     this.faceColors = {};
     this.paintLayer = null;     // surface paint atlas (brush / spray strokes)
     this.paintWireEdges = null;
+    this._paintDense = false;
     this.explicitEdges = [];
     this.hiddenEdges = [];      // edges deleted in edge mode: hidden from the
                                 // wireframe while their faces stay intact
