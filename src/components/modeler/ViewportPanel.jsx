@@ -2,7 +2,7 @@ import { useTheme, theme } from '@/lib/theme';
 import { Axis3D, Box, Grid3X3, Palette, Ruler, Tags } from 'lucide-react';
 
 // Match the main menu's exact row dimensions, icon size, text size and spacing.
-function ViewportRow({ label, icon: Icon, onClick, color, pressed }) {
+function ViewportRow({ label, icon: Icon, onClick, color, pressed = false }) {
   return (
     <button
       type="button"
