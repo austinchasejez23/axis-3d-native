@@ -9,12 +9,12 @@ export function applySceneMeasure(SceneManager) {
   const P = SceneManager.prototype;
   const SNAP_PX = 16;
 
-  P.setMeasureMode = function (active) {
+  P.setMeasureMode = /** @this {import('./SceneManager.js').SceneManager} */ function (active) {
     this.measureMode = !!active;
     this.measurePoints = [];
   };
 
-  P.measureTap = function (clientX, clientY) {
+  P.measureTap = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
     const ndc = this.screenToNDC(clientX, clientY);
     const hits = this.raycastMeshes(ndc.x, ndc.y);
     // A clean tap that hits nothing clears the current measurement (not the
