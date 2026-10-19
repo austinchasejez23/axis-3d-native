@@ -1,6 +1,6 @@
 import { forwardRef } from 'react';
 
-const NumericValueField = forwardRef(function NumericValueField({ label, value, active, onOpen, onKey, onClose, color, highlightColor, className = '' }, ref) {
+const NumericValueField = forwardRef(/** @param {{ label: string, value: string | number, active?: boolean, onOpen: () => void, onKey: (key: string) => void, onClose: () => void, color?: string, highlightColor?: string, className?: string }} props */ function NumericValueField({ label, value, active, onOpen, onKey, onClose, color, highlightColor, className = '' }, ref) {
   return (
     <button ref={ref} type="button" role="textbox" aria-label={label} aria-expanded={active} aria-readonly="true"
       data-numeric-active={active ? 'true' : 'false'}
