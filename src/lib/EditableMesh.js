@@ -437,10 +437,35 @@ export class EditableMesh {
       for (const t of tris) total += Math.abs(span(t));
       return total - Math.abs(outline);
     };
+    // A polygon may have several vertices along the same straight boundary
+    // (notably after a Boolean intersects a subdivided grid). A fan may tile
+    // that polygon perfectly but still emit *zero-area* render triangles.
+    // Those are not editable edges and must never be sent to WebGL.
+    // Check the actual Float32 positions used by BufferGeometry, not only
+    // double-precision polygon area, to avoid triangles collapsing on upload.
+    const validRenderTriangle = ([a, b, c]) => {
+      const p = pts[a], q = pts[b], r = pts[c];
+      const dx = Math.fround(q.x) - Math.fround(p.x);
+      const dy = Math.fround(q.y) - Math.fround(p.y);
+      const dz = Math.fround(q.z) - Math.fround(p.z);
+      const ex = Math.fround(r.x) - Math.fround(p.x);
+      const ey = Math.fround(r.y) - Math.fround(p.y);
+      const ez = Math.fround(r.z) - Math.fround(p.z);
+      const cx = dy * ez - dz * ey;
+      const cy = dz * ex - dx * ez;
+      const cz = dx * ey - dy * ex;
+      return cx * cx + cy * cy + cz * cz >= 1e-18;
+    };
     const fan = [];
     for (let i = 1; i < pts.length - 1; i++) fan.push([0, i, i + 1]);
     const fanSpare = spare(fan);
-    if (fanSpare <= Math.abs(outline) * 1e-7 + 1e-18) return fan;
+    const tolerance = Math.abs(outline) * 1e-7 + 1e-18;
+    const validFan = fan.filter(validRenderTriangle);
+    if (fanSpare <= tolerance && validFan.length === fan.length) return fan;
+
+    // Use ear clipping when a fan crosses a concavity or contains collinear
+    // triangles. A collinear boundary vertex remains in the *editable* face
+    // and its wireframe; it needn't create a zero-area render triangle.
     const clipped = [];
     for (const triangle of THREE.ShapeUtils.triangulateShape(flat, [])) {
       const t = [triangle[0], triangle[1], triangle[2]];
@@ -448,8 +473,12 @@ export class EditableMesh {
       if (Math.abs(a) < 1e-20) continue;
       clipped.push(a < 0 ? [t[0], t[2], t[1]] : t);
     }
-    if (!clipped.length) return fan;
-    return spare(clipped) <= fanSpare ? clipped : fan;
+    const validClipped = clipped.filter(validRenderTriangle);
+    const fanError = Math.abs(spare(validFan));
+    const clipError = validClipped.length ? Math.abs(spare(validClipped)) : Infinity;
+    if (clipError <= tolerance && clipError <= fanError + tolerance) return validClipped;
+    if (fanError <= tolerance) return validFan;
+    return clipError < fanError ? validClipped : validFan;
   }
 
   // Flood-fill coplanar triangles connected by shared edges, starting at faceIdx.
