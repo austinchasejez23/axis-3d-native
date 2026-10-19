@@ -2,6 +2,15 @@ import { createPortal } from 'react-dom';
 import { useLayoutEffect, useRef } from 'react';
 import SegmentsKeypad from './SegmentsKeypad';
 
+/**
+ * @param {{
+ *   open: boolean,
+ *   onKey: (key: string) => void,
+ *   onClose?: () => void,
+ *   decimal?: boolean,
+ *   signed?: boolean
+ * }} props
+ */
 export default function ModelingNumberPad({ open, onKey, onClose = undefined, decimal = false, signed = false }) {
   const padRef = useRef(null);
   useLayoutEffect(() => {
