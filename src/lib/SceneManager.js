@@ -379,15 +379,19 @@ export class SceneManager {
     threeMesh.rotation.copy(mesh.rotation);
     threeMesh.scale.copy(mesh.scale);
     threeMesh.visible = mesh.visible;
-    threeMesh.castShadow = true;
-    threeMesh.receiveShadow = true;
+    threeMesh.castShadow = !mesh.importedWireframeOnly;
+    threeMesh.receiveShadow = !mesh.importedWireframeOnly;
     loadReferenceImage(this, mesh);
 
     // Screen-space fat lines: GPU lines are locked at 1px, so the wireframe is
     // drawn as thin quads instead — sub-pixel thin and dark/opaque.
     const wireGeo = mesh.toEdgesGeometry();
     // Thin sub-pixel hairline (requested): finest line the screen can draw.
-    const wireframe = makeFatSegments(Array.from(wireGeo.getAttribute('position').array), 0x0a0a0a, 0.5, this.renderer);
+    const wireframe = makeFatSegments(
+      Array.from(wireGeo.getAttribute('position').array),
+      mesh.importedWireframeOnly ? 0xb7c1cd : 0x0a0a0a,
+      mesh.importedWireframeOnly ? 1.15 : 0.5, this.renderer,
+    );
     wireGeo.dispose();
     wireframe.material.opacity = 1;
     // Occlude back-side edges with the solid object's depth buffer.
@@ -395,6 +399,7 @@ export class SceneManager {
     wireframe.material.depthWrite = false;
     wireframe.renderOrder = 1;
     wireframe.visible = theme.wireframeEnabled !== false && !this.wireframesHidden;
+    if (mesh.importedWireframeOnly) mat.colorWrite = !wireframe.visible;
     threeMesh.add(wireframe);
 
     this.scene.add(threeMesh);
@@ -902,8 +907,9 @@ export class SceneManager {
   // and highlighted so tools like paint-fill keep working.
   setWireframesHidden(hidden) {
     this.wireframesHidden = !!hidden;
-    for (const obj of this.threeObjects.values()) {
-      obj.wireframe.visible = theme.wireframeEnabled !== false && !this.wireframesHidden;
+    for (const [id, obj] of this.threeObjects) {
+      obj.wireframe.visible = theme.wireframeEnabled !== false && !this.wireframesHidden && !obj.focusProxyGeometry;
+      if (obj.material && this.getMesh(id)?.importedWireframeOnly) obj.material.colorWrite = !obj.wireframe.visible;
     }
     this.refreshStaleWireframes();
   }
