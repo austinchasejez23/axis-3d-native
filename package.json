@@ -16,8 +16,6 @@
     "test:standalone": "node scripts/standalone-regression.mjs && node scripts/supabase-test-regression.mjs && node scripts/account-deletion-edge-regression.mjs && node scripts/backup-integrity-regression.mjs && node scripts/play-billing-safety-regression.mjs && node scripts/apk-signing-regression.mjs && node scripts/play-purchase-verifier-regression.mjs"
   },
   "dependencies": {
-    "@base44/sdk": "^0.8.54",
-    "@base44/vite-plugin": "^1.0.47",
     "@hello-pangea/dnd": "^17.0.0",
     "@hookform/resolvers": "^4.1.2",
     "@radix-ui/react-accordion": "^1.2.3",
