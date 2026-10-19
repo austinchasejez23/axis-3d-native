@@ -67,6 +67,43 @@ try {
     }
     geometry.dispose();
   }
+  // A second pre-migration Boolean output had a near-collinear fan on z=1.
+  // Converting the corner positions to Float32 inverted one extremely small
+  // triangle. The renderer must never reverse winding relative to its face.
+  const windingBoundary = [
+    [-1, -.5, 1],
+    [0, -.5, 1],
+    [.4469357490539553, -.05306425094604472, 1],
+    [.4469357490539551, -4.768371586472142e-8, 1],
+    [-.2469357490539551, -4.768371586472142e-8, 1],
+    [-.500000047683716, -4.7683715975743723e-8, 1],
+    [-.24693574905395513, .2530642509460449, 1],
+    [-.24693574905395516, .5, 1],
+    [-1, .5, 1],
+  ];
+  const windingMesh = new EditableMesh('float32-near-collinear-face');
+  windingMesh.vertices = windingBoundary.map(([x, y, z], i) => ({ id: i + 1, x, y, z }));
+  windingMesh.faces = [windingMesh.vertices.map(v => v.id)];
+  const windingGeo = windingMesh.toBufferGeometry();
+  const wp = windingGeo.getAttribute('position');
+  const wn = windingGeo.getAttribute('normal');
+  const originalArea = polygonArea(windingBoundary.map(([x, y]) => [x, y]));
+  let renderedArea = 0;
+  for (let i = 0; i < wp.count; i += 3) {
+    const a = new THREE.Vector3().fromBufferAttribute(wp, i);
+    const b = new THREE.Vector3().fromBufferAttribute(wp, i + 1);
+    const c = new THREE.Vector3().fromBufferAttribute(wp, i + 2);
+    const cross = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a));
+    const normal = new THREE.Vector3().fromBufferAttribute(wn, i);
+    assert.ok(cross.lengthSq() >= 1e-18, 'nearly collinear polygon contains a degenerate WebGL triangle');
+    assert.ok(cross.dot(normal) >= -1e-9, 'nearly collinear polygon reverses a WebGL triangle');
+    renderedArea += cross.length() / 2;
+  }
+  assert.ok(Math.abs(renderedArea - originalArea) < 1e-5,
+    'render geometry must retain the original face area with no overlap');
+  assert.equal(windingMesh.getEdges().length, windingBoundary.length,
+    'all original boundary edges remain selectable');
+  windingGeo.dispose();
   console.log('Boolean boundary triangulation preserves face area, edges and non-degenerate render geometry.');
 } finally {
   await server.close();
