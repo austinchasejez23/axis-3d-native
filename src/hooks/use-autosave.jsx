@@ -16,7 +16,7 @@ import { theme } from '@/lib/theme';
 // down so it can never stutter a gesture.
 const INTERVAL_MS = 60000;
 
-export default function useAutoSave(managerRef, projectName, onSaved, { isPro = false, onProjectLimit } = {}) {
+export default function useAutoSave(managerRef, projectName, onSaved, { isPro = false, onProjectLimit = undefined } = {}) {
   const savedRef = useRef({ projectId: null, signature: null });
   const warnedRef = useRef(false);
 
