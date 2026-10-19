@@ -49,7 +49,7 @@ function around(center, transform) {
 export function applySceneRadialArray(SceneManager) {
   const P = SceneManager.prototype;
 
-  P.beginRadialArray = function (options) {
+  P.beginRadialArray = /** @this {import('./SceneManager.js').SceneManager} */ function (options) {
     const mesh = this.getMesh(this.selection.meshId);
     if (!mesh || this.selection.type !== 'object' || this.isGroupMode() || mesh.locked) return false;
     this.cancelRadialArray();
@@ -64,7 +64,7 @@ export function applySceneRadialArray(SceneManager) {
     return this._radialArray?.options || false;
   };
 
-  P.radialArraySelectPreview = function () {
+  P.radialArraySelectPreview = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     const state = this._radialArray;
     if (!state) return;
     const ids = [state.sourceId, ...state.previewIds].filter((id) => this.getMesh(id));
@@ -77,19 +77,19 @@ export function applySceneRadialArray(SceneManager) {
 
   // Called by move/scale/rotate group gestures. Keep a single affine
   // adjustment for this uncommitted preview, not independently edited copies.
-  P.recordRadialArrayPreviewAffine = function (change) {
+  P.recordRadialArrayPreviewAffine = /** @this {import('./SceneManager.js').SceneManager} */ function (change) {
     const state = this._radialArray;
     if (!state || !this.isGroupMode()) return;
     state.adjustment.premultiply(change);
   };
 
-  P.recordRadialArrayPreviewScale = function (factors, center) {
+  P.recordRadialArrayPreviewScale = /** @this {import('./SceneManager.js').SceneManager} */ function (factors, center) {
     if (!this._radialArray || !this.isGroupMode()) return;
     const s = new THREE.Matrix4().makeScale(factors.x, factors.y, factors.z);
     this.recordRadialArrayPreviewAffine(around(center, s));
   };
 
-  P.updateRadialArray = function ({ count = 12, axis = 'y', follow = true, radius = 3 } = {}) {
+  P.updateRadialArray = /** @this {import('./SceneManager.js').SceneManager} */ function ({ count = 12, axis = 'y', follow = true, radius = 3 } = {}) {
     const state = this._radialArray;
     const source = state ? this.getMesh(state.sourceId) : null;
     if (!state || !source) return false;
@@ -141,7 +141,7 @@ export function applySceneRadialArray(SceneManager) {
     return true;
   };
 
-  P.commitRadialArray = function () {
+  P.commitRadialArray = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     const state = this._radialArray;
     if (!state) return false;
     const ids = [state.sourceId, ...state.previewIds].filter((id) => this.getMesh(id));
@@ -155,7 +155,7 @@ export function applySceneRadialArray(SceneManager) {
     return true;
   };
 
-  P.cancelRadialArray = function () {
+  P.cancelRadialArray = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     const state = this._radialArray;
     if (!state) return false;
     this._radialArray = null;
@@ -166,13 +166,13 @@ export function applySceneRadialArray(SceneManager) {
   // While the tool is open, gesture editing never creates an intermediate
   // undo step with partial/temporary copies. Apply creates ONE undo step.
   const pushUndo = P.pushUndo;
-  P.pushUndo = function (...args) {
+  P.pushUndo = /** @this {import('./SceneManager.js').SceneManager} */ function (...args) {
     if (this._radialArray) return;
     return pushUndo.apply(this, args);
   };
 
   const translateGroup = P.translateGroup;
-  P.translateGroup = function (delta) {
+  P.translateGroup = /** @this {import('./SceneManager.js').SceneManager} */ function (delta) {
     const tracked = !!this._radialArray && this.isGroupMode();
     const before = tracked ? this.getMesh(this._radialArray.sourceId)?.position.clone() : null;
     const result = translateGroup.call(this, delta);
@@ -187,7 +187,7 @@ export function applySceneRadialArray(SceneManager) {
   };
 
   const scaleGroup = P.scaleGroup;
-  P.scaleGroup = function (factor) {
+  P.scaleGroup = /** @this {import('./SceneManager.js').SceneManager} */ function (factor) {
     const center = this._radialArray && this.isGroupMode() ? this.getGroupCenter()?.clone() : null;
     const result = scaleGroup.call(this, factor);
     if (center) this.recordRadialArrayPreviewScale(new THREE.Vector3(factor, factor, factor), center);
@@ -195,7 +195,7 @@ export function applySceneRadialArray(SceneManager) {
   };
 
   const scaleGroupAxis = P.scaleGroupAxis;
-  P.scaleGroupAxis = function (axis, factor) {
+  P.scaleGroupAxis = /** @this {import('./SceneManager.js').SceneManager} */ function (axis, factor) {
     if (!this._radialArray || !this.isGroupMode()) return scaleGroupAxis.call(this, axis, factor);
     const center = this.getGroupCenter()?.clone();
     if (!center) return;
@@ -216,13 +216,13 @@ export function applySceneRadialArray(SceneManager) {
   };
 
   const scaleSelectionAxis = P.scaleSelectionAxis;
-  P.scaleSelectionAxis = function (axis, factor) {
+  P.scaleSelectionAxis = /** @this {import('./SceneManager.js').SceneManager} */ function (axis, factor) {
     if (this._radialArray && this.isGroupMode()) return this.scaleGroupAxis(axis, factor);
     return scaleSelectionAxis.call(this, axis, factor);
   };
 
   const rotateGroupAroundAxis = P.rotateGroupAroundAxis;
-  P.rotateGroupAroundAxis = function (angle, axisVec) {
+  P.rotateGroupAroundAxis = /** @this {import('./SceneManager.js').SceneManager} */ function (angle, axisVec) {
     const center = this._radialArray && this.isGroupMode() ? this.getGroupCenter()?.clone() : null;
     const result = rotateGroupAroundAxis.call(this, angle, axisVec);
     if (center) {
