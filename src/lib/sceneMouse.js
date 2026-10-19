@@ -15,11 +15,11 @@ import * as THREE from 'three';
 export function applySceneMouse(SceneManager) {
   const P = SceneManager.prototype;
 
-  P.setupMouseEvents = function () {
+  P.setupMouseEvents = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     this.renderer.domElement.addEventListener('wheel', (e) => this.onMouseWheel(e), { passive: false });
   };
 
-  P.isMouseOverSelection = function (x, y) {
+  P.isMouseOverSelection = /** @this {import('./SceneManager.js').SceneManager} */ function (x, y) {
     // Surface mode never transforms objects, on mouse or touch.
     if (this.surfaceMode) return false;
     if (!this.selection.meshId) return false;
@@ -27,7 +27,7 @@ export function applySceneMouse(SceneManager) {
   };
 
   // Undo for wheel bursts: one snapshot per burst, not per notch.
-  P._beginWheelStep = function () {
+  P._beginWheelStep = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (!this._wheelActive) {
       this._wheelActive = true;
       this.rotatePivot = this.getSelectionCenter();
@@ -43,7 +43,7 @@ export function applySceneMouse(SceneManager) {
     }, 500);
   };
 
-  P.onMouseDown = function (e) {
+  P.onMouseDown = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
     e.preventDefault();
     this.stopCameraMotion();
     this.renderer.domElement.setPointerCapture?.(e.pointerId);
@@ -119,7 +119,7 @@ export function applySceneMouse(SceneManager) {
     };
   };
 
-  P.onMouseMove = function (e) {
+  P.onMouseMove = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
     const m = this.mouse;
     if (!m) return;
     if (this.updateSceneLightMouse?.(e)) return;
@@ -203,7 +203,7 @@ export function applySceneMouse(SceneManager) {
 
   // Right-drag axis scale: the surface follows the pointer, growing when the
   // drag moves away from the selection center and shrinking when it moves in.
-  P._beginMouseScale = function (e) {
+  P._beginMouseScale = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
     const m = this.mouse;
     m.mode = 'scale';
     this.activeAction = 'scale';
@@ -228,7 +228,7 @@ export function applySceneMouse(SceneManager) {
     m.lastRatio = 1;
   };
 
-  P._updateMouseScale = function (e) {
+  P._updateMouseScale = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
     const m = this.mouse;
     const center = this.getSelectionCenter();
     let delta = this.screenToWorldDrag(m.startX, m.startY, e.clientX, e.clientY, center);
@@ -245,7 +245,7 @@ export function applySceneMouse(SceneManager) {
     }
   };
 
-  P.onMouseUp = function (e) {
+  P.onMouseUp = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
     const m = this.mouse;
     if (this.finishSceneLightMouse?.()) { this.mouse = null; return; }
     this.mouse = null;
@@ -318,7 +318,7 @@ export function applySceneMouse(SceneManager) {
     this.updateHud();
   };
 
-  P.onMouseWheel = function (e) {
+  P.onMouseWheel = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
     if (this.lightingEdit) {
       e.preventDefault();
       this.zoom(e.deltaY > 0 ? 1.1 : 1 / 1.1);
