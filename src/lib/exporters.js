@@ -1,4 +1,20 @@
 import * as THREE from 'three';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const AxisFiles = registerPlugin('AxisFiles');
+
+/** Convert model bytes to aligned base64 chunks for the native save picker. */
+async function encodeFileForAndroid(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const blockSize = 24576; // multiple of 3: intermediate base64 blocks concatenate safely
+  const parts = [];
+  for (let offset = 0; offset < bytes.length; offset += blockSize) {
+    const block = bytes.subarray(offset, offset + blockSize);
+    parts.push(btoa(String.fromCharCode(...block)));
+  }
+  return parts.join('');
+}
+
 
 export function exportOBJ(meshes) {
   let output = '# AXIS 3D OBJ Export\n\n';
@@ -116,6 +132,19 @@ export function exportFBX(meshes) {
 export async function downloadFile(content, filename, mimeType = 'text/plain') {
   const blob = new Blob([content], { type: mimeType });
   if (!blob.size) throw new Error('Export produced an empty file.');
+  // Real Android save picker, backed by a native Storage Access Framework
+  // document. This does not need Base44, Downloads permissions, or a share app.
+  if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
+    const data = await encodeFileForAndroid(blob);
+    try {
+      const result = await AxisFiles.saveFile({ filename, mimeType, data });
+      if (!result?.saved) throw new Error('Android did not confirm the file was saved.');
+      return 'saved';
+    } catch (error) {
+      if (error?.code === 'CANCELED') throw new Error('File saving was canceled.');
+      throw new Error(error?.message || 'Android could not save the file.');
+    }
+  }
   // Android WebViews often do not handle blob: anchor downloads. Use the
   // operating system's file sharing/saving sheet when file sharing is supported.
   const isAndroid = /Android/i.test(navigator.userAgent);
