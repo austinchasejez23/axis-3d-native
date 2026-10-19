@@ -4,7 +4,11 @@ import { Delete } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
 
 // The HUD's number pad has its own appearance; other modeling keypads stay unchanged.
-export default function HudNumberPad({ open, onKey, decimal = false, signed = false }) {
+/**
+ * @param {{ open: boolean, onKey: (key: string) => void,
+ *   onClose?: () => void, decimal?: boolean, signed?: boolean }} props
+ */
+export default function HudNumberPad({ open, onKey, onClose = undefined, decimal = false, signed = false }) {
   const padRef = useRef(null);
   const { uiColor } = useTheme();
   useLayoutEffect(() => {
@@ -23,6 +27,7 @@ export default function HudNumberPad({ open, onKey, decimal = false, signed = fa
   const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', ...lastRow];
   return createPortal(
     <div ref={padRef} className="fixed bottom-0 left-0 right-0 z-[90] modeling-sheet"
+      onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose?.(); } }}
       onPointerDown={(event) => event.stopPropagation()}
       onPointerMove={(event) => event.stopPropagation()}
       onPointerUp={(event) => event.stopPropagation()}>
