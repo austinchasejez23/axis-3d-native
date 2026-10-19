@@ -39,12 +39,12 @@ assert.match(splash, /onError=\{\(\) => setVideoEnded\(true\)\}/,
 const nativeMain = read('android/app/src/main/java/com/base6a5340f43f8fd031c5921680/app/MainActivity.java');
 const nativeFilePlugin = read('android/app/src/main/java/com/base6a5340f43f8fd031c5921680/app/AxisFilesPlugin.java');
 const exporter = read('src/lib/exporters.js');
-assert.match(nativeMain, /registerPlugin\\(AxisFilesPlugin\\.class\\)/);
-assert.match(nativeFilePlugin, /Intent\\.ACTION_CREATE_DOCUMENT/,
+assert.match(nativeMain, /registerPlugin\(AxisFilesPlugin\.class\)/);
+assert.match(nativeFilePlugin, /Intent\.ACTION_CREATE_DOCUMENT/,
   'Native Android must use the system Save As dialog');
-assert.match(nativeFilePlugin, /openOutputStream\\(uri, "w"\\)/,
+assert.match(nativeFilePlugin, /openOutputStream\(uri, "w"\)/,
   'Native Android must actually write model bytes to a user-chosen document');
-assert.match(exporter, /AxisFiles\\.saveFile\\(/);
+assert.match(exporter, /AxisFiles\.saveFile\(/);
 assert.match(exporter, /return 'saved'/);
 assert.doesNotMatch(read('vite.config.js'), /@base44/);
 console.log('Standalone isolation, Free entitlement, package ID and local storage checks passed.');
