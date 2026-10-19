@@ -67,7 +67,7 @@ function factorForSize(size) {
 
 // Uniform scale is driven by the largest axis so the shape never distorts.
 export function uniformScaleSnapFactor(manager) {
-  if (!snapActive(manager)) return 1;
+  if (!snapActive()) return 1;
   const size = selectionSize(manager);
   if (!size) return 1;
   const axis = size.x >= size.y && size.x >= size.z ? 'x' : (size.y >= size.z ? 'y' : 'z');
@@ -75,7 +75,7 @@ export function uniformScaleSnapFactor(manager) {
 }
 
 export function axisScaleSnapFactor(manager, axis) {
-  if (!snapActive(manager)) return 1;
+  if (!snapActive()) return 1;
   const size = selectionSize(manager);
   if (!size) return 1;
   return factorForSize(size[axis]);
@@ -84,7 +84,7 @@ export function axisScaleSnapFactor(manager, axis) {
 // Rotation snaps to fixed angle steps. The leftover fraction of a step is kept
 // so a slow drag still accumulates instead of being thrown away each frame.
 export function snapAngleDelta(manager, angle) {
-  if (!snapActive(manager)) return angle;
+  if (!snapActive()) return angle;
   const step = (Math.max(0, theme.snapAngle) * Math.PI) / 180;
   if (!step) return angle;
   const residual = (manager._angleResidual || 0) + angle;
