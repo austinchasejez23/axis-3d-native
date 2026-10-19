@@ -57,7 +57,7 @@ export function ToggleSliderRow({ label, enabled, intensity, onToggle, onIntensi
 
 // Label-as-toggle: no separate switch — the label itself highlights in the
 // accent color when the setting is on.
-export function LabelToggleRow({ label, icon: Icon, enabled, onToggle, highlightColor, uiColor = '#ffffff' }) {
+export function LabelToggleRow({ label, icon: Icon = null, enabled, onToggle, highlightColor, uiColor = '#ffffff' }) {
   const color = enabled ? highlightColor : uiColor;
   return (
     <button
