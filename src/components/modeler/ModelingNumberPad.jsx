@@ -2,7 +2,7 @@ import { createPortal } from 'react-dom';
 import { useLayoutEffect, useRef } from 'react';
 import SegmentsKeypad from './SegmentsKeypad';
 
-export default function ModelingNumberPad({ open, onKey, decimal = false, signed = false }) {
+export default function ModelingNumberPad({ open, onKey, onClose = undefined, decimal = false, signed = false }) {
   const padRef = useRef(null);
   useLayoutEffect(() => {
     if (!open || !padRef.current) return;
@@ -16,6 +16,7 @@ export default function ModelingNumberPad({ open, onKey, decimal = false, signed
   return createPortal(
     <div ref={padRef}
       className="fixed bottom-0 left-0 right-0 z-[90] modeling-sheet"
+      onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose?.(); } }}
       onPointerDown={(event) => event.stopPropagation()}
       onPointerUp={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
