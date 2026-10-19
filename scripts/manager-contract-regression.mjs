@@ -39,7 +39,7 @@ const installed = new Set();
 for (const moduleName of files) {
   const source = readFileSync(`src/lib/${moduleName}.js`, 'utf8');
   for (const match of source.matchAll(
-    /(?:\bP|SceneManager(?:Class)?\.prototype)\.([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?function\s*\(/g,
+    /(?:\bP|SceneManager(?:Class)?\.prototype)\.([A-Za-z_$][\w$]*)\s*=\s*(?:\/\*\*[\s\S]*?\*\/\s*)?(?:async\s+)?function\s*\(/g,
   )) {
     if (!classMethods.has(match[1])) installed.add(match[1]);
   }
@@ -51,3 +51,25 @@ for (const method of interfaceNames) {
   assert.ok(installed.has(method), `SceneManager extension is not implemented: ${method}`);
 }
 console.log(`PASS: ${interfaceNames.size} declared SceneManager extensions match installed implementations`);
+
+const configFile = ts.readConfigFile('jsconfig.json', ts.sys.readFile);
+assert.equal(configFile.error, undefined, 'Project jsconfig must parse');
+const config = ts.parseJsonConfigFileContent(configFile.config, ts.sys, process.cwd());
+const program = ts.createProgram(config.fileNames, config.options);
+const classSource = program.getSourceFile('src/lib/SceneManager.js')
+  ?? program.getSourceFiles().find(f => f.fileName.endsWith('/src/lib/SceneManager.js'));
+assert.ok(classSource, 'Project typecheck must actually include SceneManager');
+const clazz = classSource.statements.find(stmt =>
+  ts.isClassDeclaration(stmt) && stmt.name?.text === 'SceneManager'
+);
+assert.ok(clazz, 'SceneManager class was not found by TypeScript');
+const checker = program.getTypeChecker();
+const instanceSymbol = checker.getSymbolAtLocation(clazz.name);
+const instance = checker.getDeclaredTypeOfSymbol(instanceSymbol);
+for (const name of ['setupEvents', 'setSelection', 'pushUndo', 'applyLighting']) {
+  assert.ok(
+    checker.getPropertyOfType(instance, name),
+    `TypeScript cannot see SceneManager extension ${name}; the contract is not linked to the real class`,
+  );
+}
+console.log('PASS: TypeScript resolves the SceneManager extension contract against the actual class');
