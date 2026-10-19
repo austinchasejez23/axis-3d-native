@@ -28,27 +28,89 @@ rather than starting a new one. It lives in `capacitor.config.json`,
 `android/app/build.gradle` and `android/app/src/main/res/values/strings.xml`.
 Changing it means a new listing, with no carry-over of installs or reviews.
 
-**versionCode 25** — Play refuses an upload whose versionCode is not higher
-than the live one, and the current listing is on 24. Raise it by one for every
-upload, in `android/app/build.gradle`.
+**Version code:** Debug builds default to 25. Release builds require
+`AXIS_VERSION_CODE` to be set explicitly. Choose an integer strictly higher
+than **every** versionCode previously uploaded to Google Play, including internal
+and rejected/test releases. Check the **transferred app** in the current Google
+Play Console account; do not assume 25 is high enough. Set optional
+`AXIS_VERSION_NAME` for the display version. The native package ID must stay
+exactly as shown above.
 
 **App name: AXIS 3D.** `strings.xml`.
 
 **targetSdk 36, minSdk 24.** Above Play's current floor; Android 7.0 and up.
 
-## The signing question — settle this before uploading
+## Google Play upload key reset: verified 2026-10-19
 
-The listing's existing APK was built by the Wix shell and signed with its
-upload key. Play will only accept an update signed with that same upload key.
-If you do not have it, there are two ways forward:
+The original upload key is no longer needed: after transferring Axis 3D to a
+different Google Play developer account, Google Play recorded an upload key
+reset. The new approved **SHA-256 certificate fingerprint** is:
 
-1. Ask Play support for an **upload key reset**. You keep the listing, its
-   installs and its reviews. This is the normal route and takes a few days.
-2. Publish under a new package id as a new listing. Immediate, but you start
-   from zero on installs and ratings.
+```text
+BC:50:EE:20:4E:11:C9:66:CC:48:E6:EC:0B:D2:5D:7D:5E:07:96:9D:F1:81:99:1C:3D:B4:80:E6:7D:D9:2D:5F
+```
 
-Nothing here forces that decision — the package id is one line if you change
-your mind.
+The privately stored `axis-release.jks` has been checked locally: it contains
+the `axis` private-key entry and its certificate has that exact fingerprint.
+The keystore itself, passwords and key properties **must remain outside this
+repository** and outside build logs. The keystore was not committed or uploaded
+to GitHub. Keep independent secure backups. A fingerprint/Pem certificate alone
+cannot sign an app.
+
+The Play account transfer does **not** change this application's package ID,
+the app signing certificate used for users' APKs, or the required upload signing
+identity. Use the **new** Play Console account for all subsequent versionCode
+checks, app release management, permissions, and integrations.
+
+### Build a signed release bundle locally
+
+First run the existing web, modeling and Android checks and review the build on
+a real Android device. Do not publish while regression/typecheck checks fail.
+
+Provide the keystore **by absolute local path** and the passwords via local
+environment variables, not a checked-in properties file:
+
+```bash
+export AXIS_UPLOAD_KEYSTORE="/secure/location/axis-release.jks"
+export AXIS_UPLOAD_STORE_PASSWORD="your-local-keystore-password"
+export AXIS_UPLOAD_KEY_PASSWORD="your-local-private-key-password"
+export AXIS_UPLOAD_KEY_ALIAS="axis"            # optional; defaults to axis
+export AXIS_VERSION_CODE="CHOOSE_PLAY_SAFE_INTEGER"
+export AXIS_VERSION_NAME="CHOOSE_RELEASE_NAME" # optional
+
+npm ci
+npm run android:sync
+cd android
+./gradlew --no-daemon :app:bundleRelease
+```
+
+Replace the placeholders privately. Do not paste passwords into chat, CI logs,
+committed shell scripts, or public issue comments. The variables must be set
+in the environment where Gradle runs; the Android Studio signing wizard is a
+separate flow and does not invoke this custom verification task.
+
+The Gradle release task **fails closed** if signing material or a version code
+is missing, the key is inaccessible, or the certificate SHA-256 differs from
+Google Play's approved upload certificate. The resulting **signed** Android App
+Bundle, when all checks succeed, is:
+
+`android/app/build/outputs/bundle/release/app-release.aab`
+
+The build does **not** upload or publish anything. Before submitting the AAB
+under the **transferred** Play developer account, check all active Play tracks,
+confirm the maximum used versionCode, verify the Play Console app package
+identifier, and test startup, Library, import/export, Free limitations, and
+updating from the currently installed release. Signing an AAB does not imply
+that app functionality or distribution requirements have passed review.
+
+### GitHub Actions
+
+The current PR workflow builds a debug APK without release credentials. The
+signing key is intentionally **not** added as a GitHub repository file or
+Actions artifact; no automatic Play publishing is configured. Use the local
+signed-release steps above only once PR checks and Android device tests pass.
+If a future approved signing workflow is added, store secrets in a protected
+environment with restricted access and no untrusted-PR execution.
 
 ## Standalone test behavior
 
