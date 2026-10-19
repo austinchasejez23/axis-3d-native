@@ -25,11 +25,12 @@ import { collectGlDiagnostics } from '@/lib/glDiagnostics';
  * @property {(payload: any) => void} [onLightsChange]
  * @property {() => void} [onLockChange]
  * @property {() => void} [onEmptyTap]
+ * @property {() => void} [onTriangleLimit]
  * @property {(manager: SceneManager) => void} [onReady]
  */
 
 /** @type {import('react').ForwardRefRenderFunction<SceneManager, ThreeViewportProps>} */
-const renderThreeViewport = ({ onStatsChange, onTriangleCountChange, onHudChange, onMarqueeChange, onSelectionChange, onBeforeSelectionTap, onSelectionTap, onMultiSelectChange, onDrawChange, onLockChange, onSelectionModeChange, onCutChange, onAddVertexChange, onEmptyTap, onGraphicsError, onPrecisionPoint, onLightsChange, onReady }, ref) => {
+const renderThreeViewport = ({ onStatsChange, onTriangleCountChange, onHudChange, onMarqueeChange, onSelectionChange, onBeforeSelectionTap, onSelectionTap, onMultiSelectChange, onDrawChange, onLockChange, onSelectionModeChange, onCutChange, onAddVertexChange, onEmptyTap, onGraphicsError, onPrecisionPoint, onLightsChange, onTriangleLimit, onReady }, ref) => {
   const containerRef = useRef();
   /** @type {import('react').MutableRefObject<SceneManager | null>} */
   const managerRef = useRef(null);
@@ -39,7 +40,7 @@ const renderThreeViewport = ({ onStatsChange, onTriangleCountChange, onHudChange
   const cbRef = useRef({});
   const [diagnostics, setDiagnostics] = useState(null);
   const [rendererGeneration, setRendererGeneration] = useState(0);
-  cbRef.current = { onStatsChange, onTriangleCountChange, onHudChange, onMarqueeChange, onSelectionChange, onBeforeSelectionTap, onSelectionTap, onMultiSelectChange, onDrawChange, onLockChange, onSelectionModeChange, onCutChange, onAddVertexChange, onEmptyTap, onGraphicsError, onPrecisionPoint, onLightsChange, onReady };
+  cbRef.current = { onStatsChange, onTriangleCountChange, onHudChange, onMarqueeChange, onSelectionChange, onBeforeSelectionTap, onSelectionTap, onMultiSelectChange, onDrawChange, onLockChange, onSelectionModeChange, onCutChange, onAddVertexChange, onEmptyTap, onGraphicsError, onPrecisionPoint, onLightsChange, onTriangleLimit, onReady };
 
   useEffect(() => {
     let manager;
@@ -62,6 +63,7 @@ const renderThreeViewport = ({ onStatsChange, onTriangleCountChange, onHudChange
         onGraphicsError: (v) => cbRef.current.onGraphicsError?.(v),
         onPrecisionPoint: (v) => cbRef.current.onPrecisionPoint?.(v),
         onLightsChange: (v) => cbRef.current.onLightsChange?.(v),
+        onTriangleLimit: () => cbRef.current.onTriangleLimit?.(),
         onContextLost: () => {
           recoveryRef.current = manager?.serialize();
           clearTimeout(restartTimerRef.current);
