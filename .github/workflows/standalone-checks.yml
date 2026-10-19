@@ -39,7 +39,15 @@ jobs:
           status=0
           for test in scripts/*-regression.mjs; do
             echo "::group::$test"
-            node "$test" || status=1
+            # The Boolean-edge boundary case has intermittently collapsed
+            # a triangle after Float32 packing. Repeat across fresh Node/Vite
+            # processes rather than trusting a single lucky passing run.
+            trials=1
+            if [ "$test" = "scripts/boolean-edge-regression.mjs" ]; then trials=3; fi
+            for trial in $(seq 1 "$trials"); do
+              echo "Running $test (trial $trial/$trials)"
+              node "$test" || status=1
+            done
             echo "::endgroup::"
           done
           exit "$status"
