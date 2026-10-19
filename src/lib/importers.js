@@ -6,10 +6,11 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
 import { EditableMesh } from './EditableMesh';
 
-// Import an uploaded .obj, .fbx, .stl, .glb/.gltf or .3mf model file into one EditableMesh per mesh found
-// in the file. World transforms are baked into vertex positions, then the whole
-// model is centered at the origin and scaled to fit a ~2-unit box so it lands
-// in view and is easy to edit. Returns an array of EditableMesh.
+// Import a device-selected .obj, .fbx, .stl, .glb/.gltf or .3mf model file.
+// Preserve its coordinates and original dimensions. Imported mesh transforms
+// are baked into vertex positions; changing the model's size just to make it
+// fit the viewport would silently corrupt dimensions in a CAD application.
+// Returns editable meshes that can be added to the current scene.
 export async function importModelFile(file) {
   const ext = (file.name.split('.').pop() || '').toLowerCase();
   let root;
@@ -48,35 +49,29 @@ export async function importModelFile(file) {
   root.updateMatrixWorld(true);
   root.traverse((child) => {
     if (child.isMesh && child.geometry && child.geometry.attributes.position) {
-      const geo = child.geometry.clone();
+      // Create a POSITION-ONLY copy. No imported normals, UVs, colors,
+      // tangents, skinning, morph attributes, source materials or textures are
+      // carried into the editable model. Axis generates whatever temporary
+      // face normals it needs for editing from the geometry itself.
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', child.geometry.attributes.position.clone());
+      if (child.geometry.index) geo.setIndex(child.geometry.index.clone());
       geo.applyMatrix4(child.matrixWorld);
       const mesh = EditableMesh.fromGeometry(geo, child.name || file.name);
       geo.dispose();
-      if (mesh.vertices.length > 0 && mesh.faces.length > 0) meshes.push(mesh);
+      if (mesh.vertices.length > 0 && mesh.faces.length > 0) {
+        // Only the editable vertices, edges and faces. Do not transfer any
+        // appearance data from the source model.
+        mesh.importedWireframeOnly = true;
+        mesh.importedFeatureEdges = false;
+        meshes.push(mesh);
+      }
     }
   });
 
   if (meshes.length === 0) throw new Error('No mesh geometry found in file');
 
-  await new Promise((r) => setTimeout(r, 0));
-
-  // Center + uniformly scale the combined model to fit a ~2-unit bounding box
-  // at the origin so the imported model is visible in the default camera.
-  const box = new THREE.Box3();
-  for (const m of meshes) {
-    for (const v of m.vertices) box.expandByPoint(new THREE.Vector3(v.x, v.y, v.z));
-  }
-  const center = box.getCenter(new THREE.Vector3());
-  const size = box.getSize(new THREE.Vector3());
-  const maxDim = Math.max(size.x, size.y, size.z);
-  const scale = maxDim > 1e-6 ? 2 / maxDim : 1;
-  for (const m of meshes) {
-    for (const v of m.vertices) {
-      v.x = (v.x - center.x) * scale;
-      v.y = (v.y - center.y) * scale;
-      v.z = (v.z - center.z) * scale;
-    }
-    m.invalidateCache();
-  }
+  // Do not normalize dimensions or shift the model to the origin. The caller
+  // frames the camera after import so even a large model is visible.
   return meshes;
 }
