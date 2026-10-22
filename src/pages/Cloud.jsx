@@ -6,7 +6,7 @@ import { listProjects } from '@/lib/storage';
 import { FREE_PROJECT_LIMIT } from '@/lib/proAccess';
 import { getCloudSession, signInWithEmail, signUpWithEmail, signOutOfCloud } from '@/lib/supabaseTest';
 import { listCloudBackups, backupLocalProject, restoreCloudBackup, deleteCloudBackup } from '@/lib/cloudSync';
-import { checkPlayBillingConnection } from '@/lib/playBillingTest';
+import { useProAccess } from '@/lib/ProAccessContext';
 
 export default function CloudBackups() {
   const location = useLocation();
@@ -20,8 +20,7 @@ export default function CloudBackups() {
   const [local, setLocal] = useState(() => listProjects());
   const [error, setError] = useState('');
   const [message, setMessage] = useState(() => location.state?.passwordReset ? 'Password changed. Sign in with your new password.' : '');
-  const [billingStatus, setBillingStatus] = useState(null);
-  const [billingChecking, setBillingChecking] = useState(false);
+  const { isPro, plan, validUntil, openUpgrade } = useProAccess();
 
   const refresh = useCallback(async () => {
     setLocal(listProjects());
@@ -109,14 +108,16 @@ export default function CloudBackups() {
         </p>
 
         <section className="space-y-2 rounded-lg border border-white/15 bg-white/5 p-3 text-sm">
-          <h2 className="font-semibold">Google Play Billing connection (test only)</h2>
-          <p className="text-white/65">This checks the Android billing service. Purchases and Pro unlocks remain disabled.</p>
-          <button type="button" disabled={billingChecking} className="min-h-10 rounded-lg border border-white/20 px-3 text-white disabled:opacity-40" onClick={async () => {
-            setBillingChecking(true);
-            try { setBillingStatus(await checkPlayBillingConnection()); }
-            finally { setBillingChecking(false); }
-          }}>{billingChecking ? 'Checking...' : 'Check billing connection'}</button>
-          {billingStatus && <p role="status" className="text-white/75">{billingStatus.connected ? 'Connected' : 'Not connected'}: {billingStatus.message} Purchases disabled.</p>}
+          <h2 className="font-semibold">AXIS Pro</h2>
+          <p className="text-white/65">
+            {isPro
+              ? (plan === 'axis_pro_lifetime' ? 'Pro is active for life on this account.'
+                : 'Pro is active' + (validUntil ? ' until ' + new Date(validUntil).toLocaleDateString() : '') + '.')
+              : 'Pro is tied to your AXIS account, so it follows you to any phone you sign in on.'}
+          </p>
+          <button type="button" className="min-h-10 rounded-lg border border-amber-400/50 px-3 font-medium text-amber-300" onClick={() => openUpgrade(isPro ? 'Manage or restore your Pro purchase.' : 'Unlock every AXIS Pro tool.')}>
+            {isPro ? 'Restore purchases' : 'Get Pro'}
+          </button>
         </section>
 
         {error && <p role="alert" className="rounded-lg border border-red-400/40 bg-red-900/30 p-3 text-sm text-red-100">{error}</p>}

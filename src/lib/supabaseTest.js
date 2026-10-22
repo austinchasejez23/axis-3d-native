@@ -16,6 +16,11 @@ function readSession() {
 
 export function getCloudSession() { return readSession(); }
 
+// Lets Pro access follow sign-in and sign-out without a reload.
+function announceSession() {
+  try { window.dispatchEvent(new Event('axis-cloud-session')); } catch { /* not in a browser */ }
+}
+
 function saveSession(payload, previous = null) {
   const session = {
     access_token: payload.access_token,
@@ -26,7 +31,9 @@ function saveSession(payload, previous = null) {
   if (!session.access_token || !session.refresh_token || !session.user?.id) {
     throw new Error('The server did not return a complete login session.');
   }
+  const changedUser = readSession()?.user?.id !== session.user.id;
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  if (changedUser) announceSession();
   return session;
 }
 
@@ -109,6 +116,7 @@ export async function cloudRequest(path, options = {}) {
 export async function signOutOfCloud() {
   const session = readSession();
   localStorage.removeItem(SESSION_KEY);
+  announceSession();
   if (session) {
     try { await request('/auth/v1/logout', { token: session.access_token, method: 'POST' }); }
     catch { /* Local sign-out must still work without a connection. */ }

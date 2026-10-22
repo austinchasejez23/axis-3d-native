@@ -7,7 +7,7 @@ const deletion = readFileSync('supabase/functions/axis-test-delete-account/index
 const pro = readFileSync('src/lib/ProAccessContext.jsx','utf8');
 const main = readFileSync('src/App.jsx','utf8');
 assert.doesNotMatch(src, /SERVICE_ROLE_KEY|service_role/i, 'Never embed admin credentials in the app.');
-assert.match(pro, /isPro:\s*false/, 'Pro must stay locked until trusted billing verification exists.');
+assert.doesNotMatch(pro, /isPro:\s*true/, 'Pro must only come from the verified entitlement.');
 assert.match(deletion, /credentials\.user\?\.id !== user\.id/, 'Deletion must independently verify account ownership.');
 assert.match(deletion, /body\.confirm !== "DELETE"/, 'Deletion must require explicit confirmation.');
 assert.match(deletion, /\/auth\/v1\/admin\/users\//, 'Deletion should use the server-side admin API.');

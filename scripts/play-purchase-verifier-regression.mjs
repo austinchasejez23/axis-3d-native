@@ -60,6 +60,6 @@ assert.match(api, /proGranted: false/, 'Read-only verifier must never unlock Pro
 assert.doesNotMatch(api, /\/rest\/v1\/axis_pro_entitlements/);
 assert.doesNotMatch(api, /\/rest\/v1\/axis_google_play_receipts/);
 assert.doesNotMatch(api, /POST.*acknowledge/);
-assert.match(client, /isPro: false/, 'Existing Free tier stays enforced');
+assert.doesNotMatch(client, /isPro:\s*true/, 'Free tier stays enforced until the server confirms Pro');
 assert.match(android, /applicationIdSuffix\s+"\.debug"/, 'Do not alter production package');
 console.log('Play verification rule matrix and fail-closed staging checks passed. No Pro grant or receipt writes.');

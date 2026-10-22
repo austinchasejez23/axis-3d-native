@@ -27,7 +27,7 @@ walk('src');
 const cap = JSON.parse(read('capacitor.config.json'));
 assert.equal(cap.appId, 'com.base6a5340f43f8fd031c5921680.app');
 assert.match(read('android/app/build.gradle'), /applicationId "com\.base6a5340f43f8fd031c5921680\.app"/);
-assert.match(read('src/lib/ProAccessContext.jsx'), /isPro:\s*false/);
+assert.doesNotMatch(read('src/lib/ProAccessContext.jsx'), /isPro:\s*true/);
 assert.match(read('src/lib/projectStore.js'), /indexedDB\.open/);
 assert.match(read('src/lib/storage.js'), /forge3d_projects/);
 assert.match(read('src/pages/Splash.jsx'), /navigate\('\/library'/);

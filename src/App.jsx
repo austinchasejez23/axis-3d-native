@@ -47,12 +47,12 @@ function AppRoutes() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClientInstance}>
-      <ProAccessProvider>
-        <Router>
+      <Router>
+        <ProAccessProvider>
           <ScrollToTop />
           <AppRoutes />
-        </Router>
-      </ProAccessProvider>
+        </ProAccessProvider>
+      </Router>
       <Toaster />
       <SonnerToaster position="top-center" toastOptions={{ style: { background: '#333', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' } }} />
     </QueryClientProvider>
