@@ -25,7 +25,7 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
         </button>
         {/* Leave a clear gap below the enlarged undo/redo touch targets. */}
         <div className="relative mt-12 flex flex-col items-end gap-2.5">
-          {/* One subtle backdrop for all six right-side controls; it does not
+          {/* One subtle backdrop for all seven right-side controls; it does not
               intercept touches or grow when temporary tool labels appear. */}
           <div
             aria-hidden="true"
