@@ -176,18 +176,50 @@ function mergeCommonPolygon(mesh, e1, e2) {
 // === CUT LOOP ===
 // Walk the edge ring from the tapped edge: in each quad the cut continues on
 // the opposite side, at the same position along it.
+// Triangles around `hub` in order, as rim vertices v0..v(n-1) (triangle k is
+// hub, v_k, v_k+1), or null when the faces around it are not a closed fan of
+// triangles (cap of a cylinder or cone, pole of a sphere, tip of a pyramid).
+function fanAround(mesh, hub) {
+  const next = new Map();
+  let count = 0;
+  for (const f of mesh.faces) {
+    const i = f.indexOf(hub);
+    if (i < 0) continue;
+    if (f.length !== 3) return null;
+    next.set(f[(i + 1) % 3], f[(i + 2) % 3]);
+    count++;
+  }
+  if (count < 3 || next.size !== count) return null;
+  const rim = [next.keys().next().value];
+  while (rim.length < count) {
+    const v = next.get(rim[rim.length - 1]);
+    if (v === undefined || rim.includes(v)) return null;
+    rim.push(v);
+  }
+  return next.get(rim[rim.length - 1]) === rim[0] ? rim : null;
+}
+
+// Walk the edge ring from the tapped edge: in each quad the cut continues on
+// the opposite side. Where the ring runs into a fan of triangles (a cap, a
+// pole, a tip) it carries on straight through the fan's center and out the
+// opposite side, so the loop reaches right round the object instead of
+// stopping at its edge. A lone triangle (or an odd fan) ends the cut at its
+// far corner.
 export function buildCutLoopPlan(mesh, a0, b0, t, mode = 'follow') {
-  /** @type {Array<{ loop: number[]; from: number[]; to: number[]; fromT?: number; toT?: number }>} */
+  /** @type {Array<{ loop?: number[]; tri?: number[]; from: number[]; to?: number[]; fromT?: number; toT?: number; hub?: number; end?: number }>} */
   const segments = [];
   const quadSeen = new Set();
+  const triSeen = new Set();
   const edgeSeen = new Set();
   const stack = [[a0, b0]];
+  const triKey = (f) => [...f].sort((x, y) => x - y).join(',');
   while (stack.length) {
     const [a, b] = stack.pop();
     const k = edgeKey(a, b);
     if (edgeSeen.has(k)) continue;
     edgeSeen.add(k);
-    for (const loop of quadLoopsForEdge(mesh, a, b)) {
+    const quads = quadLoopsForEdge(mesh, a, b);
+    for (const loop of quads) {
       const qk = [...loop].sort((x, y) => x - y).join(',');
       if (quadSeen.has(qk)) continue;
       const i = loopIndexOfEdge(loop, a, b);
@@ -199,6 +231,31 @@ export function buildCutLoopPlan(mesh, a0, b0, t, mode = 'follow') {
       const next = p === a ? [s, r] : [r, s];
       segments.push({ loop, from: [a, b], to: next });
       stack.push(next);
+    }
+    // Triangles on this edge that are not half of one of those quads.
+    for (const fi of adjacentFaceIndicesForEdge(mesh, a, b)) {
+      const f = mesh.faces[fi];
+      if (f.length !== 3) continue;
+      if (quads.some((loop) => f.every((v) => loop.includes(v)))) continue;
+      const tk = triKey(f);
+      if (triSeen.has(tk)) continue;
+      triSeen.add(tk);
+      const hub = f.find((v) => v !== a && v !== b);
+      const rim = fanAround(mesh, hub);
+      if (rim && rim.length % 2 === 0 && rim.includes(a) && rim.includes(b)) {
+        const n = rim.length;
+        const across = (v) => rim[(rim.indexOf(v) + n / 2) % n];
+        const to = [across(a), across(b)];
+        const far = [hub, to[0], to[1]];
+        const fk = triKey(far);
+        if (!triSeen.has(fk)) {
+          triSeen.add(fk);
+          segments.push({ tri: [a, b, hub], from: [a, b], hub, to });
+          stack.push(to);
+          continue;
+        }
+      }
+      segments.push({ tri: [a, b, hub], from: [a, b], end: hub });
     }
   }
   if (mode === 'straight') {
@@ -217,7 +274,7 @@ export function buildCutLoopPlan(mesh, a0, b0, t, mode = 'follow') {
     };
     for (const seg of segments) {
       seg.fromT = fraction(...seg.from);
-      seg.toT = fraction(...seg.to);
+      if (seg.to) seg.toT = fraction(...seg.to);
     }
   }
   return { t, segments };
@@ -225,16 +282,35 @@ export function buildCutLoopPlan(mesh, a0, b0, t, mode = 'follow') {
 
 export function cutLoopPreviewPoints(mesh, plan) {
   const out = [];
+  const vec = (id) => { const v = mesh.getVertex(id); return v ? new THREE.Vector3(v.x, v.y, v.z) : null; };
+  // One point per edge, the first one placed — the same rule the cut itself
+  // follows, so the preview matches where the cut lands.
+  const placed = new Map();
+  const at = (v1, v2, frac) => {
+    const k = edgeKey(v1, v2);
+    if (!placed.has(k)) placed.set(k, pointOnEdge(mesh, v1, v2, frac));
+    return placed.get(k)?.clone() || null;
+  };
   for (const seg of plan.segments) {
-    const p1 = pointOnEdge(mesh, seg.from[0], seg.from[1], seg.fromT ?? plan.t);
-    const p2 = pointOnEdge(mesh, seg.to[0], seg.to[1], seg.toT ?? plan.t);
-    if (p1 && p2) out.push([p1, p2]);
+    const p1 = at(seg.from[0], seg.from[1], seg.fromT ?? plan.t);
+    if (!p1) continue;
+    if (seg.end != null) {
+      const c = vec(seg.end);
+      if (c) out.push([p1, c]);
+      continue;
+    }
+    const p2 = at(seg.to[0], seg.to[1], seg.toT ?? plan.t);
+    if (!p2) continue;
+    if (seg.hub != null) {
+      const c = vec(seg.hub);
+      if (c) { out.push([p1, c]); out.push([c.clone(), p2]); }
+    } else out.push([p1, p2]);
   }
   return out;
 }
 
 export function applyCutLoopPlan(mesh, plan) {
-  for (const seg of plan.segments) ensureQuadFace(mesh, seg.loop);
+  for (const seg of plan.segments) if (seg.loop) ensureQuadFace(mesh, seg.loop);
   const vidByKey = new Map();
   const vidFor = (a, b, fraction) => {
     const k = edgeKey(a, b);
@@ -246,8 +322,21 @@ export function applyCutLoopPlan(mesh, plan) {
   let cuts = 0;
   for (const seg of plan.segments) {
     const v1 = vidFor(seg.from[0], seg.from[1], seg.fromT ?? plan.t);
+    if (v1 == null) continue;
+    if (seg.end != null) {
+      // Triangle: cut from the point to its far corner.
+      if (splitFaceBetween(mesh, v1, seg.end)) cuts++;
+      continue;
+    }
     const v2 = vidFor(seg.to[0], seg.to[1], seg.toT ?? plan.t);
-    if (v1 == null || v2 == null) continue;
+    if (v2 == null) continue;
+    if (seg.hub != null) {
+      // Through a fan: point -> center in the entry triangle, center -> point
+      // in the opposite one.
+      if (splitFaceBetween(mesh, v1, seg.hub)) cuts++;
+      if (splitFaceBetween(mesh, seg.hub, v2)) cuts++;
+      continue;
+    }
     if (splitFaceBetween(mesh, v1, v2)) cuts++;
   }
   mesh.invalidateCache();
@@ -289,8 +378,9 @@ export function applyDrawCut(mesh, points, closed = false) {
     if (a == null || b == null) continue;
     // Consecutive points on one boundary have already subdivided that edge.
     if (edgeKey(points[i].v1, points[i].v2) === edgeKey(points[next].v1, points[next].v2)) continue;
+    // A cut only commits when it creates a genuine face boundary.
+    // Never leave an unsupported span behind as a detached explicit line.
     if (splitFaceBetween(mesh, a, b)) cuts++;
-    else mesh.explicitEdges.push({ v1: a, v2: b });
   }
   // Extra points can make the first three boundary vertices collinear. Rotate
   // only those outlines so their existing normal calculation stays well-defined.

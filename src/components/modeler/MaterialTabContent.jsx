@@ -1,15 +1,13 @@
-import { SoftNormalsIcon } from '@/lib/toolIcons';
-import { useTheme } from '@/lib/theme';
 import { ENV_URLS } from '@/lib/sceneReflections';
 import RoundPresetScroller from './RoundPresetScroller';
 import SurfaceSliderRow from './SurfaceSliderRow';
 import InlineSlider from './InlineSlider';
+import SheetActionButton from './SheetActionButton';
 
-// Material tab: the reflection environments as reflective spheres (with the
-// Soft Norms icon button beside them), then every material property as an
-// inline slider.
-export default function MaterialTabContent({ environments, envId, onEnv, sliders, onSoftNormals, softNormalsOn, tintHue, tintAmount, onTintHue, onTintAmount }) {
-  const { uiColor, highlightColor } = useTheme();
+// Material tab, top to bottom: the reflection environments as reflective
+// spheres; Soft Norms, Default and Apply; then every material property as an
+// inline slider along the bottom of the sheet.
+export default function MaterialTabContent({ environments, envId, onEnv, sliders, onSoftNormals, softNormalsOn, tintHue, tintAmount, onTintHue, onTintAmount, onDefault, onApply, canApply }) {
   const items = environments.map((e) => ({
     id: e.id,
     label: e.label,
@@ -21,21 +19,13 @@ export default function MaterialTabContent({ environments, envId, onEnv, sliders
     onClick: () => onEnv(e.id),
   }));
   return (
-    <div>
-      <div className="flex items-start gap-1">
-        <div className="flex-1 min-w-0">
-          <RoundPresetScroller items={items} />
-        </div>
-        <button
-          type="button"
-          onClick={onSoftNormals}
-          aria-label={softNormalsOn ? 'Hard normals' : 'Soft normals'}
-          aria-pressed={softNormalsOn}
-          className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg active:scale-95 transition-all"
-          style={{ color: softNormalsOn ? highlightColor : uiColor, textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}
-        >
-          <SoftNormalsIcon className="h-7 w-7" strokeWidth={1.3} />
-        </button>
+    <div className="h-full flex flex-col">
+      <RoundPresetScroller items={items} />
+      <div className="flex-1 flex items-center gap-1.5">
+        {/* Toggle: highlighted while the selected object has soft normals. */}
+        <SheetActionButton label="Soft Norms" ariaLabel="Soft normals" active={softNormalsOn} onClick={onSoftNormals} />
+        <SheetActionButton label="Default" ariaLabel="Reset material to default" onClick={onDefault} disabled={!canApply} />
+        <SheetActionButton label="Apply" ariaLabel="Apply material changes" onClick={onApply} disabled={!canApply} primary />
       </div>
       <SurfaceSliderRow scrollPadTop>
         {sliders.map((s) => (

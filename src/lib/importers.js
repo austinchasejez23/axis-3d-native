@@ -7,9 +7,8 @@ import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
 import { EditableMesh } from './EditableMesh';
 
 // Import a device-selected .obj, .fbx, .stl, .glb/.gltf or .3mf model file.
-// Preserve its coordinates and original dimensions. Imported mesh transforms
-// are baked into vertex positions; changing the model's size just to make it
-// fit the viewport would silently corrupt dimensions in a CAD application.
+// Bake imported transforms into geometry, then uniformly downscale the entire
+// import only when its longest bounding-box dimension exceeds 100 inches.
 // Returns editable meshes that can be added to the current scene.
 export async function importModelFile(file) {
   const ext = (file.name.split('.').pop() || '').toLowerCase();
@@ -85,7 +84,9 @@ export async function importModelFile(file) {
         // Only the editable vertices, edges and faces. Do not transfer any
         // appearance data from the source model.
         mesh.importedWireframeOnly = true;
-        mesh.importedFeatureEdges = false;
+        // Suppress tessellation seams in the displayed import; retain every
+        // triangle and edge in the editable geometry.
+        mesh.importedFeatureEdges = true;
         meshes.push(mesh);
       }
     }
@@ -93,7 +94,26 @@ export async function importModelFile(file) {
 
   if (meshes.length === 0) throw new Error('No mesh geometry found in file');
 
-  // Do not normalize dimensions or shift the model to the origin. The caller
-  // frames the camera after import so even a large model is visible.
+  // Keep all parts at the same relative positions and proportions. Scale only
+  // oversized imports; smaller models retain their original dimensions.
+  const bounds = new THREE.Box3();
+  for (const mesh of meshes) {
+    for (const vertex of mesh.vertices) {
+      const p = Array.isArray(vertex) ? vertex : vertex.position ?? vertex;
+      bounds.expandByPoint(new THREE.Vector3(p.x ?? p[0], p.y ?? p[1], p.z ?? p[2]));
+    }
+  }
+  const size = bounds.getSize(new THREE.Vector3());
+  const longest = Math.max(size.x, size.y, size.z);
+  if (longest > 100) {
+    const factor = 100 / longest;
+    for (const mesh of meshes) {
+      for (const vertex of mesh.vertices) {
+        const p = Array.isArray(vertex) ? vertex : vertex.position ?? vertex;
+        if (Array.isArray(p)) { p[0] *= factor; p[1] *= factor; p[2] *= factor; }
+        else { p.x *= factor; p.y *= factor; p.z *= factor; }
+      }
+    }
+  }
   return meshes;
 }

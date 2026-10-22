@@ -377,7 +377,11 @@ export function bevelLoopEdges(sm, options = {}) {
       bis.normalize();
       let cos = 1;
       for (const d of dirs) cos = Math.min(cos, bis.dot(d));
-      const len = r / Math.max(0.25, cos);
+      // Tight/concave turns can drive the theoretical miter several times
+      // beyond the entered radius, crossing neighboring bevel strips and
+      // producing the folded triangular spikes seen on irregular loops.
+      // Limit the miter extension while preserving the bisector direction.
+      const len = r / Math.max(0.74, cos);
       return vv.clone().addScaledVector(bis, len);
     };
     const pA = mitered('dA');

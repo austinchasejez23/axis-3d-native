@@ -32,7 +32,7 @@ export default function GeneralToolGrid({
 
   const items = [
     { id: 'reference', label: 'Reference', icon: ImagePlus, onClick: () => run('reference', () => referenceInputRef.current?.click(), false) },
-    { id: 'materials', label: 'Materials', icon: Palette, onClick: () => run('material', onMaterial) },
+    { id: 'materials', label: 'Materials', icon: Palette, onClick: () => { onActivateTool?.('material'); onMaterial?.(); onClose?.(); } },
     { id: 'sculpt', label: 'Sculpt', icon: Hand, locked: !isPro, onClick: () => !isPro ? onProLock?.('Sculpt requires AXIS 3D Pro.') : run('sculpt', onSculpt) },
     { id: 'free_transform', label: 'Free Transform', icon: Move3D, active: freeTransform, onClick: () => run('free_transform', onToggleFreeTransform) },
     { id: 'protractor', label: 'Protractor', icon: ProtractorIcon, active: angleMode, onClick: () => run('protractor', onToggleAngle) },

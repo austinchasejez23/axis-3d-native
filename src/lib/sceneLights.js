@@ -94,7 +94,7 @@ export function applySceneLights(SceneManager) {
     if (channelMean > 1e-6) color.multiplyScalar(1 / channelMean);
     object.color.copy(color);
     // Only the Intensity slider changes light power.
-    object.intensity = clamp(record.intensity ?? 1.5, 0, 5) * (record.type === 'directional' ? 2.2 : 55);
+    object.intensity = clamp(record.intensity ?? 1.5, 0, 5) * (record.type === 'directional' ? 3 : 75);
     object.castShadow = custom && !!record.shadows;
     object.shadow.intensity = clamp(record.shadowIntensity, 0, 1);
     object.shadow.radius = record.type === 'point' ? clamp(record.radius * 2, 0, 10) : 3;
@@ -126,7 +126,9 @@ export function applySceneLights(SceneManager) {
       child.material.opacity = selected ? 1 : 0.72;
       child.material.transparent = !selected;
     });
-    this.renderer.shadowMap.enabled = custom && ((this.sceneLights || []).some((light) => light.shadows) || !!record.shadows);
+    // One rule for shadows everywhere (see _shadowState), so this and
+    // applyShadows can never switch shadow rendering in opposite directions.
+    this.renderer.shadowMap.enabled = this._shadowState().on || (custom && !!record.shadows);
     this.renderer.shadowMap.needsUpdate = true;
     this._reflectionDirty = true;
   };
@@ -144,7 +146,6 @@ export function applySceneLights(SceneManager) {
     const source = saved?.length ? saved : [defaults('directional')];
     this.sceneLights = source.map((light) => this._createSceneLight(light));
     this.selectedLightId = this.sceneLights[0]?.id || null;
-    this.dirLight.intensity = 0;
     this.applyLighting();
     this.applyShadows();
     this._emitSceneLights();
@@ -160,24 +161,45 @@ export function applySceneLights(SceneManager) {
     this.sceneLights = [];
   };
 
-  P.applyLighting = /** @this {import('./SceneManager.js').SceneManager} */ function () {
-    if (this.dirLight) this.dirLight.intensity = 0;
-    // Studio lighting is a complete neutral setup. Custom lights replace its
-    // strong key, not all illumination: a restrained neutral fill remains so
-    // shaded sides are legible and metallic materials still have an environment
-    // to reflect. Setting these to zero made metal/chrome surfaces black.
+  // Shadows on/off and strength. Default lighting has its own setting (the
+  // Shadows button while Default is on); custom lighting follows the lights
+  // that have Shadows turned on, at the strongest of their Shadow sliders.
+  P._shadowState = function () {
+    if (theme.defaultLightingEnabled) {
+      return { on: !!theme.shadowsEnabled, intensity: clamp(theme.shadowIntensity ?? 0.6, 0, 1) };
+    }
+    const casting = (this.sceneLights || []).filter((light) => light.shadows);
+    return { on: casting.length > 0, intensity: casting.length ? Math.max(...casting.map((light) => clamp(light.shadowIntensity ?? 0.65, 0, 1))) : 0 };
+  };
+
+  P.applyLighting = function () {
+    // Default lighting: a studio setup with a real key light from above and to
+    // the side (so objects show a lit and a shaded side, and can cast shadows),
+    // plus softer fill. Custom lighting: the user's lights do the work. Only a
+    // faint fill and a little environment remain, enough that metal is not
+    // pitch black, so every light setting has a clearly visible effect and the
+    // scene goes dark when the lights are turned down.
     const base = theme.defaultLightingEnabled;
-    if (this.ambientLight) this.ambientLight.intensity = base ? 0.47 : 0.22;
+    if (this.dirLight) {
+      this.dirLight.intensity = base ? 2 : 0;
+      if (!this.dirLight.target.parent) this.scene.add(this.dirLight.target);
+      if (base && !theme.shadowsEnabled) {
+        this.dirLight.position.set(-5, 8, 1.5);
+        this.dirLight.target.position.set(0, 0, 0);
+        this.dirLight.target.updateMatrixWorld();
+      }
+    }
+    if (this.ambientLight) this.ambientLight.intensity = base ? 0.3 : 0.03;
     if (this.hemiLight) {
-      this.hemiLight.intensity = base ? 0.8 : 0.38;
+      this.hemiLight.intensity = base ? 0.5 : 0.06;
       this.hemiLight.color.set(0xffffff);
       this.hemiLight.groundColor.set(0x888888);
     }
     if (this.fillLight) {
-      this.fillLight.intensity = base ? 0.75 : 0.25;
+      this.fillLight.intensity = base ? 0.35 : 0;
       this.fillLight.color.set(0xffffff);
     }
-    this.scene.environmentIntensity = base ? 1.2 : 0.85;
+    this.scene.environmentIntensity = base ? 0.7 : 0.22;
     for (const light of this.sceneLights || []) this._syncSceneLight(light);
   };
   P.setLightingEdit = /** @this {import('./SceneManager.js').SceneManager} */ function (active) {

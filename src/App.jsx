@@ -10,6 +10,7 @@ import { ProAccessProvider } from '@/lib/ProAccessContext';
 import ScrollToTop from '@/components/ScrollToTop';
 import Modeler from '@/pages/Modeler';
 import Splash from '@/pages/Splash';
+import SplashExperiment from '@/pages/SplashExperiment';
 import Library from '@/pages/Library';
 import AccountDeletion from '@/pages/AccountDeletion';
 import About from '@/pages/About';
@@ -25,6 +26,7 @@ function AppRoutes() {
     <AnimatePresence initial={false} mode="sync">
       <Routes location={location} key={location.pathname}>
         <Route path="/" element={<Splash />} />
+        <Route path="/splash-experiment" element={<SplashExperiment />} />
         <Route path="/library" element={<RouteTransition><Library /></RouteTransition>} />
         <Route path="/modeler" element={<ProjectLockGate><PageTransition><Modeler /></PageTransition></ProjectLockGate>} />
         <Route path="/cloud" element={<CloudBackups />} />

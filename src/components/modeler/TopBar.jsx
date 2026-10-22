@@ -3,7 +3,7 @@ import { useTheme } from '@/lib/theme';
 import ViewportModeButtons from '@/components/modeler/ViewportModeButtons';
 import RenderBoostButtons from '@/components/modeler/RenderBoostButtons';
 
-export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transparentViewport, renderBoost, freeTransform, snapping, onToggleClayViewport, onToggleTransparentViewport, onToggleRenderBoost, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel }) {
+export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transparentViewport, renderBoost, freeTransform, snapping, onToggleClayViewport, onToggleTransparentViewport, onToggleRenderBoost, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel, onFocus, precision, onTogglePrecision, onOpenPrecisionPanel }) {
   const { uiColor } = useTheme();
   const txtShadow = '0 1px 3px rgba(0,0,0,0.35)';
   const btn = 'pointer-events-auto w-16 h-16 rounded-xl flex items-center justify-center active:scale-95 transition-transform touch-none';
@@ -25,7 +25,7 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
         </button>
         {/* Leave a clear gap below the enlarged undo/redo touch targets. */}
         <div className="relative mt-12 flex flex-col items-end gap-2.5">
-          {/* One subtle backdrop for all five right-side controls; it does not
+          {/* One subtle backdrop for all six right-side controls; it does not
               intercept touches or grow when temporary tool labels appear. */}
           <div
             aria-hidden="true"
@@ -47,6 +47,10 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
             onToggleSnapping={onToggleSnapping}
             onOpenFreeTransformPanel={onOpenFreeTransformPanel}
             onOpenSnapPanel={onOpenSnapPanel}
+            onFocus={onFocus}
+            precision={precision}
+            onTogglePrecision={onTogglePrecision}
+            onOpenPrecisionPanel={onOpenPrecisionPanel}
           />
         </div>
       </div>

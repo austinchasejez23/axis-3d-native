@@ -41,7 +41,9 @@ export function applySceneExtrude(SceneManager) {
         for (let j = 0; j < f.length; j++) {
           const k = ek(f[j], f[(j + 1) % f.length]);
           for (const n of edgeFaces.get(k) || []) {
-            if (!visited.has(n) && Math.abs(mesh.getFaceNormal(cur).dot(mesh.getFaceNormal(n))) > 0.9995) stack.push(n);
+            // Any selected face sharing an edge joins the region, whatever way
+            // it faces: touching faces on different axes extrude as one piece.
+            if (!visited.has(n)) stack.push(n);
           }
         }
       }
@@ -53,14 +55,48 @@ export function applySceneExtrude(SceneManager) {
     const newVid = () => Date.now() + Math.floor(Math.random() * 1e6);
     for (const group of groups) {
       const groupSet = new Set(group);
-      let n = new THREE.Vector3();
+      // Each face's outward normal. A face pointing straight back against the
+      // first one (two sides of a sheet) follows the first, as before.
       const referenceNormal = mesh.getFaceNormal(group[0]).clone();
+      const faceNormals = new Map();
       for (const fi of group) {
         const faceNormal = mesh.getFaceNormal(fi).clone();
-        if (faceNormal.dot(referenceNormal) < 0) faceNormal.negate();
-        n.add(faceNormal);
+        if (faceNormal.dot(referenceNormal) < -0.9995) faceNormal.negate();
+        faceNormals.set(fi, faceNormal);
       }
-      n.normalize();
+      // Every vertex moves so that each selected face around it moves out by
+      // the same distance along its own normal: on one flat face that is just
+      // the normal; at a corner between faces on different axes it is the
+      // diagonal that keeps both faces flat and evenly offset.
+      const vertexNormals = new Map();
+      for (const fi of group) {
+        const fn = faceNormals.get(fi);
+        for (const vid of mesh.faces[fi]) {
+          const list = vertexNormals.get(vid) || [];
+          if (!list.some((m) => m.dot(fn) > 0.9995)) list.push(fn);
+          vertexNormals.set(vid, list);
+        }
+      }
+      const offsetDirection = (vid) => {
+        const list = vertexNormals.get(vid) || [referenceNormal];
+        if (list.length === 1) return list[0].clone();
+        // Least squares for v·n = 1 over every face normal at this vertex,
+        // lightly regularized so faces in a fan (rank 2) stay well-defined.
+        const e = new THREE.Matrix3().set(1e-4, 0, 0, 0, 1e-4, 0, 0, 0, 1e-4).elements;
+        const b = new THREE.Vector3();
+        for (const m of list) {
+          e[0] += m.x * m.x; e[3] += m.x * m.y; e[6] += m.x * m.z;
+          e[1] += m.y * m.x; e[4] += m.y * m.y; e[7] += m.y * m.z;
+          e[2] += m.z * m.x; e[5] += m.z * m.y; e[8] += m.z * m.z;
+          b.add(m);
+        }
+        const A = new THREE.Matrix3().fromArray(e);
+        if (Math.abs(A.determinant()) < 1e-12) return b.normalize();
+        const v = b.applyMatrix3(A.invert());
+        // Very sharp corners would shoot a vertex far out; cap the stretch.
+        if (v.length() > 4) v.setLength(4);
+        return v;
+      };
       const boundary = [];
       for (const fi of group) {
         const f = mesh.faces[fi];
@@ -78,6 +114,7 @@ export function applySceneExtrude(SceneManager) {
         const nv = { id: newVid(), x: v.x, y: v.y, z: v.z };
         mesh.vertices.push(nv);
         oldToNew.set(vid, nv.id);
+        const n = offsetDirection(vid);
         items.push({ capVid: nv.id, bx: v.x, by: v.y, bz: v.z, nx: n.x, ny: n.y, nz: n.z });
       }
       for (const fi of group) newCapFaces.push(mesh.faces[fi].map(vid => oldToNew.get(vid)));

@@ -22,10 +22,14 @@ export default function ToolAnnouncement({ toolActive = false, suppressed = fals
       // fine. A longer, sentence-style hint can opt into a narrower box so
       // it wraps into a tight, balanced block hugging the left edge instead
       // of stretching a single line toward the middle of the screen.
-      setSelection({ label, widthRem: event.detail?.widthRem, mode: event.detail?.mode });
+      setSelection({ label, widthRem: event.detail?.widthRem, mode: event.detail?.mode, small: !!event.detail?.small });
       setShowDescription(false);
       setVisible(false);
-      timers.current = [setTimeout(() => setVisible(true), 20)];
+      timers.current = [
+        setTimeout(() => setVisible(true), 20),
+        setTimeout(() => setVisible(false), 5000),
+        setTimeout(() => setSelection(null), 5000 + SLIDE_MS),
+      ];
     };
     const close = (event) => {
       const closingLabel = event.detail?.label;
@@ -51,17 +55,6 @@ export default function ToolAnnouncement({ toolActive = false, suppressed = fals
     };
   }, []);
 
-  // The label only stays while a tool is actually active. A one-shot tool
-  // (extrude, delete, …) shows its name briefly, then slides away.
-  useEffect(() => {
-    if (!selection || toolActive) return;
-    const hide = setTimeout(() => {
-      setVisible(false);
-      timers.current = [setTimeout(() => setSelection(null), SLIDE_MS)];
-    }, showDescription ? 5000 : 3000);
-    return () => clearTimeout(hide);
-  }, [selection, toolActive, showDescription]);
-
   if (!selection || suppressed) return null;
   const label = selection.label.replace(/\n/g, ' ');
   return (
@@ -77,7 +70,7 @@ export default function ToolAnnouncement({ toolActive = false, suppressed = fals
     >
       <button
         type="button"
-        className="flex items-center gap-1.5 px-2 py-1.5 text-left text-[1.375rem] leading-tight pointer-events-auto touch-none"
+        className={`flex items-center gap-1.5 px-2 py-1.5 text-left leading-tight pointer-events-auto touch-none ${selection.small ? 'text-[14px]' : 'text-[1.375rem]'}`}
         aria-label={`Show ${label} description`}
         onClick={() => setShowDescription(true)}
       >

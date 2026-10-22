@@ -6,76 +6,151 @@ import { EditableMesh } from '@/lib/EditableMesh';
 import { listCustomLibrary, saveToCustomLibrary, deleteFromCustomLibrary, genCustomId } from '@/lib/customLibrary';
 import { toast } from 'sonner';
 
-// Render actual shaded 3D geometry instead of pretending flat SVG paths are models.
-function ShapeWireframe({ type, stroke }) {
-  const [image, setImage] = useState('');
-  useEffect(() => {
-    let renderer;
-    let geometry;
-    let material;
-    try {
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
-      camera.position.set(3.4, 2.7, 4.4);
-      camera.lookAt(0, 0, 0);
-      scene.add(new THREE.HemisphereLight(0xffffff, 0x19283c, 2.2));
-      const key = new THREE.DirectionalLight(0xffffff, 3);
-      key.position.set(-3, 6, 5);
-      scene.add(key);
-      const rim = new THREE.DirectionalLight(0x82b9ff, 1.4);
-      rim.position.set(4, 2, -5);
-      scene.add(rim);
-      const radial = 48;
-      switch (type) {
-        case 'cube': geometry = new THREE.BoxGeometry(1.35, 1.35, 1.35); break;
-        case 'plane': geometry = new THREE.PlaneGeometry(1.8, 1.8); geometry.rotateX(-Math.PI / 2); break;
-        case 'sphere': geometry = new THREE.SphereGeometry(.83, radial, 32); break;
-        case 'cylinder': geometry = new THREE.CylinderGeometry(.67, .67, 1.65, radial); break;
-        case 'cone': geometry = new THREE.ConeGeometry(.83, 1.8, radial); break;
-        case 'pyramid': geometry = new THREE.ConeGeometry(.92, 1.8, 4); geometry.rotateY(Math.PI / 4); break;
-        case 'tube': {
-          const outer = new THREE.Shape();
-          outer.absarc(0, 0, .84, 0, Math.PI * 2, false);
-          const hole = new THREE.Path();
-          hole.absarc(0, 0, .47, 0, Math.PI * 2, true);
-          outer.holes.push(hole);
-          geometry = new THREE.ExtrudeGeometry(outer, { depth: 1.25, bevelEnabled: false, curveSegments: radial });
-          // The extrusion starts in XY and extends along +Z. Rotate so
-          // its front opening faces UP toward the preview camera.
-          geometry.rotateX(Math.PI / 2);
-          geometry.translate(0, .625, 0);
-          break;
-        }
-        case 'torus': geometry = new THREE.TorusGeometry(.65, .26, 20, 64); geometry.rotateX(-Math.PI / 2.8); break;
-        case 'helix': {
-          const points = [];
-          for (let i = 0; i <= 128; i++) {
-            const t = i / 128;
-            const angle = t * Math.PI * 4;
-            points.push(new THREE.Vector3(.58 * Math.cos(angle), 1.55 * (t - .5), .58 * Math.sin(angle)));
-          }
-          geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 160, .13, 10, false);
-          break;
-        }
-        default: return;
-      }
-      material = new THREE.MeshStandardMaterial({ color: new THREE.Color(stroke), metalness: .28, roughness: .32, side: THREE.DoubleSide });
-      const object = new THREE.Mesh(geometry, material);
-      scene.add(object);
-      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
-      renderer.setPixelRatio(1);
-      renderer.setSize(180, 180);
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.render(scene, camera);
-      setImage(renderer.domElement.toDataURL('image/png'));
-    } catch (error) {
-      console.warn('Primitive preview unavailable:', type, error);
-    } finally {
-      geometry?.dispose();
-      material?.dispose();
-      renderer?.dispose();
-      renderer?.forceContextLoss();
+const SHAPE_TYPES = ['cube', 'plane', 'sphere', 'cylinder', 'cone', 'pyramid', 'tube', 'torus', 'helix'];
+
+function buildShapeGeometry(type) {
+  const radial = 48;
+  switch (type) {
+    case 'cube': return new THREE.BoxGeometry(1.35, 1.35, 1.35);
+    case 'plane': { const g = new THREE.PlaneGeometry(1.8, 1.8); g.rotateX(-Math.PI / 2); return g; }
+    case 'sphere': return new THREE.SphereGeometry(.83, radial, 32);
+    case 'cylinder': return new THREE.CylinderGeometry(.67, .67, 1.65, radial);
+    case 'cone': return new THREE.ConeGeometry(.83, 1.8, radial);
+    case 'pyramid': { const g = new THREE.ConeGeometry(.92, 1.8, 4); g.rotateY(Math.PI / 4); return g; }
+    case 'tube': {
+      const outer = new THREE.Shape();
+      outer.absarc(0, 0, .84, 0, Math.PI * 2, false);
+      const hole = new THREE.Path();
+      hole.absarc(0, 0, .47, 0, Math.PI * 2, true);
+      outer.holes.push(hole);
+      const g = new THREE.ExtrudeGeometry(outer, { depth: 1.25, bevelEnabled: false, curveSegments: radial });
+      // The extrusion starts in XY and extends along +Z. Rotate so
+      // its front opening faces UP toward the preview camera.
+      g.rotateX(Math.PI / 2);
+      g.translate(0, .625, 0);
+      return g;
     }
+    case 'torus': { const g = new THREE.TorusGeometry(.65, .26, 20, 64); g.rotateX(-Math.PI / 2.8); return g; }
+    case 'helix': {
+      const points = [];
+      for (let i = 0; i <= 128; i++) {
+        const t = i / 128;
+        const angle = t * Math.PI * 4;
+        points.push(new THREE.Vector3(.58 * Math.cos(angle), 1.55 * (t - .5), .58 * Math.sin(angle)));
+      }
+      return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 160, .13, 10, false);
+    }
+    default: return null;
+  }
+}
+
+// Shaded 3D thumbnails of the primitives. Opening the library used to start a
+// separate WebGL renderer for every card, every time, which froze the phone
+// for a moment. Now ONE renderer draws them one per frame, the images are
+// kept for the rest of the session, and they are prepared in the background
+// shortly after the app loads, so the library opens with them ready.
+const thumbCache = new Map();   // `${type}|${color}` -> data URL
+const thumbWaiters = new Map(); // key -> [callbacks]
+const thumbQueue = [];
+let thumbRig = null;
+let thumbTimer = null;
+
+function thumbKey(type, color) { return `${type}|${color}`; }
+
+function getThumbRig() {
+  if (thumbRig) return thumbRig;
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
+  camera.position.set(3.4, 2.7, 4.4);
+  camera.lookAt(0, 0, 0);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x19283c, 2.2));
+  const key = new THREE.DirectionalLight(0xffffff, 3);
+  key.position.set(-3, 6, 5);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(0x82b9ff, 1.4);
+  rim.position.set(4, 2, -5);
+  scene.add(rim);
+  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(1);
+  renderer.setSize(180, 180);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  thumbRig = { scene, camera, renderer };
+  return thumbRig;
+}
+
+function releaseThumbRig() {
+  if (!thumbRig) return;
+  thumbRig.renderer.dispose();
+  thumbRig.renderer.forceContextLoss();
+  thumbRig = null;
+}
+
+function renderThumb(type, color) {
+  const geometry = buildShapeGeometry(type);
+  if (!geometry) return '';
+  const material = new THREE.MeshStandardMaterial({ color: new THREE.Color(color), metalness: .28, roughness: .32, side: THREE.DoubleSide });
+  const rig = getThumbRig();
+  const object = new THREE.Mesh(geometry, material);
+  rig.scene.add(object);
+  try {
+    rig.renderer.render(rig.scene, rig.camera);
+    return rig.renderer.domElement.toDataURL('image/png');
+  } finally {
+    rig.scene.remove(object);
+    geometry.dispose();
+    material.dispose();
+  }
+}
+
+function pumpThumbs() {
+  thumbTimer = null;
+  const job = thumbQueue.shift();
+  if (job) {
+    const k = thumbKey(job.type, job.color);
+    if (!thumbCache.has(k)) {
+      let url = '';
+      try { url = renderThumb(job.type, job.color); } catch (error) { console.warn('Primitive preview unavailable:', job.type, error); }
+      thumbCache.set(k, url);
+    }
+    for (const cb of thumbWaiters.get(k) || []) cb(thumbCache.get(k));
+    thumbWaiters.delete(k);
+  }
+  if (thumbQueue.length) thumbTimer = setTimeout(pumpThumbs, 16);
+  else releaseThumbRig();
+}
+
+function requestThumb(type, color, cb) {
+  const k = thumbKey(type, color);
+  if (thumbCache.has(k)) { cb?.(thumbCache.get(k)); return; }
+  if (cb) thumbWaiters.set(k, [...(thumbWaiters.get(k) || []), cb]);
+  if (!thumbQueue.some((j) => thumbKey(j.type, j.color) === k)) thumbQueue.push({ type, color });
+  if (!thumbTimer) thumbTimer = setTimeout(pumpThumbs, 0);
+}
+
+// Prepare every thumbnail in the background (idle time after load).
+function prewarmThumbs(color) {
+  const start = () => SHAPE_TYPES.forEach((t) => requestThumb(t, color));
+  if (typeof window === 'undefined') return;
+  if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(start, { timeout: 4000 });
+  else setTimeout(start, 1500);
+}
+
+let prewarmedColor = null;
+function usePrimitiveThumbPrewarm(color) {
+  useEffect(() => {
+    if (!color || prewarmedColor === color) return;
+    prewarmedColor = color;
+    const t = setTimeout(() => prewarmThumbs(color), 1500);
+    return () => clearTimeout(t);
+  }, [color]);
+}
+
+function ShapeWireframe({ type, stroke }) {
+  const [image, setImage] = useState(() => thumbCache.get(thumbKey(type, stroke)) || '');
+  useEffect(() => {
+    let live = true;
+    requestThumb(type, stroke, (url) => { if (live) setImage(url || ''); });
+    return () => { live = false; };
   }, [type, stroke]);
   return image
     ? <img src={image} alt="" draggable={false} className="w-full h-full object-contain" />
@@ -90,6 +165,7 @@ export default function LibraryPanel({ open, onClose, onSelectShape, managerRef 
   useEffect(() => {
     if (open) setItems(listCustomLibrary());
   }, [open]);
+  usePrimitiveThumbPrewarm(highlightColor);
 
   if (!open) return null;
 

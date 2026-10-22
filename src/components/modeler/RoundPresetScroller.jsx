@@ -1,17 +1,16 @@
 import { useTheme } from '@/lib/theme';
-import ScrollerTunnelShadows from './ScrollerTunnelShadows';
+import { Image } from '@/components/ui/image';
+import LoopingScroller from './LoopingScroller';
 
 // Glossy sphere shading laid over a thumbnail so every preset reads as a ball.
 export const SPHERE_SHADE =
   'radial-gradient(circle at 34% 28%, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.12) 22%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.55) 100%)';
 
-// Row of round, named thumbnails (materials / textures) that scrolls sideways.
+// Endless row of round, named thumbnails (materials / textures).
 export default function RoundPresetScroller({ items }) {
   const { highlightColor } = useTheme();
   return (
-    <div className="relative">
-      <div className="overflow-x-auto no-scrollbar" style={{ touchAction: 'pan-x' }}>
-        <div className="flex items-start gap-1.5 w-max px-1 pt-0.5">
+    <LoopingScroller shadows shadowWidth={32} shadowAlpha={0.82} itemClass="pr-1.5" innerClass="items-start pt-0.5">
           {items.map((it) => {
             const Icon = it.icon;
             return (
@@ -30,7 +29,7 @@ export default function RoundPresetScroller({ items }) {
                   }}
                 >
                   {it.image && (
-                    <img src={it.image} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" style={{ transform: `scale(${it.zoom ?? 1})` }} />
+                    <Image src={it.image} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" style={{ transform: `scale(${it.zoom ?? 1})` }} />
                   )}
                   {it.sphere && <span className="absolute inset-0" style={{ background: SPHERE_SHADE }} />}
                   {Icon && <Icon className="relative w-5 h-5" style={{ color: it.active ? highlightColor : 'rgb(var(--modeling-ink))' }} strokeWidth={2} />}
@@ -44,9 +43,6 @@ export default function RoundPresetScroller({ items }) {
               </button>
             );
           })}
-        </div>
-      </div>
-      <ScrollerTunnelShadows />
-    </div>
+    </LoopingScroller>
   );
 }

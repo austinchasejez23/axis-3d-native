@@ -409,12 +409,14 @@ export function applySceneSelection(SceneManager) {
       return true;
     }
     const idx = hit.index;
-    if (sel.indices.includes(idx)) return false;
     if (mode === 'face') {
       const set = new Set(sel.indices);
-      for (const g of (hit.group || [idx])) set.add(g);
+      const group = hit.group || [idx];
+      if (group.every(g => set.has(g))) return false;
+      for (const g of group) set.add(g);
       sel.indices = Array.from(set);
     } else {
+      if (sel.indices.includes(idx)) return false;
       sel.indices.push(idx);
     }
     this.updateHighlights();

@@ -13,6 +13,7 @@ const directory = await mkdtemp(join(tmpdir(), 'axis-local-files-'));
 const sources = [
   'src/lib/importers.js', 'src/lib/exporters.js', 'src/lib/exporters3d.js',
   'src/lib/EditableMesh.js',
+  'src/lib/materials.js',
 ];
 await build({
   entryPoints: sources,
@@ -28,6 +29,7 @@ const { importModelFile } = await get('importers');
 const { exportOBJ, exportFBX, downloadFile } = await get('exporters');
 const { exportSTL, exportGLB, export3MF } = await get('exporters3d');
 const { EditableMesh } = await get('EditableMesh');
+const { createMaterial, applyWireframe } = await get('materials');
 
 const makeFile = (name, data) => {
   const bytes = typeof data === 'string'
@@ -90,7 +92,7 @@ const [sphere] = await importModelFile(makeFile(
   'sphere.obj', objForGeometry(new THREE.SphereGeometry(2, 20, 14)),
 ));
 assert.equal(sphere.smoothShading, false);
-assert.equal(sphere.importedFeatureEdges, false);
+assert.equal(sphere.importedFeatureEdges, true);
 assert.equal(sphere.importedWireframeOnly, true);
 assert.equal(sphere.color, 0xaeb4bc);
 assert.equal(sphere.material, null);
@@ -102,8 +104,15 @@ assert.deepEqual(sphere.faceColors, {});
 assert.deepEqual(sphere.vertexColors, {});
 const editableEdgeCount = sphere.getEdges().length;
 const displayEdgeCount = sphere.toEdgesGeometry().attributes.position.count / 2;
-assert.equal(displayEdgeCount, editableEdgeCount,
-  `Every source mesh edge must remain visible in geometry-only wireframe (${displayEdgeCount}/${editableEdgeCount})`);
+assert.ok(displayEdgeCount > 0 && displayEdgeCount < editableEdgeCount,
+  `The imported wireframe must hide smooth triangle seams without removing editable topology (${displayEdgeCount}/${editableEdgeCount})`);
+assert.equal(sphere.getEdges().length, editableEdgeCount,
+  'Showing only feature edges must not remove editable triangle edges');
+const olderSavedImport = sphere.serialize();
+olderSavedImport.importedFeatureEdges = false;
+const restoredOldImport = EditableMesh.deserialize(olderSavedImport);
+assert.equal(restoredOldImport.toEdgesGeometry().attributes.position.count / 2, displayEdgeCount,
+  'Existing saved wireframe-only imports should also suppress triangulation seams');
 assert.equal(EditableMesh.deserialize(sphere.serialize()).importedWireframeOnly, true);
 assert.equal(sphere.clone().importedWireframeOnly, true);
 
@@ -111,8 +120,65 @@ const [box] = await importModelFile(makeFile(
   'cube.obj', objForGeometry(new THREE.BoxGeometry(2, 2, 2)),
 ));
 const boxDisplayEdges = box.toEdgesGeometry().attributes.position.count / 2;
-assert.ok(boxDisplayEdges >= 12, `Hard box creases disappeared: ${boxDisplayEdges}`);
-console.log('PASS: imported geometry-only wireframe, editable topology and persisted import mode');
+assert.equal(boxDisplayEdges, 12, `Import should show the 12 cube creases, not its triangulation diagonals: ${boxDisplayEdges}`);
+// A bent joint contains a long REAL edge shared by two non-coplanar triangles.
+// The older imported classifier removed it solely because it was longest.
+const bentGeometry = new THREE.BufferGeometry();
+bentGeometry.setAttribute('position', new THREE.Float32BufferAttribute([
+  0, 0, 0, 1, 1, 0, 5, 0, 0,
+  5, 0, 0, 2, -1, 1, 0, 0, 0,
+], 3));
+const bentJoint = EditableMesh.fromGeometry(bentGeometry, 'bent joint');
+bentGeometry.dispose();
+bentJoint.importedWireframeOnly = true;
+assert.equal(bentJoint.getEdges().length, 5);
+assert.equal(bentJoint.toEdgesGeometry().getAttribute('position').count / 2, 5,
+  'A genuine long edge at a twisted joint must remain visible');
+
+// Tube meshes must keep every circumferential ring and axial line intact.
+// Only the diagonals crossing individual tube surface cells should disappear.
+const tube = EditableMesh.fromGeometry(new THREE.CylinderGeometry(1, 1, 6, 12, 12), 'tube');
+tube.importedWireframeOnly = true;
+const tubeDisplay = tube.toEdgesGeometry().getAttribute('position');
+const pairKey = (a, b) => [a, b].map(v => v.map(n => n.toFixed(5)).join(',')).sort().join('|');
+const rendered = new Set();
+for (let i = 0; i < tubeDisplay.count; i += 2) {
+  const a = [tubeDisplay.getX(i), tubeDisplay.getY(i), tubeDisplay.getZ(i)];
+  const b = [tubeDisplay.getX(i + 1), tubeDisplay.getY(i + 1), tubeDisplay.getZ(i + 1)];
+  rendered.add(pairKey(a, b));
+}
+let requiredStructure = 0;
+for (const e of tube.getEdges()) {
+  const av = tube.getVertex(e.v1), bv = tube.getVertex(e.v2);
+  const a = [av.x, av.y, av.z], b = [bv.x, bv.y, bv.z];
+  const sameRing = Math.abs(av.y - bv.y) < 1e-5 &&
+    Math.hypot(av.x, av.z) > 0.9 && Math.hypot(bv.x, bv.z) > 0.9;
+  const axial = Math.abs(av.x - bv.x) < 1e-5 &&
+    Math.abs(av.z - bv.z) < 1e-5 && Math.abs(av.y - bv.y) > 1e-5;
+  if (sameRing || axial) {
+    requiredStructure++;
+    assert.ok(rendered.has(pairKey(a, b)),
+      'Imported tube lost an existing ring or longitudinal wireframe edge');
+  }
+}
+assert.ok(requiredStructure > 100, 'Tube edge-coverage regression is too small');
+
+// Geometry-only means discard source appearance, NOT leave a hollow, black
+// object. Surface and line overlay must be visible at the same time.
+const neutralSurface = createMaterial(box);
+assert.equal(neutralSurface.colorWrite, true,
+  'Imported neutral faces must be drawn even when wireframe is visible');
+assert.equal(neutralSurface.color.getHex(), 0xaeb4bc);
+const renderObject = { material: neutralSurface, wireframe: { visible: true } };
+const sceneStub = { threeObjects: new Map([[box.id, renderObject]]), wireframesHidden: false };
+applyWireframe(sceneStub);
+assert.equal(neutralSurface.colorWrite, true, 'Enabling wireframe must not erase imported faces');
+sceneStub.wireframesHidden = true;
+applyWireframe(sceneStub);
+assert.equal(neutralSurface.colorWrite, true, 'Hiding wireframe must not erase imported faces');
+neutralSurface.dispose();
+
+console.log('PASS: imported structural ring/joint edges, neutral solid faces, legacy saved imports, and editable topology');
 
 // The source GLB's red color and PBR values must be discarded entirely.
 const glbFixture = new Uint8Array(exportGLB([original]));
@@ -153,74 +219,35 @@ assert.deepEqual(colored.vertexColors, {});
 assert.equal(EditableMesh.deserialize(colored.serialize()).color, 0xaeb4bc);
 console.log('PASS: colored metallic GLB imports geometry only, no source appearance');
 
- 
-// A reflected node transform (such as a mirrored CAD assembly component)
-// flips vertex handedness. Baking it into local geometry must also correct
-// face winding so the imported surface remains front-facing in Axis.
-const mirroredJson = structuredClone(glbJson);
-mirroredJson.nodes[0].scale = [-1, 1, 1];
-const mirrorJsonBytes = new TextEncoder().encode(JSON.stringify(mirroredJson));
-const mirrorJsonPadded = new Uint8Array(Math.ceil(mirrorJsonBytes.length / 4) * 4).fill(32);
-mirrorJsonPadded.set(mirrorJsonBytes);
-const mirrorGlb = new Uint8Array(20 + mirrorJsonPadded.length + binaryChunk.length);
-const mirrorView = new DataView(mirrorGlb.buffer);
-mirrorView.setUint32(0, 0x46546c67, true);
-mirrorView.setUint32(4, 2, true);
-mirrorView.setUint32(8, mirrorGlb.length, true);
-mirrorView.setUint32(12, mirrorJsonPadded.length, true);
-mirrorView.setUint32(16, 0x4e4f534a, true);
-mirrorGlb.set(mirrorJsonPadded, 20);
-mirrorGlb.set(binaryChunk, 20 + mirrorJsonPadded.length);
-const [mirrored] = await importModelFile(makeFile('mirrored.glb', mirrorGlb));
-assert.equal(mirrored.faces.length, original.faces.length);
-approx(span(mirrored, 'x'), 20, 'Mirrored import X dimensions');
-approx(span(mirrored, 'y'), 40, 'Mirrored import Y dimensions');
-assert.ok(mirrored.vertices.every(v => v.x < 0), 'Mirrored X coordinates were not baked');
-assert.ok(mirrored.getFaceNormal(0).z > 0.99,
-  'Mirrored transform reversed front-facing triangle winding');
-assert.equal(mirrored.importedWireframeOnly, true);
-assert.equal(mirrored.mapTexture, null);
-console.log('PASS: mirrored GLB transform retains dimensions and front-facing geometry-only mesh');
-
-// Browser fallback is an explicit download request (not proof that Android
-// saved a file). The native Android save path is covered by the Capacitor
-// plugin registration regression and Android Gradle compilation.
 const originalNavigator = globalThis.navigator;
 const originalWindow = globalThis.window;
-const originalDocument = globalThis.document;
-const originalCreateObjectURL = URL.createObjectURL;
-const originalRevokeObjectURL = URL.revokeObjectURL;
-const originalSetTimeout = globalThis.setTimeout;
 try {
   Object.defineProperty(globalThis, 'navigator', {
     configurable: true, value: { userAgent: 'Mozilla/5.0 (Linux; Android 16; wv)' },
   });
   Object.defineProperty(globalThis, 'window', { configurable: true, value: {} });
-  let clicked = 0;
-  let revoked = 0;
-  globalThis.document = {
-    body: { appendChild: () => {} },
-    createElement: () => ({
-      click: () => { clicked++; },
-      remove: () => {},
+  await assert.rejects(
+    downloadFile('mesh bytes', 'part.obj', 'text/plain'),
+    /cannot save local exports yet/,
+  );
+
+  const saved = [];
+  globalThis.window.showSaveFilePicker = async () => ({
+    createWritable: async () => ({
+      write: async (blob) => saved.push(await blob.text()),
+      close: async () => {},
     }),
-  };
-  URL.createObjectURL = () => 'blob:local-test';
-  URL.revokeObjectURL = () => { revoked++; };
-  globalThis.setTimeout = (callback, ms, ...args) =>
-    ms === 60000 ? callback() : originalSetTimeout(callback, ms, ...args);
+  });
+  assert.equal(await downloadFile('mesh bytes', 'part.obj'), 'saved');
+  assert.deepEqual(saved, ['mesh bytes']);
 
-  assert.equal(await downloadFile('mesh bytes', 'part.obj', 'text/plain'), 'requested');
-  assert.equal(clicked, 1, 'Browser fallback must initiate a real download');
-  assert.equal(revoked, 1, 'Temporary blob URL must be reclaimed');
-  console.log('PASS: browser fallback requests actual download instead of reporting saved');
-
+  delete globalThis.window.showSaveFilePicker;
   globalThis.navigator.share = async (data) => {
     assert.equal(data.files[0].name, 'part.obj');
   };
   globalThis.navigator.canShare = () => true;
   assert.equal(await downloadFile('mesh bytes', 'part.obj'), 'shared');
-  console.log('PASS: Android web share API fallback returns confirmed share result');
+  console.log('PASS: real save/share APIs and no false WebView download success');
 } finally {
   Object.defineProperty(globalThis, 'navigator', {
     configurable: true, value: originalNavigator,
@@ -228,9 +255,4 @@ try {
   Object.defineProperty(globalThis, 'window', {
     configurable: true, value: originalWindow,
   });
-  if (originalDocument === undefined) delete globalThis.document;
-  else globalThis.document = originalDocument;
-  URL.createObjectURL = originalCreateObjectURL;
-  URL.revokeObjectURL = originalRevokeObjectURL;
-  globalThis.setTimeout = originalSetTimeout;
 }

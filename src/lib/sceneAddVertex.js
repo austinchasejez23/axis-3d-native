@@ -1,4 +1,5 @@
 import { insertVertexOnEdge } from './cutTools';
+import { cleanupCommittedTopology } from './meshTopologyInvariants';
 
 const splitTrackedEdge = (items, edge, vertexId) => items.flatMap((item) => {
   const same = (item.v1 === edge.v1 && item.v2 === edge.v2) || (item.v1 === edge.v2 && item.v2 === edge.v1);
@@ -78,7 +79,11 @@ export function applySceneAddVertex(SceneManager) {
     if (!mode) return false;
     this.addVertexMode = null;
     this.cb.onAddVertexChange?.(null);
-    if (mode.vertexIds.length) this.pushUndoSnapshot(mode.snapshot);
+    if (mode.vertexIds.length) {
+      const mesh = this.getMesh(mode.meshId);
+      if (mesh) cleanupCommittedTopology(mesh);
+      this.pushUndoSnapshot(mode.snapshot);
+    }
     return mode.vertexIds.length > 0;
   };
 

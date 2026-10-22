@@ -1,6 +1,7 @@
 import { EditableMesh } from './EditableMesh';
 import * as THREE from 'three';
 import { newVid, edgeKey, posKey, adjacentFaceIndicesForEdge, weldCoincidentVertices } from './meshTopology';
+import { cleanupCommittedTopology, resolveLegacyDeletedBorders } from './meshTopologyInvariants';
 import { bevelLoopEdges } from './bevelLoop';
 import { splitFaceBetween } from './cutTools';
 import { cornerRadiusLoop } from './cornerRadius';
@@ -216,8 +217,10 @@ export function targetMergeVertices(sm) {
   mesh.hiddenEdges = mesh.hiddenEdges.map(e => ({ ...e, v1: remap(e.v1), v2: remap(e.v2) }))
     .filter(e => e.v1 !== e.v2 && !survivors.has(key(e.v1, e.v2)));
   mesh.vertices = mesh.vertices.filter(v => !toMerge.has(v.id));
-  mesh.invalidateCache();
-  sm.rebuildThreeMesh(mesh.id);
+  resolveLegacyDeletedBorders(mesh);
+  cleanupCommittedTopology(mesh);
+  if (!mesh.faces.length) sm.removeMesh(mesh.id);
+  else sm.rebuildThreeMesh(mesh.id);
   sm.clearSelection();
   sm.updateStats();
 }
@@ -240,19 +243,16 @@ export function connectVertices(sm) {
       (id === v2 && face[(j + 1) % face.length] === v1)
     ));
     const attached = faceEdge || splitFaceBetween(mesh, v1, v2);
-    // Never create a display-only line across one or more existing faces.
-    // Multi-face connections require intersection vertices and face splitting;
-    // reject unsupported paths rather than leaving detached geometry behind.
-    if (!attached && mesh.faces.length) continue;
+    // Every committed edge MUST border a face. Connecting two unrelated
+    // vertices may not leave a standalone line, even in an empty mesh.
+    // Reject unsupported multi-face connections until they can split faces.
+    if (!attached) continue;
     mesh.hiddenEdges = mesh.hiddenEdges.filter(h => hiddenKey(h.v1, h.v2) !== key);
     if (!mesh.visibleEdges.some(e => hiddenKey(e.v1, e.v2) === key)) {
       mesh.visibleEdges.push({ v1: Math.min(v1, v2), v2: Math.max(v1, v2) });
     }
-    if (!attached && !mesh.explicitEdges.some(e => hiddenKey(e.v1, e.v2) === key)) {
-      mesh.explicitEdges.push({ v1, v2 });
-    }
   }
-  mesh.invalidateCache();
+  cleanupCommittedTopology(mesh);
   sm.rebuildThreeMesh(mesh.id);
   sm.clearSelection();
 }
@@ -776,13 +776,18 @@ export function createFaceFromBorder(sm) {
   if (!mesh) return;
   const edges = mesh.getEdges();
   const ekey = edgeKey;
+  const edgeFaces = mesh._ensureEdgeFaceMap();
+  const isBorder = e => edgeFaces.get(ekey(e.v1, e.v2))?.faces.length === 1;
+  // A shared edge belongs to an existing surface on both sides. Never infer
+  // a face loop from it, even if the generic loop walker finds a closed quad.
+  const seeds = sel.indices.map(i => edges[i]);
+  if (seeds.some(e => !e || !isBorder(e))) return;
   const loopEdgeKeys = new Set();
-  for (const ei of sel.indices) {
-    const e = edges[ei];
-    if (!e) continue;
+  for (const e of seeds) {
     for (const li of collectLoopEdgeIndices(mesh, e)) {
       const le = edges[li];
-      if (le) loopEdgeKeys.add(ekey(le.v1, le.v2));
+      if (!le || !isBorder(le)) return;
+      loopEdgeKeys.add(ekey(le.v1, le.v2));
     }
   }
   const loopEdges = [...loopEdgeKeys].map(k => {
@@ -793,6 +798,10 @@ export function createFaceFromBorder(sm) {
   if (!isClosedLoop(loopEdges)) return;
   const loops = orderLoops(loopEdges).filter(l => l.length >= 3);
   if (loops.length === 0) return;
+  // Reject loops that would recreate an existing face. This also protects
+  // against overlapping faces when old imported geometry has duplicate rims.
+  const faceKeys = new Set(mesh.faces.map(f => [...f].sort((a, b) => a - b).join(',')));
+  if (loops.some(loop => faceKeys.has([...loop].sort((a, b) => a - b).join(',')))) return;
   sm.pushUndo();
   // Mesh centroid, used to orient each new cap's normal outward.
   let cx = 0, cy = 0, cz = 0;

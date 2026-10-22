@@ -68,7 +68,8 @@ export function applySceneMouse(SceneManager) {
         }
         this.mouse = { button: 0, startX: e.clientX, startY: e.clientY, lastX: e.clientX, lastY: e.clientY, moved: false, mode: 'paint' };
         this.cancelPaintPreview();
-        this.pushUndo();
+        // Nothing commits until Apply; the stroke joins the pending batch.
+        this.beginPendingPaint();
         this.paintAt(e.clientX, e.clientY);
         return;
       }

@@ -3,10 +3,12 @@
 // always matches the active mode. Keep every line SHORT — one glance.
 
 const WORKSPACE_TIPS = [
-  'Hold a tool, then drag it to rearrange the grid',
-  'To change units, open Menu → Settings → Units',
-  'To adjust snapping, hold the Snapping icon',
-  'To import a model, open Menu → File → Import',
+  'Tap a tool name on the left to read what it does',
+  'Double-tap Snapping or Resistance for settings',
+  'Hold and drag a tool icon to rearrange your tools',
+  'Use Focus to center the view without changing zoom',
+  'Tap a HUD number to enter an exact value',
+  'Use Undo to reverse the last modeling action',
 ];
 
 export const CONTEXT_TIPS = {
@@ -14,22 +16,20 @@ export const CONTEXT_TIPS = {
   empty: [
     'Tap an object to select it',
     'Drag empty space to orbit',
-    'Two-finger drag to pan and zoom',
-    'Tap Library to add a shape',
-    'Hold empty space for a selection box',
-    'To edit a light, open Menu → Lighting and select the light',
+    'Drag two fingers to pan the view',
+    'Pinch empty space to zoom the camera',
+    'Open Library to add another primitive',
+    'Hold empty space to begin a selection box',
   ],
   // Object mode, something selected.
   object: [
     'Pinch on the object to scale',
     'Twist two fingers to rotate',
     'Drag the object to move it',
-    'Tap a value above to type it',
-    'Hold an object to multi-select',
-    'Slide two fingers to scale one axis',
-    'Object tools → Boolean → Subtract cuts overlaps',
-    'Object tools → Lock protects objects from edits',
-    'Select a primitive, then use Segments to change its subdivisions',
+    'Tap a HUD value above the model to enter a number',
+    'Use Multi-select to transform several objects together',
+    'Focus centers the selected object without zooming',
+    'Segments divides the selected mesh along X, Y, or Z',
   ],
   face: [
     'Tap a face to select it',
@@ -73,7 +73,8 @@ export const CONTEXT_TIPS = {
     'Pinch the selection to scale it together',
   ],
   precision: [
-    'Set Distance and Angle in the panel',
+    'Double-tap Resistance to adjust transform sensitivity',
+    'Resistance slows movement, rotation, and scaling',
   ],
   drawFace: [
     'Draw a closed outline with one continuous stroke',

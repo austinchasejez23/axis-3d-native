@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { formatLength } from '@/lib/units';
 import { getMeasurements } from '@/lib/measurements';
 import { useTheme } from '@/lib/theme';
@@ -8,28 +8,42 @@ import { useTheme } from '@/lib/theme';
 // updates React state when a rounded pixel / text value actually changes.
 export default function MeasurementOverlay({ managerRef, unit, option, enabled }) {
   const [labels, setLabels] = useState([]);
+  const lastMoveRef = useRef(0);
+  const selectionRef = useRef('');
   const { highlightColor } = useTheme();
 
   useEffect(() => {
-    if (!enabled) { setLabels([]); return; }
+    if (!enabled) { setLabels([]); lastMoveRef.current = 0; return; }
     let active = true;
     let raf = 0;
     const tick = () => {
       if (!active) return;
       const mgr = managerRef.current;
       if (mgr) {
-        const ms = getMeasurements(mgr, option);
-        const next = ms.map((m) => ({
+        const moving = (mgr.activeAction === 'move' || mgr.activeAction === 'scale') &&
+          (mgr.selectionMode === 'face' || mgr.selectionMode === 'edge');
+        const selectionKey = [mgr.selectionMode, mgr.selection?.meshId, ...(mgr.selection?.indices || [])].join(':');
+        if (selectionRef.current !== selectionKey) {
+          selectionRef.current = selectionKey;
+          lastMoveRef.current = 0;
+        }
+        const now = performance.now();
+        if (moving) lastMoveRef.current = now;
+        const elapsed = now - lastMoveRef.current;
+        const lingering = !moving && lastMoveRef.current > 0 && elapsed < 5600;
+        const ms = getMeasurements(mgr, option, lingering);
+        const next = ms.filter(m => !m.stretchDimension || moving || lingering).map((m) => ({
           x: Math.round(m.x),
           y: Math.round(m.y),
           text: (m.prefix ? `${m.prefix} ` : '') + formatLength(m.length, unit),
           line: m.line ? Object.fromEntries(Object.entries(m.line).map(([key, value]) => [key, Math.round(value)])) : null,
           stretchDimension: !!m.stretchDimension,
+          opacity: m.stretchDimension && lingering && elapsed > 5000 ? Math.max(0, 1 - (elapsed - 5000) / 600) : 1,
         }));
         setLabels((prev) => {
           if (prev.length !== next.length) return next;
           for (let i = 0; i < next.length; i++) {
-            if (prev[i].x !== next[i].x || prev[i].y !== next[i].y || prev[i].text !== next[i].text ||
+            if (prev[i].x !== next[i].x || prev[i].y !== next[i].y || prev[i].text !== next[i].text || prev[i].opacity !== next[i].opacity ||
               JSON.stringify(prev[i].line) !== JSON.stringify(next[i].line)) return next;
           }
           return prev;
@@ -48,7 +62,7 @@ export default function MeasurementOverlay({ managerRef, unit, option, enabled }
         <div
           key={i}
           className="absolute inset-0 font-mono"
-          style={{ color: l.stretchDimension ? highlightColor : '#ffffff', fontSize: '13px', fontWeight: 700,
+          style={{ color: l.stretchDimension ? highlightColor : '#ffffff', opacity: l.opacity, fontSize: '13px', fontWeight: 700,
             textShadow: '0 1px 0 rgba(0,0,0,0.9), 0 0 3px rgba(0,0,0,0.9)' }}
         >
           {l.line && (() => {

@@ -155,7 +155,7 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
                 ref={fileInputRef}
                 type="file"
                 disabled={!isPro}
-                accept=".obj,.fbx,.stl,.glb,.gltf,.3mf"
+                accept="*/*"
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) { if (!isPro) onProLock?.('Model import requires AXIS 3D Pro.'); else { onImport?.(f); closeAll(); } } e.target.value = ''; }}
               />

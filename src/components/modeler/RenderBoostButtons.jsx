@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { Gauge, Move3D, Magnet } from 'lucide-react';
+import { Gauge, Move3D, Magnet, Crosshair } from 'lucide-react';
+import ResistanceIcon from './ResistanceIcon';
 import { useTheme } from '@/lib/theme';
 
 // A deliberate tap toggles a viewport option. Free Transform and Snapping
 // open their settings panels on double-tap; dragging across the stack never
 // activates a button.
 const SNAP_HINT = 'Double-tap the Snapping icon for settings';
-const SNAP_HINT_WIDTH_REM = 9;
+const SNAP_HINT_WIDTH_REM = 12;
 const FREE_HINT = 'Double-tap the Free Transform icon for settings';
-const FREE_HINT_WIDTH_REM = 11;
+const FREE_HINT_WIDTH_REM = 12;
+const RESISTANCE_HINT = 'Double-tap the Resistance icon for settings';
 
-export default function RenderBoostButtons({ renderBoost, freeTransform, snapping, onRenderBoost, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel }) {
+export default function RenderBoostButtons({ renderBoost, freeTransform, snapping, onRenderBoost, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel, onFocus, precision, onTogglePrecision, onOpenPrecisionPanel }) {
   const { uiColor, highlightColor } = useTheme();
   const [notice, setNotice] = useState(null);
   const timerRef = useRef(null);
@@ -55,11 +57,15 @@ export default function RenderBoostButtons({ renderBoost, freeTransform, snappin
   });
 
   const handleFreeTap = () => {
-    if (!freeTransform) window.dispatchEvent(new CustomEvent('axis-tool-selected', { detail: { label: FREE_HINT, widthRem: FREE_HINT_WIDTH_REM } }));
+    if (!freeTransform) window.dispatchEvent(new CustomEvent('axis-tool-selected', { detail: { label: FREE_HINT, widthRem: FREE_HINT_WIDTH_REM, small: true } }));
     select('Free Transform', onToggleFreeTransform);
   };
+  const handleResistanceTap = () => {
+    window.dispatchEvent(new CustomEvent('axis-tool-selected', { detail: { label: RESISTANCE_HINT, widthRem: 12, small: true } }));
+    select('Resistance', onTogglePrecision);
+  };
   const handleSnapTap = () => {
-    if (!snapping) window.dispatchEvent(new CustomEvent('axis-tool-selected', { detail: { label: SNAP_HINT, widthRem: SNAP_HINT_WIDTH_REM } }));
+    if (!snapping) window.dispatchEvent(new CustomEvent('axis-tool-selected', { detail: { label: SNAP_HINT, widthRem: SNAP_HINT_WIDTH_REM, small: true } }));
     select('Snapping', onToggleSnapping);
   };
 
@@ -93,6 +99,15 @@ export default function RenderBoostButtons({ renderBoost, freeTransform, snappin
           <Magnet className="w-5 h-5 shrink-0" strokeWidth={2} />
         </button>
       </div>
+      <button {...tapProps('precision', handleResistanceTap, onOpenPrecisionPanel)} aria-label="Toggle resistance" aria-pressed={precision} title="Double-tap for resistance settings" style={style(precision)} className={button}>
+        {notice === 'Resistance' && <span className="text-sm whitespace-nowrap translate-y-[3px]">Resistance</span>}
+        <ResistanceIcon className="w-5 h-5 shrink-0" />
+      </button>
+      {/* Focus: one tap re-centers the camera on the current selection. */}
+      <button {...tapProps('focus', () => select('Focus', onFocus))} aria-label="Focus on selection" style={style(false)} className={button}>
+        {notice === 'Focus' && <span className="text-sm whitespace-nowrap translate-y-[3px]">Focus</span>}
+        <Crosshair className="w-5 h-5 shrink-0" strokeWidth={2} />
+      </button>
     </div>
   );
 }

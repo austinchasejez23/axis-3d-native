@@ -7,7 +7,7 @@ import * as THREE from 'three';
 // object mode -> the few forward-most edges / object bbox;
 // face mode   -> edges of selected faces / their bbox;
 // edge mode   -> selected edges / their endpoints' bbox.
-export function getMeasurements(manager, option = 'edge') {
+export function getMeasurements(manager, option = 'edge', showConnectingEdges = false) {
   const out = [];
   const sel = manager.selection;
   if (!sel.meshId) return out;
@@ -24,7 +24,7 @@ export function getMeasurements(manager, option = 'edge') {
       y: ((-ndc.y + 1) / 2) * rect.height + rect.top,
     };
   };
-  const addEdge = (va, vb) => {
+  const addEdge = (va, vb, connecting = false) => {
     const wa = new THREE.Vector3(va.x, va.y, va.z).applyMatrix4(wm);
     const wb = new THREE.Vector3(vb.x, vb.y, vb.z).applyMatrix4(wm);
     const mid = wa.clone().lerp(wb, 0.5);
@@ -32,7 +32,7 @@ export function getMeasurements(manager, option = 'edge') {
     if (manager.isWorldPointVisible && !manager.isWorldPointVisible(mid)) return;
     const screen = project(mid);
     if (!screen) return;
-    out.push({ x: screen.x, y: screen.y, length: wa.distanceTo(wb) });
+    out.push({ x: screen.x, y: screen.y, length: wa.distanceTo(wb), stretchDimension: connecting });
   };
 
   const wantEdge = option === 'edge' || option === 'both';
@@ -66,7 +66,7 @@ export function getMeasurements(manager, option = 'edge') {
   // While stretching a face, also show connecting-edge lengths, where one
   // endpoint belongs to the face and the other to surrounding geometry.
   if (wantEdge && mode === 'face' && sel.indices.length &&
-      (manager.activeAction === 'move' || manager.activeAction === 'scale')) {
+      (showConnectingEdges || manager.activeAction === 'move' || manager.activeAction === 'scale')) {
     const faceVertices = new Set();
     for (const fi of sel.indices) {
       for (const gi of mesh.getCoplanarFaceGroup(fi)) {
@@ -80,7 +80,7 @@ export function getMeasurements(manager, option = 'edge') {
       if (seen.has(key)) continue;
       seen.add(key);
       const va = mesh.getVertex(edge.v1), vb = mesh.getVertex(edge.v2);
-      if (va && vb) addEdge(va, vb);
+      if (va && vb) addEdge(va, vb, true);
     }
   }
 
@@ -93,7 +93,35 @@ export function getMeasurements(manager, option = 'edge') {
       const va = mesh.getVertex(e.v1), vb = mesh.getVertex(e.v2);
       if (va && vb) addEdge(va, vb);
     }
-  } else if (wantEdge && mode === 'object') {
+  }
+
+  // When a selected edge moves, its endpoints also change the lengths of
+  // neighboring edges attached to unselected vertices. Show those live,
+  // just as face movement shows the connecting edges.
+  if (wantEdge && mode === 'edge' && sel.indices.length &&
+      (showConnectingEdges || manager.activeAction === 'move' || manager.activeAction === 'scale')) {
+    const movingVertices = new Set();
+    const selectedEdgeKeys = new Set();
+    const keyFor = (a, b) => a < b ? a + ',' + b : b + ',' + a;
+    for (const index of new Set(sel.indices)) {
+      const edge = edges[index];
+      if (!edge) continue;
+      movingVertices.add(edge.v1);
+      movingVertices.add(edge.v2);
+      selectedEdgeKeys.add(keyFor(edge.v1, edge.v2));
+    }
+    const seen = new Set(selectedEdgeKeys);
+    for (const edge of edges) {
+      const key = keyFor(edge.v1, edge.v2);
+      if (seen.has(key)) continue;
+      if (!movingVertices.has(edge.v1) && !movingVertices.has(edge.v2)) continue;
+      seen.add(key);
+      const va = mesh.getVertex(edge.v1), vb = mesh.getVertex(edge.v2);
+      if (va && vb) addEdge(va, vb, true);
+    }
+  }
+
+  if (wantEdge && mode === 'object') {
     // In object mode only the few forward-most edges — closest to the camera,
     // and not occluded — carry labels, never every edge of the object.
     const drawEdges = (mesh.visibleEdges && mesh.visibleEdges.length) ? mesh.visibleEdges : edges;

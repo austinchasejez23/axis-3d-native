@@ -6,7 +6,9 @@ import { toggleSmoothShading, separateMesh as separateMeshTool, createFaceFromVe
 import { theme } from './theme';
 import { createMaterial as buildMaterial, applyShadows as applyShadowsFn, applyShine as applyShineFn, applyWireframe as applyWireframeFn, updateObjectMaterial as updateObjectMaterialFn } from './materials';
 import { subdivideMesh as subdivideMeshTool } from './subdivideTool';
+import { segmentEditedMesh } from './axisSegments';
 import { fillSelection as fillPaintSelection, paintAt as applyPaintAt, endPaintStroke as finishPaintStroke } from './paintTools';
+import { applyPaintPatches, samplePaintLayer } from './paintLayer';
 import { clonePaintLayer, clearPaintLayer } from './paintLayer';
 import { sculptSmooth, sculptDisplace } from './sculptTools';
 import { applySceneUndo } from './sceneUndo';
@@ -24,14 +26,16 @@ import { applySceneMeasure } from './sceneMeasure';
 import { applySceneAddVertex } from './sceneAddVertex';
 import { applySceneReference, loadReferenceImage } from './sceneReference';
 import { mergeVerticesWithin, weldCoincidentVertices, edgeKey } from './meshTopology';
+import { cleanupCommittedTopology, dissolveSharedBoundary, adjacentFacesForBoundary, removeFaceByIndex, resolveLegacyDeletedBorders } from './meshTopologyInvariants';
 import { updateGeometryInPlace } from './meshBufferUpdate';
+import { syncObjectHighlightTransforms, refreshTransformHighlights } from './highlightFollow';
 import { intersectSelection, subtractSelection, unionSelection } from './booleanTools';
 import { snapAngleDelta, uniformScaleSnapFactor, axisScaleSnapFactor } from './snapping';
 import { buildViewportGrid, disposeViewportGrid, updateViewportGridFade, updateViewportGridResolution } from './viewportGrid';
 import applySceneDrawFace from '@/lib/sceneDrawFace';
 import updateDrawFaceGrid from '@/lib/drawFaceGrid';
 import { restoreNavigationResolution, updateRenderBoostTriangleLoad, resetRenderBoostAuto } from './renderBoost';
-import { queueCameraMotion, releaseCameraMotion, stopCameraMotion, updateCameraMotion } from '@/lib/cameraMotion';
+import { queueCameraMotion, releaseCameraMotion, stopCameraMotion, updateCameraMotion, tweenCameraTo } from '@/lib/cameraMotion';
 import { bridgeSelection } from '@/lib/bridgeTools';
 import { applyFocusRenderBoost } from '@/lib/focusRenderBoost';
 import { updateObjectAxisArrows, disposeObjectAxisArrows } from '@/lib/objectAxisArrows';
@@ -63,7 +67,8 @@ export class SceneManager {
     this.cameraTheta = 0;
     this.cameraPhi = Math.PI / 2;
     this.cameraDist = 5;
-    this.setCameraOrbit(9, Math.PI / 4, Math.PI / 6);
+    // Screenshot-based starting view: 45° azimuth, 22° elevation, wider framing.
+    this.setCameraOrbit(11.5, Math.PI / 4, THREE.MathUtils.degToRad(22));
 
     // Cap mobile resolution to avoid the GPU-memory exhaustion that blanks
     // WebViews. (Thumbnails self-render before reading the canvas, so no
@@ -297,6 +302,33 @@ export class SceneManager {
   pan(dx, dy) { queueCameraMotion(this, 'pan', dx, dy); }
   zoom(factor) { queueCameraMotion(this, 'zoom', factor); }
 
+  // Focus: center the camera on the current selection (object, group, faces,
+  // edges or vertices), preserving the current zoom and viewing angle.
+  // Returns false when nothing is selected.
+  focusSelection() {
+    const box = new THREE.Box3();
+    const add = (mesh, ids) => {
+      const wm = this.getWorldMatrix(mesh);
+      for (const id of ids) {
+        const v = mesh.getVertex(id);
+        if (v) box.expandByPoint(new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(wm));
+      }
+    };
+    if (this.isGroupMode()) {
+      for (const id of this.selectedMeshIds) {
+        const mesh = this.getMesh(id);
+        if (mesh) add(mesh, mesh.vertices.map((v) => v.id));
+      }
+    } else {
+      const mesh = this.getMesh(this.selection.meshId);
+      if (!mesh) return false;
+      add(mesh, this.selection.type === 'object' ? mesh.vertices.map((v) => v.id) : this.getSelectedVertexIds());
+    }
+    if (box.isEmpty()) return false;
+    tweenCameraTo(this, box.getCenter(new THREE.Vector3()), this.cameraDist);
+    return true;
+  }
+
   frameScene(padding = 3) {
     this.stopCameraMotion();
     if (this.meshes.length === 0) return;
@@ -348,10 +380,37 @@ export class SceneManager {
     const mesh = createPrimitive(type, segments);
     const projectedTriangles = this.meshes.reduce((sum, item) => sum + item.getTriangleCount(), 0) + mesh.getTriangleCount();
     if (this.triangleLimit && projectedTriangles > this.triangleLimit) { this.cb.onTriangleLimit?.(); return null; }
-    // New objects sit ON the grid: lift the shape so its lowest point is at Y=0.
-    let minY = Infinity;
-    for (const v of mesh.vertices) if (v.y < minY) minY = v.y;
-    if (Number.isFinite(minY)) mesh.position.y = -minY * (mesh.scale.y || 1);
+    // The first primitive retains its factory geometry, size, and original
+    // grid placement. Only subsequently added primitives are camera-centered
+    // and uniformly sized relative to the existing model.
+    if (this.meshes.length === 0) {
+      let minY = Infinity;
+      for (const v of mesh.vertices) if (v.y < minY) minY = v.y;
+      if (Number.isFinite(minY)) mesh.position.y = -minY * (mesh.scale.y || 1);
+    } else {
+      const bounds = new THREE.Box3();
+      for (const existing of this.meshes) {
+        if (!existing.visible) continue;
+        const world = this.getWorldMatrix(existing);
+        for (const vertex of existing.vertices) {
+          bounds.expandByPoint(new THREE.Vector3(vertex.x, vertex.y, vertex.z).applyMatrix4(world));
+        }
+      }
+      const primitiveBounds = new THREE.Box3();
+      for (const vertex of mesh.vertices) primitiveBounds.expandByPoint(new THREE.Vector3(vertex.x, vertex.y, vertex.z));
+      const size = primitiveBounds.getSize(new THREE.Vector3());
+      const longest = Math.max(size.x, size.y, size.z, 1e-6);
+      const existingSize = bounds.getSize(new THREE.Vector3());
+      const modelLongest = Math.max(existingSize.x, existingSize.y, existingSize.z);
+      // A new part starts at 25% of the model's longest dimension.
+      // Never enlarge the factory primitive, and cap its screen footprint.
+      const visibleHeight = 2 * Math.max(0.1, this.cameraDist) * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+      const targetSize = Math.min(modelLongest > 1e-6 ? modelLongest * 0.25 : longest, longest, visibleHeight * 0.25);
+      const scale = Math.max(0.0001, targetSize / longest);
+      mesh.scale.setScalar(scale);
+      const center = primitiveBounds.getCenter(new THREE.Vector3()).multiplyScalar(scale);
+      mesh.position.copy(this.cameraTarget).sub(center);
+    }
     this.meshes.push(mesh);
     this.buildThreeMesh(mesh);
     // A new object always arrives selected in object mode.
@@ -365,6 +424,10 @@ export class SceneManager {
   }
 
   addMesh(editableMesh) {
+    // Imported meshes may not commit detached vertices or edges.
+    resolveLegacyDeletedBorders(editableMesh);
+    cleanupCommittedTopology(editableMesh);
+    if (!editableMesh.faces.length) return null;
     const projectedTriangles = this.meshes.reduce((sum, item) => sum + item.getTriangleCount(), 0) + editableMesh.getTriangleCount();
     if (this.triangleLimit && projectedTriangles > this.triangleLimit) { this.cb.onTriangleLimit?.(); return null; }
     this.meshes.push(editableMesh);
@@ -389,8 +452,8 @@ export class SceneManager {
     // Thin sub-pixel hairline (requested): finest line the screen can draw.
     const wireframe = makeFatSegments(
       Array.from(wireGeo.getAttribute('position').array),
-      mesh.importedWireframeOnly ? 0xb7c1cd : 0x0a0a0a,
-      mesh.importedWireframeOnly ? 1.15 : 0.5, this.renderer,
+      mesh.importedWireframeOnly ? 0x161c24 : 0x0a0a0a,
+      mesh.importedWireframeOnly ? 0.85 : 0.5, this.renderer,
     );
     wireGeo.dispose();
     wireframe.material.opacity = 1;
@@ -399,7 +462,7 @@ export class SceneManager {
     wireframe.material.depthWrite = false;
     wireframe.renderOrder = 1;
     wireframe.visible = theme.wireframeEnabled !== false && !this.wireframesHidden;
-    if (mesh.importedWireframeOnly) mat.colorWrite = !wireframe.visible;
+    // Keep imported faces visible behind their editable wireframe, never hollow.
     threeMesh.add(wireframe);
 
     this.scene.add(threeMesh);
@@ -467,6 +530,7 @@ export class SceneManager {
     obj.mesh.position.copy(mesh.position);
     obj.mesh.rotation.copy(mesh.rotation);
     obj.mesh.scale.copy(mesh.scale);
+    syncObjectHighlightTransforms(this);
   }
 
   // HUD rotation while vertices/edges/faces are selected rotates ONLY that
@@ -507,7 +571,7 @@ export class SceneManager {
     this.pushUndo();
     mesh.scale.set(Math.max(0.01, sx), Math.max(0.01, sy), Math.max(0.01, sz));
     this.updateObjectTransform(mesh.id);
-    this.updateHighlights();
+    refreshTransformHighlights(this);
     this.updateHud();
   }
 
@@ -526,7 +590,7 @@ export class SceneManager {
       const delta = new THREE.Vector3(x, y, z).sub(center);
       this.translateSelection(delta);
     }
-    this.updateHighlights();
+    refreshTransformHighlights(this);
     this.updateHud();
   }
   setObjectRotationLive(rxDeg, ryDeg, rzDeg) {
@@ -540,7 +604,7 @@ export class SceneManager {
     } else {
       this.rotateSubSelectionTo(rxDeg, ryDeg, rzDeg);
     }
-    this.updateHighlights();
+    refreshTransformHighlights(this);
     this.updateHud();
   }
 
@@ -644,6 +708,33 @@ export class SceneManager {
     this._setMaterialProp((mesh) => { mesh.emissive = e; });
   }
 
+  // "Default" on the Material tab: every material slider back to what a new
+  // object starts with (metal, rough, opacity, glow, reflect, blur, clear coat
+  // and tint). Color, paint, texture and soft normals are left as they are.
+  resetMaterialDefaults() {
+    const ids = this.targetMeshIds();
+    if (ids.length === 0) return false;
+    this._setMaterialProp((mesh) => {
+      mesh.roughness = null;
+      mesh.metalness = null;
+      mesh.opacity = 1;
+      mesh.emissive = 0;
+      mesh.clearCoatEnabled = false;
+      mesh.clearCoatIntensity = 0.5;
+      mesh.tintHue = 0;
+      mesh.tintAmount = 0;
+      mesh.reflectionEnabled = false;
+      mesh.reflectionIntensity = 0.6;
+      mesh.reflectionRoughness = 0.1;
+    });
+    for (const id of ids) {
+      this._disposeReflectionRig?.(id);
+      this.updateObjectMaterial(id);
+    }
+    this._reflectionDirty = true;
+    return true;
+  }
+
   // Chameleon two-tone color-shift finish: primary and secondary colors plus
   // the intensity of the secondary color at grazing angles.
   setMaterialChameleon(primaryColor, secondaryColor, intensity) {
@@ -684,6 +775,47 @@ export class SceneManager {
   }
 
   setPaintTool(config) { this.paintTool = { ...config }; }
+
+  // Eyedropper: while armed, a tap on the canvas samples the surface color
+  // under it and hands it to `onPick` instead of painting or selecting.
+  setEyedropper(onPick) { this.eyedropper = onPick || null; this._eyedropDown = null; }
+
+  // The surface's own color at a screen point (not the lit, shaded pixel):
+  // brush/spray paint over the face, vertex or object color. '#rrggbb' or null.
+  sampleColorAt(clientX, clientY) {
+    const { x, y } = this.screenToNDC(clientX, clientY);
+    const hit = this.raycastMeshes(x, y)[0];
+    if (!hit) return null;
+    const mesh = this.getMesh(this.findMeshIdByObject(hit.object));
+    if (!mesh) return null;
+    const fi = mesh.getFaceIndexFromTriangle(hit.faceIndex);
+    const face = mesh.faces[fi];
+    if (!face) return null;
+    const local = hit.point.clone().applyMatrix4(this.getWorldMatrix(mesh).clone().invert());
+    let base = mesh.faceColors[fi];
+    if (base == null) {
+      // Nearest corner's own color, when this face has vertex colors.
+      let best = Infinity;
+      for (const vid of face) {
+        const c = mesh.vertexColors[vid];
+        if (c == null) continue;
+        const v = mesh.getVertex(vid);
+        const d = (v.x - local.x) ** 2 + (v.y - local.y) ** 2 + (v.z - local.z) ** 2;
+        if (d < best) { best = d; base = c; }
+      }
+    }
+    // getHex() gives the color back in sRGB, the same space as the paint layer.
+    const baseHex = new THREE.Color(base ?? mesh.color).getHex();
+    let r = (baseHex >> 16) & 255, g = (baseHex >> 8) & 255, bl = baseHex & 255;
+    const paint = samplePaintLayer(mesh.paintLayer, mesh, fi, local);
+    if (paint) {
+      r = paint.r * paint.a + r * (1 - paint.a);
+      g = paint.g * paint.a + g * (1 - paint.a);
+      bl = paint.b * paint.a + bl * (1 - paint.a);
+    }
+    const hex = (v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, '0');
+    return `#${hex(r)}${hex(g)}${hex(bl)}`;
+  }
   exitPaintMode() { this.endPaintStroke(); this.paintTool = null; }
   endPaintStroke() { finishPaintStroke(this); }
   setSculptTool(config) { this.sculptTool = config ? { ...config } : null; }
@@ -761,6 +893,74 @@ export class SceneManager {
     return true;
   }
   cancelPaintPreview() { this._restorePaintPreview(true); }
+  hasPaintPreview() { return !!this._paintPreviewSnapshot; }
+
+  // ── Pending paint ──
+  // Brush and spray strokes land on the paint layer as you draw, so you can
+  // see them, but nothing is committed until Apply. Each finished stroke keeps
+  // the pixels it overwrote, in order: Undo can take the last stroke back, X
+  // can roll every stroke back, and Apply folds them into one undo step.
+  beginPendingPaint() {
+    if (this._paintPending) return;
+    this._paintPending = { snapshot: this.captureSnapshot(), strokes: [] };
+    // New paint invalidates redo, as any other edit does.
+    this.redoStack = [];
+  }
+  hasPendingPaint() { return !!this._paintPending?.strokes.length; }
+  _notifyPaintPending() {
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('axis-paint-pending'));
+  }
+  undoPendingStroke() {
+    this.endPaintStroke();
+    const pending = this._paintPending;
+    if (!pending?.strokes.length) return false;
+    applyPaintPatches(this, pending.strokes.pop());
+    if (!pending.strokes.length) this._dropPendingPaint(pending);
+    this._notifyPaintPending();
+    return true;
+  }
+  cancelPendingPaint() {
+    this.endPaintStroke();
+    const pending = this._paintPending;
+    if (!pending) return false;
+    for (let i = pending.strokes.length - 1; i >= 0; i--) applyPaintPatches(this, pending.strokes[i]);
+    this._dropPendingPaint(pending);
+    this._notifyPaintPending();
+    return true;
+  }
+  // A paint layer the pending strokes created from nothing goes too, so the
+  // object is left exactly as it was rather than carrying an empty layer.
+  _dropPendingPaint(pending) {
+    for (const before of pending.snapshot.meshes) {
+      const live = this.getMesh(before.id);
+      if (!live || before.paintLayer || !live.paintLayer) continue;
+      live.paintLayer.texture?.dispose?.();
+      live.paintLayer = null;
+      this.updateObjectMaterial(live.id);
+    }
+    this._paintPending = null;
+  }
+  commitPendingPaint() {
+    this.endPaintStroke();
+    const pending = this._paintPending;
+    if (!pending) return false;
+    this._paintPending = null;
+    if (!pending.strokes.length) { this._notifyPaintPending(); return false; }
+    // The earliest saved pixels of each block are what the batch started from.
+    const seen = new Set();
+    const before = [];
+    for (const stroke of pending.strokes) {
+      for (const patch of stroke) {
+        const key = `${patch.meshId}:${patch.x}:${patch.y}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        before.push(patch);
+      }
+    }
+    this.pushUndoSnapshot({ ...pending.snapshot, paintPatches: before });
+    this._notifyPaintPending();
+    return true;
+  }
   paintAt(x, y) { applyPaintAt(this, x, y); }
   applyBevel(options) { bevelEdge(this, options); }
 
@@ -836,6 +1036,10 @@ export class SceneManager {
     mesh.position.add(c.clone().multiply(mesh.scale).applyQuaternion(q));
     mesh.invalidateCache();
     this.rebuildThreeMesh(mesh.id);
+    // Re-centering alters local vertex positions, not just the transform.
+    // Rebuild the selected local outline once so subsequent transforms can
+    // reuse it without ever trailing or drawing from the old origin.
+    if (this.selection?.meshId === mesh.id && this.selection.type === 'object') this.updateHighlights(true);
   }
 
   worldToLocalDelta(mesh, delta) {
@@ -907,9 +1111,9 @@ export class SceneManager {
   // and highlighted so tools like paint-fill keep working.
   setWireframesHidden(hidden) {
     this.wireframesHidden = !!hidden;
-    for (const [id, obj] of this.threeObjects) {
+    for (const obj of this.threeObjects.values()) {
       obj.wireframe.visible = theme.wireframeEnabled !== false && !this.wireframesHidden && !obj.focusProxyGeometry;
-      if (obj.material && this.getMesh(id)?.importedWireframeOnly) obj.material.colorWrite = !obj.wireframe.visible;
+      // Imported surfaces remain visible regardless of wireframe visibility.
     }
     this.refreshStaleWireframes();
   }
@@ -944,7 +1148,8 @@ export class SceneManager {
     if (!mesh || mesh.getTriangleCount() < HEAVY_EDIT_TRIANGLES) return;
     this._heavyEdit = true;
     for (const obj of this.threeObjects.values()) obj.wireframe.visible = false;
-    this.highlightGroup.visible = false;
+    // Transform-only outlines follow the moving object; do not hide them.
+    if (this.selection.type !== 'object' && !this.isGroupMode()) this.highlightGroup.visible = false;
   }
 
   // Gesture over: put the detail back and rebuild whatever was skipped.
@@ -967,10 +1172,10 @@ export class SceneManager {
     }
   }
 
-  updateHighlights() {
-    // Mid-gesture on a heavy mesh the highlight is hidden, so rebuilding it
-    // every frame would be pure waste — defer it to the end of the gesture.
-    if (this._heavyEdit) { this._highlightsStale = true; return; }
+  updateHighlights(force = false) {
+    // Only topology changes (like origin re-centering) force a rebuild during
+    // a heavy gesture; object transforms reuse the existing local outline.
+    if (this._heavyEdit && !force) { this._highlightsStale = true; return; }
     while (this.highlightGroup.children.length > 0) {
       const child = this.highlightGroup.children[0];
       this.highlightGroup.remove(child);
@@ -998,12 +1203,13 @@ export class SceneManager {
         if (!mesh) continue;
         const wireGeo = mesh.toEdgesGeometry();
         const wirePositions = Array.from(wireGeo.getAttribute('position').array);
-        const wire = makeFatSegments(wirePositions, hl, 1, this.renderer);
+        const wire = makeFatSegments(wirePositions, hl, 2, this.renderer);
         wireGeo.dispose();
         wire.position.copy(mesh.position);
         wire.rotation.copy(mesh.rotation);
         wire.scale.copy(mesh.scale);
         wire.renderOrder = 999;
+        wire.userData.axisFollowMeshId = id;
         this.highlightGroup.add(wire);
       }
       this.cb.onSelectionChange?.(true);
@@ -1022,12 +1228,13 @@ export class SceneManager {
     if (sel.type === 'object') {
       const wireGeo = mesh.toEdgesGeometry();
       const wirePositions = Array.from(wireGeo.getAttribute('position').array);
-      const wire = makeFatSegments(wirePositions, hl, 1, this.renderer);
+      const wire = makeFatSegments(wirePositions, hl, 2, this.renderer);
       wireGeo.dispose();
       wire.position.copy(mesh.position);
       wire.rotation.copy(mesh.rotation);
       wire.scale.copy(mesh.scale);
       wire.renderOrder = 999;
+      wire.userData.axisFollowMeshId = mesh.id;
       this.highlightGroup.add(wire);
     } else if (sel.type === 'vertex') {
       for (const idx of sel.indices) {
@@ -1063,33 +1270,80 @@ export class SceneManager {
         positions.push(wa.x, wa.y, wa.z, wb.x, wb.y, wb.z);
       }
       if (positions.length > 0) {
-        const line = makeFatSegments(positions, hl, 1, this.renderer);
+        const line = makeFatSegments(positions, hl, 2, this.renderer);
         line.renderOrder = 999;
         this.highlightGroup.add(line);
       }
     } else if (sel.type === 'face') {
-      for (const idx of sel.indices) {
+      // Imported meshes frequently store one visible surface as two or more
+      // triangles. Highlight the logical surface, not its hidden tessellation.
+      // Only traverse edges the mesh itself classifies as hidden; user-created
+      // or visible dividing edges must remain independent and selectable.
+      mesh.getEdges(); // ensure the lazy hidden-diagonal classification is current
+      const edgeMap = mesh._ensureEdgeFaceMap();
+      const hidden = mesh._hiddenEdgeMap();
+      const selected = new Set(sel.indices.filter(i => mesh.faces[i]));
+      const pending = [...selected];
+      while (pending.length) {
+        const current = pending.pop();
+        const face = mesh.faces[current];
+        if (!face) continue;
+        for (let j = 0; j < face.length; j++) {
+          const a = face[j], b = face[(j + 1) % face.length];
+          const key = Math.min(a, b) + ',' + Math.max(a, b);
+          const edge = edgeMap.get(key);
+          if (!edge || edge.faces.length !== 2) continue;
+          const isHidden = hidden.has(key) && mesh._hiddenApplies(hidden.get(key), edge.faces);
+          const isImportedDiagonal = mesh.importedWireframeOnly &&
+            !mesh.explicitEdges.some(e => Math.min(e.v1, e.v2) === Math.min(a, b) && Math.max(e.v1, e.v2) === Math.max(a, b)) &&
+            !mesh._visibleEdgeSet().has(key) &&
+            mesh._isConfidentImportedDiagonal(a, b, edge.faces[0], edge.faces[1]);
+          if (!isHidden && !isImportedDiagonal) continue;
+          const neighbor = edge.faces[0] === current ? edge.faces[1] : edge.faces[0];
+          if (!selected.has(neighbor)) { selected.add(neighbor); pending.push(neighbor); }
+        }
+      }
+      const positions = [];
+      const borderPositions = [];
+      for (const idx of selected) {
         const face = mesh.faces[idx];
         if (!face) continue;
-        const positions = [];
-        // Highlight the same render triangles the actual face uses, including
-        // concave n-gons, without the previous additive glowing overlay.
         for (const triangle of mesh.getFaceTriangleIndices(idx)) {
           for (const vi of triangle) {
             const v = mesh.getVertex(face[vi]);
+            if (!v) continue;
             const wp = new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(wm);
             positions.push(wp.x, wp.y, wp.z);
           }
         }
+        for (let i = 0; i < face.length; i++) {
+          const ai = face[i], bi = face[(i + 1) % face.length];
+          const key = Math.min(ai, bi) + ',' + Math.max(ai, bi);
+          const edge = edgeMap.get(key);
+          // An edge between two highlighted triangles is not a border.
+          if (edge?.faces.length === 2 && edge.faces.every(fi => selected.has(fi))) continue;
+          const a = mesh.getVertex(ai), b = mesh.getVertex(bi);
+          if (!a || !b) continue;
+          const wa = new THREE.Vector3(a.x, a.y, a.z).applyMatrix4(wm);
+          const wb = new THREE.Vector3(b.x, b.y, b.z).applyMatrix4(wm);
+          borderPositions.push(wa.x, wa.y, wa.z, wb.x, wb.y, wb.z);
+        }
+      }
+      if (positions.length) {
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
         geo.computeVertexNormals();
-        // toneMapped:false so the fill renders the exact chosen highlight color
-        // instead of the tone-mapped (washed) version of it.
-        const mat = new THREE.MeshBasicMaterial({ color: hl, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthTest: false, toneMapped: false });
-        const tri = new THREE.Mesh(geo, mat);
-        tri.renderOrder = 998;
-        this.highlightGroup.add(tri);
+        const faceColor = new THREE.Color(hl).lerp(new THREE.Color(0xffffff), 0.55);
+        const mat = new THREE.MeshBasicMaterial({ color: faceColor, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthTest: false, depthWrite: false, toneMapped: false });
+        const fill = new THREE.Mesh(geo, mat);
+        fill.renderOrder = 998;
+        this.highlightGroup.add(fill);
+      }
+      if (borderPositions.length) {
+        const border = makeFatSegments(borderPositions, hl, 2.25, this.renderer);
+        border.material.depthTest = false;
+        border.renderOrder = 999;
+        this.highlightGroup.add(border);
       }
     }
 
@@ -1098,26 +1352,25 @@ export class SceneManager {
 
   // === MANIPULATION ===
   refreshInteractionFeedback() {
-    if (!this._liveEdit) {
+    // Selected object/group outlines reuse local edges and follow the actual
+    // mesh transform. Rebuilding dense line geometry per touch caused trails.
+    if (this.selection.type === 'object' || this.isGroupMode()) {
+      syncObjectHighlightTransforms(this);
+    } else if (!this._liveEdit || this.selection.type === 'face') {
+      // Face highlights follow their edited vertices in the same event.
+      this._interactionHighlightsDirty = false;
       this.updateHighlights();
       this.updateHud();
       return;
+    } else {
+      // Edge/vertex highlights refresh BEFORE the next render, rather than in
+      // a competing RAF that can occur after the render loop.
+      this._interactionHighlightsDirty = true;
     }
-    // A selected face must track the edited mesh in the same input event.
-    // Deferring its overlay to a later frame makes the face appear to lag.
-    if (this.selection.type === 'face' && !this._heavyEdit) {
-      if (this._interactionFeedbackRaf) {
-        cancelAnimationFrame(this._interactionFeedbackRaf);
-        this._interactionFeedbackRaf = null;
-      }
-      this.updateHighlights();
-      this.updateHud();
-      return;
-    }
+    if (!this._liveEdit) { this.updateHud(); return; }
     if (this._interactionFeedbackRaf) return;
     this._interactionFeedbackRaf = requestAnimationFrame(() => {
       this._interactionFeedbackRaf = null;
-      this.updateHighlights();
       this.updateHud();
     });
   }
@@ -1203,7 +1456,7 @@ export class SceneManager {
     if (!mesh || mesh.locked) return;
     if (sel.type === 'object') {
       mesh.position.add(worldDelta);
-      mesh.position.add(this.snapCorrection(this.getSelectionCenter()));
+      if (theme.snapToGrid) mesh.position.add(this.snapCorrection(this.getSelectionCenter()));
       this.updateObjectTransform(mesh.id);
     } else {
       mesh.lockTriangulationDiagonals();
@@ -1267,7 +1520,7 @@ export class SceneManager {
       this.rebuildThreeMesh(mesh.id);
     }
     this.applyScaleSnap(null);
-    this.updateHighlights();
+    refreshTransformHighlights(this);
     this.updateHud();
   }
 
@@ -1283,23 +1536,34 @@ export class SceneManager {
       this.updateObjectTransform(id);
     }
     this.applyScaleSnap(null);
-    this.updateHighlights();
+    refreshTransformHighlights(this);
     this.updateHud();
   }
 
+  // Stretch every multi-selected object along one WORLD axis about the group
+  // center: positions spread along it, and each object scales along whichever
+  // of its own axes points closest to it (so a rotated object still stretches
+  // the way the drag goes instead of along an unrelated side).
   scaleGroupAxis(axis, factor) {
     const center = this.getGroupCenter();
     if (!center) return;
+    const worldAxis = new THREE.Vector3(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0);
     for (const id of this.selectedMeshIds) {
       const m = this.getMesh(id);
       if (!m || m.locked) continue;
       const offset = m.position.clone().sub(center);
       offset[axis] *= factor;
       m.position.copy(center).add(offset);
-      m.scale[axis] = Math.max(0.01, m.scale[axis] * factor);
+      const q = new THREE.Quaternion().setFromEuler(m.rotation);
+      let localAxis = axis, best = -1;
+      for (const [k, dir] of [['x', new THREE.Vector3(1, 0, 0)], ['y', new THREE.Vector3(0, 1, 0)], ['z', new THREE.Vector3(0, 0, 1)]]) {
+        const align = Math.abs(dir.applyQuaternion(q).dot(worldAxis));
+        if (align > best) { best = align; localAxis = k; }
+      }
+      m.scale[localAxis] = Math.max(0.01, m.scale[localAxis] * factor);
       this.updateObjectTransform(id);
     }
-    this.updateHighlights();
+    refreshTransformHighlights(this);
     this.updateHud();
   }
 
@@ -1340,11 +1604,12 @@ export class SceneManager {
       mesh.invalidateCache();
       this.rebuildThreeMesh(mesh.id);
     }
-    this.updateHighlights();
+    refreshTransformHighlights(this);
     this.updateHud();
   }
 
   scaleSelectionAxis(axis, factor) {
+    if (this.isGroupMode()) { this.scaleGroupAxis(axis, factor); return; }
     const sel = this.selection;
     if (!sel) return;
     const mesh = this.getMesh(sel.meshId);
@@ -1371,7 +1636,7 @@ export class SceneManager {
       this.rebuildThreeMesh(mesh.id);
     }
     this.applyScaleSnap(axis);
-    this.updateHighlights();
+    refreshTransformHighlights(this);
     this.updateHud();
   }
 
@@ -1409,7 +1674,7 @@ export class SceneManager {
       mesh.invalidateCache();
       this.rebuildThreeMesh(mesh.id);
     }
-    this.updateHighlights();
+    refreshTransformHighlights(this);
     this.updateHud();
   }
 
@@ -1428,7 +1693,7 @@ export class SceneManager {
       m.rotation.setFromQuaternion(curQ);
       this.updateObjectTransform(id);
     }
-    this.updateHighlights();
+    refreshTransformHighlights(this);
     this.updateHud();
   }
 
@@ -1455,6 +1720,14 @@ export class SceneManager {
 
   // === TOOLS ===
   executeTool(toolId, options = {}) {
+    // These interactive tools acquire their targets from the canvas AFTER
+    // activation. An edge selected for an earlier operation must not remain
+    // highlighted when one of them starts. Preserve selections for tools
+    // that actually consume preselected edges (bevel, bridge, extrude, etc.).
+    const canvasTargetTools = new Set(['cut_loop', 'draw_cut', 'draw_face', 'add_vertex']);
+    if (canvasTargetTools.has(toolId) && this.selection?.type === 'edge' && this.selection.indices?.length) {
+      this.clearSelection();
+    }
     this._runTool(toolId, options);
     // Multi-select is a staging mode: once a tool acts on the group it closes.
     // Selection tools (select loop/ring/shell) only change what's selected, so
@@ -1528,58 +1801,66 @@ export class SceneManager {
       this.removeMesh(sel.meshId);
       this.clearSelection();
     } else if (sel.type === 'face') {
-      mesh.faces = mesh.faces.filter((_, i) => !sel.indices.includes(i));
-      mesh.invalidateCache();
-      this.rebuildThreeMesh(mesh.id);
+      for (const fi of [...sel.indices].sort((a, b) => b - a)) removeFaceByIndex(mesh, fi);
+      cleanupCommittedTopology(mesh);
+      if (!mesh.faces.length) this.removeMesh(mesh.id);
+      else this.rebuildThreeMesh(mesh.id);
       this.clearSelection();
     } else if (sel.type === 'vertex') {
-      const toDelete = new Set(sel.indices.map(i => mesh.vertices[i]?.id).filter(Boolean));
-      mesh.explicitEdges = mesh.explicitEdges.filter(e => !toDelete.has(e.v1) && !toDelete.has(e.v2));
-      mesh.faces = mesh.faces.filter(f => !f.some(vid => toDelete.has(vid)));
-      mesh.vertices = mesh.vertices.filter(v => !toDelete.has(v.id));
-      mesh.invalidateCache();
-      this.rebuildThreeMesh(mesh.id);
+      const toDelete = new Set(sel.indices.map(i => mesh.vertices[i]?.id).filter(id => id != null));
+      // Removing a vertex invalidates its incident faces. Sweep the remaining
+      // topology so no loose verts or edges survive.
+      for (let fi = mesh.faces.length - 1; fi >= 0; fi--) {
+        if (mesh.faces[fi].some(id => toDelete.has(id))) removeFaceByIndex(mesh, fi);
+      }
+      cleanupCommittedTopology(mesh);
+      if (!mesh.faces.length) this.removeMesh(mesh.id);
+      else this.rebuildThreeMesh(mesh.id);
       this.clearSelection();
     } else if (sel.type === 'edge') {
+      // Edges are FACE BORDERS, not independent drawable lines.
       const edges = mesh.getEdges();
       const selected = sel.indices.map(i => edges[i]).filter(Boolean);
-      const dissolve = (a, b) => {
-        const adjacent = [];
-        for (let fi = 0; fi < mesh.faces.length; fi++) {
-          const face = mesh.faces[fi];
-          const i = face.findIndex((v, j) => (v === a && face[(j + 1) % face.length] === b) ||
-            (v === b && face[(j + 1) % face.length] === a));
-          if (i >= 0) adjacent.push({ fi, face, i });
+      // Only DIVIDING edges are deleted, and their two faces merge into one.
+      // Face borders (open edges, edges where faces meet at an angle) stay.
+      const selectedKeys = [...new Set(selected.map(e =>
+        `${Math.min(e.v1, e.v2)},${Math.max(e.v1, e.v2)}`))];
+      // A merge changes face indices and can make another selected edge
+      // mergeable. Retry pending edges until a complete pass makes no progress.
+      const pending = new Set(selectedKeys);
+      let changed = false;
+      let progress;
+      do {
+        progress = false;
+        for (const key of [...pending]) {
+          const [a, b] = key.split(',').map(Number);
+          const adjacent = adjacentFacesForBoundary(mesh, a, b).length;
+          // Already removed as part of a longer dividing line merged earlier.
+          if (adjacent === 0) { pending.delete(key); continue; }
+          if (adjacent !== 2) continue;
+          if (!dissolveSharedBoundary(mesh, a, b, { requireDivider: true })) continue;
+          pending.delete(key);
+          progress = true;
+          changed = true;
         }
-        if (adjacent.length !== 2) return false;
-        const walk = ({ face, i }) => {
-          const path = [];
-          for (let j = (i + 1) % face.length; ; j = (j + 1) % face.length) {
-            path.push(face[j]);
-            if (j === i) break;
-          }
-          return path;
-        };
-        const p = walk(adjacent[0]), q = walk(adjacent[1]);
-        if (p[0] !== q[q.length - 1] || p[p.length - 1] !== q[0]) return false;
-        const merged = [...p, ...q.slice(1, -1)];
-        if (merged.length < 3 || new Set(merged).size !== merged.length) return false;
-        mesh.faces[adjacent[0].fi] = merged;
-        mesh.faces.splice(adjacent[1].fi, 1);
-        return true;
-      };
-      for (const e of selected) {
-        if (dissolve(e.v1, e.v2)) continue;
-        mesh.hiddenEdges.push({ v1: Math.min(e.v1, e.v2), v2: Math.max(e.v1, e.v2), user: true });
+      } while (progress && pending.size);
+      if (changed) {
+        resolveLegacyDeletedBorders(mesh);
+        cleanupCommittedTopology(mesh);
+        this.rebuildThreeMesh(mesh.id);
       }
-      const hiddenKeys = new Set(mesh.hiddenEdges.map(h => `${h.v1},${h.v2}`));
-      mesh.explicitEdges = mesh.explicitEdges.filter(e => {
-        const k = `${Math.min(e.v1, e.v2)},${Math.max(e.v1, e.v2)}`;
-        return !hiddenKeys.has(k);
-      });
-      mesh.invalidateCache();
-      this.rebuildThreeMesh(mesh.id);
-      this.clearSelection();
+      // A rejected dissolve must not pretend that deletion succeeded.
+      // Keep the selected edges available for a different operation.
+      if (pending.size) {
+        const remaining = mesh.getEdges();
+        const indices = remaining.map((edge, i) =>
+          pending.has(`${Math.min(edge.v1, edge.v2)},${Math.max(edge.v1, edge.v2)}`) ? i : -1
+        ).filter(i => i >= 0);
+        if (indices.length) {
+          this.selection = { meshId: mesh.id, type: 'edge', indices };
+          this.updateHighlights?.();
+        } else this.clearSelection();
+      } else this.clearSelection();
     }
     this.updateStats();
   }
@@ -1590,7 +1871,14 @@ export class SceneManager {
     const sel = this.selection;
     if (!sel.meshId || sel.type !== 'object') return;
     const mesh = this.getMesh(sel.meshId);
-    if (!mesh || !mesh.primitiveType) return;
+    if (!mesh) return;
+    if (!mesh.primitiveType) {
+      segmentEditedMesh(mesh, { x: segX, y: segY, z: segZ });
+      this.rebuildThreeMesh(mesh.id);
+      this.updateHighlights();
+      this.updateStats();
+      return;
+    }
     const newMesh = createPrimitiveSegments(mesh.primitiveType, segX, segY, segZ, primitiveParams || mesh.primitiveParams || {});
     newMesh.id = mesh.id;
     newMesh.name = mesh.name;
@@ -1786,8 +2074,10 @@ export class SceneManager {
       .map((face) => face.filter((id, i) => id !== face[(i + face.length - 1) % face.length]))
       .filter((face) => face.length >= 3 && new Set(face).size === face.length);
     mesh.vertices = mesh.vertices.filter(v => !toMerge.has(v.id));
-    mesh.invalidateCache();
-    this.rebuildThreeMesh(mesh.id);
+    resolveLegacyDeletedBorders(mesh);
+    cleanupCommittedTopology(mesh);
+    if (!mesh.faces.length) this.removeMesh(mesh.id);
+    else this.rebuildThreeMesh(mesh.id);
     this.clearSelection();
   }
 
@@ -1809,7 +2099,10 @@ export class SceneManager {
     const threshold = pixels * worldPerPixel * localPerWorld;
     const snapshot = this.captureSnapshot();
     if (!mergeVerticesWithin(mesh, threshold)) return;
+    resolveLegacyDeletedBorders(mesh);
+    cleanupCommittedTopology(mesh);
     this.pushUndoSnapshot(snapshot);
+    if (!mesh.faces.length) { this.removeMesh(mesh.id); this.clearSelection(); return; }
     this.rebuildThreeMesh(mesh.id);
     this.setSelection({ meshId: mesh.id, type: 'object', indices: [] });
     this.updateStats();
@@ -2130,6 +2423,11 @@ export class SceneManager {
       updateObjectAxisArrows(this);
       updateDrawFaceGrid(this);
       this._updateSelectionReveal();
+      if (this._interactionHighlightsDirty && !this._heavyEdit) {
+        this._interactionHighlightsDirty = false;
+        this.updateHighlights();
+      }
+      syncObjectHighlightTransforms(this);
       this.renderer.render(this.scene, this.camera);
     } catch (err) {
       this._reportGraphicsError(err?.message || String(err));

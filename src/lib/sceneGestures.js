@@ -3,6 +3,61 @@ import { sculptGrabStart, sculptGrabMove } from './sculptTools';
 import { theme } from './theme';
 import { beginFreeScale, updateFreeScale, updateFreeRotation } from '@/lib/freeTransforms';
 import { beginCameraTouch, endCameraTouch } from '@/lib/cameraTouchSession';
+import { discardTapMotion, resetCameraTouchSpeed } from '@/lib/cameraMotion';
+
+// How long one finger may move alone before a two-finger gesture is read as
+// "one finger anchored" (pinch / twist). Fingers never land and start moving
+// at the same instant; without this wait a two-finger drag whose second finger
+// lagged a few frames looked like a twist and rotated the object.
+const LONE_FINGER_WAIT_MS = 140;
+
+// On-screen direction of each axis a two-finger drag can scale along: the
+// object's own axes for a whole object, world axes otherwise. Each entry is a
+// unit screen direction plus how many pixels one world unit along it covers.
+function dragAxisFrames(sm, localAxes) {
+  const rect = sm.renderer.domElement.getBoundingClientRect();
+  const toScreen = (v) => {
+    const p = v.clone().project(sm.camera);
+    return { x: (p.x * 0.5 + 0.5) * rect.width, y: (-p.y * 0.5 + 0.5) * rect.height };
+  };
+  const center = sm.getSelectionCenter();
+  const mesh = sm.getMesh(sm.selection.meshId);
+  const q = localAxes && mesh ? new THREE.Quaternion().setFromEuler(mesh.rotation) : new THREE.Quaternion();
+  const probe = Math.max(0.001, sm.cameraDist * 0.05);
+  const a = toScreen(center);
+  const frames = {};
+  for (const [axis, dir] of [['x', new THREE.Vector3(1, 0, 0)], ['y', new THREE.Vector3(0, 1, 0)], ['z', new THREE.Vector3(0, 0, 1)]]) {
+    const b = toScreen(center.clone().addScaledVector(dir.applyQuaternion(q), probe));
+    const sx = b.x - a.x, sy = b.y - a.y;
+    const len = Math.hypot(sx, sy);
+    frames[axis] = { ux: len ? sx / len : 0, uy: len ? sy / len : 0, pxPerUnit: len / probe };
+  }
+  return frames;
+}
+
+// Size of the selection along one scale axis, in world units: along the
+// object's own axis for a whole object, along the world axis otherwise.
+function extentAlongAxis(sm, axis, localAxes) {
+  const mesh = sm.getMesh(sm.selection.meshId);
+  if (localAxes && mesh && mesh.vertices.length) {
+    let min = Infinity, max = -Infinity;
+    for (const v of mesh.vertices) { if (v[axis] < min) min = v[axis]; if (v[axis] > max) max = v[axis]; }
+    return (max - min) * Math.abs(mesh.scale[axis] || 1);
+  }
+  if (sm.isGroupMode?.()) {
+    // The whole multi-selection, in world space.
+    const box = new THREE.Box3();
+    for (const id of sm.selectedMeshIds) {
+      const m = sm.getMesh(id);
+      if (!m) continue;
+      const wm = sm.getWorldMatrix(m);
+      for (const v of m.vertices) box.expandByPoint(new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(wm));
+    }
+    if (!box.isEmpty()) return box.getSize(new THREE.Vector3())[axis];
+  }
+  const bounds = sm.getSelectionBounds();
+  return { x: bounds.sx, y: bounds.sy, z: bounds.sz }[axis] || 0;
+}
 
 // Touch gesture handling for SceneManager, extracted so SceneManager.js stays
 // within the file size limit. Behavior is unchanged from when it lived inline.
@@ -83,6 +138,13 @@ export function applySceneGestures(SceneManager) {
   };
 
   P.onPointerDown = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
+    // Armed eyedropper: the first finger (or left click) is a color pick, not
+    // a paint stroke, selection or camera move. It resolves on release.
+    if (this.eyedropper && !this._eyedropDown && this.pointers.size === 0 && (e.pointerType !== 'mouse' || e.button === 0)) {
+      e.preventDefault();
+      this._eyedropDown = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      return;
+    }
     if (e.pointerType === 'mouse') return this.onMouseDown(e);
     e.preventDefault();
     try { this.renderer.domElement.setPointerCapture(e.pointerId); } catch {}
@@ -117,7 +179,7 @@ export function applySceneGestures(SceneManager) {
       return;
     }
 
-    if (this.paintTool && this.paintTool.tool !== 'fill' && this.pointers.size === 1) {
+    if (this.paintTool && this.paintTool.tool !== 'fill' && !this.multiSelect && this.pointers.size === 1) {
       clearTimeout(this.pressHoldTimer);
       // Paint only starts on the object itself; a finger on empty space runs
       // the camera so the view stays navigable while brush/spray are active.
@@ -143,7 +205,8 @@ export function applySceneGestures(SceneManager) {
         this.gestureData = { lastX: e.clientX, lastY: e.clientY };
         // An unapplied color preview never sticks: a stroke discards it first.
         this.cancelPaintPreview();
-        this.pushUndo();
+        // Nothing commits until Apply; the stroke joins the pending batch.
+        this.beginPendingPaint();
         this.paintAt(e.clientX, e.clientY);
         return;
       }
@@ -249,7 +312,7 @@ export function applySceneGestures(SceneManager) {
         this.gestureData = null;
         this.pressHoldTimer = setTimeout(() => {
           if (this.movedSignificantly || this.pointers.size !== 1) return;
-          if (this.surfaceMode) return; // no multi-select inside Surface mode
+          if (this.surfaceMode && this.surfaceSection === 'texture') return;
           this.gesture = 'multiselect_hold';
           this.gestureData = null;
           this._msPainted = true;
@@ -289,7 +352,7 @@ export function applySceneGestures(SceneManager) {
       // space → marquee selection frame.
       this.pressHoldTimer = setTimeout(() => {
         if (!this.movedSignificantly && this.pointers.size === 1) {
-          if (this.surfaceMode) return; // no multi-select / marquee inside Surface mode
+          if (this.surfaceMode && this.surfaceSection === 'texture') return;
           if (onGeometry) {
             this.enterMultiSelect();
             if (this.selectionMode === 'object') {
@@ -391,8 +454,7 @@ export function applySceneGestures(SceneManager) {
       const moved = Math.hypot(e.clientX - this._cameraHandoffGuard.x, e.clientY - this._cameraHandoffGuard.y);
       if (moved < 7) return;
       this._cameraHandoffGuard = null;
-      this._cameraOrbitVelocity = null;
-      this._cameraLastMoveAt = null;
+      resetCameraTouchSpeed(this);
     }
 
     const totalMove = Math.hypot(e.clientX - ptr.startX, e.clientY - ptr.startY);
@@ -525,7 +587,7 @@ export function applySceneGestures(SceneManager) {
         const worldDelta = this.screenToWorldDrag(
           this.gestureData.startX, this.gestureData.startY,
           e.clientX, e.clientY, origin
-        );
+        ).multiplyScalar(this.precisionFactor ?? 1);
         if (this.freeMove) {
           this.activeAxis = null;
           // Use the entire drag, not tiny incremental deltas that grid snapping
@@ -571,6 +633,9 @@ export function applySceneGestures(SceneManager) {
         // requiring both to move meant it never engaged at all.
         const movedPointers = pts.filter((p) => Math.hypot(p.x - p.startX, p.y - p.startY) > 3).length;
         if (movedPointers === 0) return;
+        const now = performance.now();
+        if (!this.gestureData.firstMoveAt) this.gestureData.firstMoveAt = now;
+        if (movedPointers === 1 && now - this.gestureData.firstMoveAt < LONE_FINGER_WAIT_MS) return;
         // Pointer moves arrive one finger at a time. Never commit scaling from
         // the first moved-finger event: that transient distance change made a
         // same-direction slide look like a huge pinch and caused the jump. A
@@ -617,19 +682,28 @@ export function applySceneGestures(SceneManager) {
           this.gestureData.mode = 'axis_scale';
           this.activeAction = 'scale';
           this.pushUndo();
-          const center = this.getSelectionCenter();
-          const worldDeltaRaw = this.screenToWorldDrag(
-            this.gestureData.startMidX, this.gestureData.startMidY, midX, midY, center
-          );
+          // Scale along whichever axis lines up best with the drag ON SCREEN.
+          // Axes pointing almost straight at the camera are skipped: their
+          // screen direction is just noise.
           const axMesh = this.getMesh(this.selection.meshId);
           this.gestureData.localAxes = this.selection.type === 'object' && axMesh && !this.isGroupMode();
-          const worldDelta = this.gestureData.localAxes ? this.worldToLocalDelta(axMesh, worldDeltaRaw) : worldDeltaRaw;
-          const ax = Math.abs(worldDelta.x), ay = Math.abs(worldDelta.y), az = Math.abs(worldDelta.z);
-          this.gestureData.axis = ax >= ay && ax >= az ? 'x' : (ay >= az ? 'y' : 'z');
-          this.activeAxis = this.gestureData.axis;
+          const frames = dragAxisFrames(this, this.gestureData.localAxes);
+          const maxPx = Math.max(frames.x.pxPerUnit, frames.y.pxPerUnit, frames.z.pxPerUnit);
+          const dragLen = Math.hypot(panDx, panDy) || 1;
+          let bestAxis = 'x', bestScore = -1;
+          for (const axis of ['x', 'y', 'z']) {
+            const fr = frames[axis];
+            if (fr.pxPerUnit < maxPx * 0.3) continue;
+            const score = Math.abs(panDx * fr.ux + panDy * fr.uy) / dragLen;
+            if (score > bestScore) { bestScore = score; bestAxis = axis; }
+          }
+          this.gestureData.axis = bestAxis;
+          this.gestureData.axisFrame = frames[bestAxis];
+          this.activeAxis = bestAxis;
           this.gestureData.axisSign = 1;
-          const bounds = this.getSelectionBounds();
-          const extent = { x: bounds.sx, y: bounds.sy, z: bounds.sz }[this.gestureData.axis] || 0;
+          // The object's own size along that axis (not its on-screen box,
+          // which after a rotation can be far smaller and made scaling race).
+          const extent = extentAlongAxis(this, bestAxis, this.gestureData.localAxes);
           // Scale against the full selected extent. Using one quarter of the
           // extent multiplied finger travel by four and made the object shoot
           // across the viewport as soon as an axis-scale gesture engaged.
@@ -693,7 +767,7 @@ export function applySceneGestures(SceneManager) {
             : ay >= az
               ? new THREE.Vector3(0, Math.sign(camDir.y) || 1, 0)
               : new THREE.Vector3(0, 0, Math.sign(camDir.z) || 1);
-          const rotDelta = angleDelta * (theme.gestureRotateSensitivity ?? 1);
+          const rotDelta = angleDelta * (theme.gestureRotateSensitivity ?? 1) * (this.precisionFactor ?? 1);
           this.rotateSelectionAroundAxis(rotDelta, axisVec);
           this.activeRotation = (this.activeRotation || 0) + rotDelta;
           if (!this.activeRotationAxis) {
@@ -703,18 +777,20 @@ export function applySceneGestures(SceneManager) {
           this.gestureData.startAngle = angle;
         }
       } else if (this.gestureData.mode === 'axis_scale') {
-        const center = this.getSelectionCenter();
-        let worldDelta = this.screenToWorldDrag(
-          this.gestureData.startMidX, this.gestureData.startMidY, midX, midY, center
-        );
-        if (this.gestureData.localAxes) {
-          const m = this.getMesh(this.selection.meshId);
-          if (m) worldDelta = this.worldToLocalDelta(m, worldDelta);
-        }
+        // The chosen AXIS still follows the view, but the SCALE SIGN must
+        // follow the user's screen gesture, never the world-axis projection.
+        // Right and up always grow; left and down always shrink, even after
+        // orbiting to the opposite side of the model.
+        const fr = this.gestureData.axisFrame;
+        const dx = midX - this.gestureData.startMidX;
+        const dy = midY - this.gestureData.startMidY;
+        const horizontal = Math.abs(fr?.ux || 0) >= Math.abs(fr?.uy || 0);
+        const screenTravel = horizontal ? dx : -dy;
+        const along = fr && fr.pxPerUnit > 0 ? screenTravel / fr.pxPerUnit : 0;
         // Gesture activation is rebased above, so recognition movement cannot
         // resize the selection. Apply the post-activation drag directly; easing
         // it by half made deliberate scaling feel stuck on a phone.
-        const amount = worldDelta[this.gestureData.axis] * (this.gestureData.axisSign || 1) * (theme.gestureScaleSensitivity ?? 1) * 0.35;
+        const amount = along * (this.gestureData.axisSign || 1) * (theme.gestureScaleSensitivity ?? 1) * 0.35 * (this.precisionFactor ?? 1);
         // Growth is linear in the drag; shrink is hyperbolic (startOffset /
         // (startOffset - amount)), which approaches zero smoothly and never
         // actually reaches it — so a long shrink drag can never snap or
@@ -738,7 +814,7 @@ export function applySceneGestures(SceneManager) {
         const ref = Math.max(60, this.gestureData.scaleRefDist || dist);
         const target = Math.max(
           0.001,
-          1 + (dist - this.gestureData.scaleRefDist) * (theme.gestureScaleSensitivity ?? 1) / ref
+          1 + (dist - this.gestureData.scaleRefDist) * (theme.gestureScaleSensitivity ?? 1) * (this.precisionFactor ?? 1) / ref
         );
         const f = target / (this.gestureData.lastFactor || 1);
         if (Math.abs(f - 1) > 0.001) {
@@ -750,6 +826,15 @@ export function applySceneGestures(SceneManager) {
   };
 
   P.onPointerUp = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
+    if (this._eyedropDown && e.pointerId === this._eyedropDown.id) {
+      const d = this._eyedropDown;
+      this._eyedropDown = null;
+      if (e.type === 'pointerup' && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 12) {
+        const color = this.sampleColorAt(e.clientX, e.clientY);
+        if (color) this.eyedropper?.(color);
+      }
+      return;
+    }
     if (e.pointerType === 'mouse') return this.onMouseUp(e);
     // A finger that never pressed DOWN on the canvas must not be treated as a
     // canvas tap. Dismiss overlays close their layer on press and then unmount,
@@ -769,6 +854,9 @@ export function applySceneGestures(SceneManager) {
       Math.hypot(e.clientX - pointer.startX, e.clientY - pointer.startY) < 22 &&
       (this.gesture === 'orbit' || this.gesture === 'orbit_pending');
     if (quickTap) {
+      // The tap's movement was held back and never shown, so this restore
+      // changes nothing on screen; it only guards against stray input.
+      discardTapMotion(this);
       this.stopCameraMotion();
       this.cameraTheta = this._quickTapCamera.theta;
       this.cameraPhi = this._quickTapCamera.phi;
@@ -892,6 +980,24 @@ export function applySceneGestures(SceneManager) {
           this.updateHud();
           return;
         }
+        // After manipulating a multi-selection, tapping its geometry (or an
+        // adjacent face sharing a selected vertex) clears the entire group.
+        if (this._postMultiActionSelection && tapHitsGeometry) {
+          const hits = this.raycastMeshes(tapNdc.x, tapNdc.y);
+          const meshId = hits.length ? this.findMeshIdByObject(hits[0].object) : null;
+          let attached = this.selectedMeshIds.includes(meshId) || meshId === this.selection.meshId;
+          if (!attached && this.selection.type === 'face' && meshId === this.selection.meshId) attached = true;
+          if (attached) {
+            this._postMultiActionSelection = false;
+            this.exitMultiSelect();
+            this.clearSelection();
+            this.gesture = null;
+            this.gestureData = null;
+            this.activeAction = 'idle';
+            this.updateHud();
+            return;
+          }
+        }
         // A press-hold that just entered multi-select already selected the
         // object under the finger. Running the toggle on release would remove
         // it again, so the object you were holding must stay selected.
@@ -932,7 +1038,10 @@ export function applySceneGestures(SceneManager) {
           this.selectAtScreenPoint(e.clientX, e.clientY);
         }
       }
-      if (this.multiSelect && (this.gesture === 'translate' || this._msManipulated)) this.exitMultiSelect();
+      if (this.multiSelect && (this.gesture === 'translate' || this._msManipulated)) {
+        this._postMultiActionSelection = true;
+        this.exitMultiSelect();
+      }
       this._msManipulated = false;
       this._resumeObjectGesture = false;
       this.activeAction = 'idle';

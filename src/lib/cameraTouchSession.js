@@ -1,3 +1,5 @@
+import { resetCameraTouchSpeed } from '@/lib/cameraMotion';
+
 // Camera lifecycle only: hit testing, selection reach and modeling gestures stay
 // in their existing handlers. Multi-touch can hand back to one-finger orbit
 // without a full lift, but a short movement dead-zone absorbs release wobble.
@@ -7,8 +9,7 @@ export function beginCameraTouch(manager) {
     manager._cameraTouchFrozen = false;
   } else {
     manager._cameraTouchMulti = true;
-    manager._cameraOrbitVelocity = null;
-    manager._cameraGlide = null;
+    resetCameraTouchSpeed(manager);
   }
   return manager._cameraTouchFrozen && manager.cameraGesture;
 }
@@ -18,13 +19,13 @@ export function endCameraTouch(manager, event) {
   const remaining = manager.pointers.size - 1;
   if (event.type !== 'pointerup') manager.stopCameraMotion();
   if (remaining > 0) {
-    manager.stopCameraMotion();
+    // Keep easing in what the fingers already did; only the speed history
+    // (used for the release glide) starts over with the new finger count.
+    resetCameraTouchSpeed(manager);
     if (remaining === 1) {
       const survivor = [...manager.pointers.entries()]
         .find(([id]) => id !== event.pointerId)?.[1];
       manager._cameraTouchMulti = false;
-      manager._cameraOrbitVelocity = null;
-      manager._cameraLastMoveAt = null;
       manager._cameraHandoffGuard = survivor ? { x: survivor.x, y: survivor.y } : null;
       manager.gesture = 'orbit';
       manager.gestureData = null;

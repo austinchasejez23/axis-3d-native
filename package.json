@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "test:boolean": "node scripts/boolean-regression.mjs && node scripts/boolean-edge-regression.mjs",
+    "test:topology": "node scripts/topology-invariants-regression.mjs",
+    "test:highlight": "node scripts/highlight-follow-regression.mjs",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",

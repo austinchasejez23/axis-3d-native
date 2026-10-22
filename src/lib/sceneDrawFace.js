@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { EditableMesh } from '@/lib/EditableMesh';
 import { simplifyDrawFacePath } from '@/lib/drawFacePath';
 import { buildDrawFaceTopology } from '@/lib/drawFaceTopology';
+import { cleanupCommittedTopology } from '@/lib/meshTopologyInvariants';
 import straightenDrawFace from '@/lib/straightenDrawFace';
 import alignDrawFace from '@/lib/alignDrawFace';
 import updateDrawFaceGrid, { disposeDrawFaceGrid } from '@/lib/drawFaceGrid';
@@ -120,14 +121,17 @@ export default function applySceneDrawFace(SceneManager) {
   };
   P.confirmDrawFaces = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     const meshes = (this.drawPreviews || []).map((record) => record.mesh).filter(Boolean);
-    const total = [...this.meshes, ...meshes].reduce((sum, mesh) => sum + mesh.getTriangleCount(), 0);
+    // Incomplete previews must never become stored isolated points or lines.
+    for (const mesh of meshes) cleanupCommittedTopology(mesh);
+    const committed = meshes.filter(mesh => mesh.faces.length > 0);
+    const total = [...this.meshes, ...committed].reduce((sum, mesh) => sum + mesh.getTriangleCount(), 0);
     if (this.triangleLimit && total > this.triangleLimit) { this.cb.onTriangleLimit?.(); return; }
-    if (meshes.length) {
+    if (committed.length) {
       this.pushUndo();
-      for (const mesh of meshes) { this.meshes.push(mesh); this.buildThreeMesh(mesh); }
+      for (const mesh of committed) { this.meshes.push(mesh); this.buildThreeMesh(mesh); }
       this.selectionMode = 'object';
       this.cb.onSelectionModeChange?.('object');
-      this.setSelection({ meshId: meshes[meshes.length - 1].id, type: 'object', indices: [] });
+      this.setSelection({ meshId: committed[committed.length - 1].id, type: 'object', indices: [] });
     }
     this.exitDrawMode();
     this.updateStats();

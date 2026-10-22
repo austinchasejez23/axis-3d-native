@@ -1,8 +1,18 @@
 import * as THREE from 'three';
+import { theme } from './theme';
+
+// Direction default lighting's key light shines in: from above and to the
+// left, so shadows fall out to the side where they can be seen.
+const DEFAULT_KEY_DIRECTION = new THREE.Vector3(5, -8, -1.5).normalize();
 
 // Fit shadow precision to real geometry, not a fixed box around the light icon.
 export default function updateSceneShadowBounds(manager) {
-  const lights = (manager.sceneLights || []).filter((light) => light.shadows);
+  const defaultMode = !!theme.defaultLightingEnabled;
+  let lights = defaultMode ? [] : (manager.sceneLights || []).filter((light) => light.shadows);
+  // Default lighting's key light, fitted the same way as a custom directional.
+  if (defaultMode && theme.shadowsEnabled && manager.dirLight) {
+    lights = [{ id: 'default-key', type: 'directional', range: 20, object: manager.dirLight, target: manager.dirLight.target, direction: DEFAULT_KEY_DIRECTION }];
+  }
   if (!lights.length) {
     manager._shadowBoundsSignature = null;
     return;
@@ -18,7 +28,7 @@ export default function updateSceneShadowBounds(manager) {
       return `${id}:${mesh.visible ? 1 : 0}:${mesh.geometry.uuid}:${p.x},${p.y},${p.z}:${r.x},${r.y},${r.z}:${s.x},${s.y},${s.z}`;
     }).join('|');
     const lightSignature = lights.map((record) =>
-      `${record.id}:${record.type}:${record.range}:${record.rotation.join(',')}:${record.object.shadow.mapSize.x}x${record.object.shadow.mapSize.y}`
+      `${record.id}:${record.type}:${record.range}:${record.direction ? 'key' : record.rotation.join(',')}:${record.object.shadow.mapSize.x}x${record.object.shadow.mapSize.y}`
     ).join('|');
     const signature = `${meshSignature}#${lightSignature}`;
     if (signature === manager._shadowBoundsSignature) return;
@@ -50,7 +60,7 @@ export default function updateSceneShadowBounds(manager) {
     object.shadow.normalBias = Math.min(smallest * 0.02, record.range / object.shadow.mapSize.x * 0.8);
     object.shadow.bias = -0.0002;
     if (record.type === 'directional') {
-      const direction = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(...record.rotation));
+      const direction = record.direction ? record.direction.clone() : new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(...record.rotation));
       const coverage = bounds.clone();
       // Include the actual ground projection of the geometry, not the whole ground plane.
       if (direction.y < -0.01) for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y]) for (const z of [bounds.min.z, bounds.max.z]) {
@@ -70,5 +80,13 @@ export default function updateSceneShadowBounds(manager) {
       object.shadow.camera.far = record.range;
     }
     object.shadow.camera.updateProjectionMatrix();
+  }
+  // The ground that catches shadows covers the scene and where its shadows
+  // fall, wherever the objects are (it was a fixed 40×40 square at the origin).
+  if (manager.shadowGround) {
+    const reach = Math.max(span * 4, 20);
+    const center = bounds.getCenter(new THREE.Vector3());
+    manager.shadowGround.position.set(center.x, 0, center.z);
+    manager.shadowGround.scale.setScalar(Math.max(1, (reach * 2) / 40));
   }
 }

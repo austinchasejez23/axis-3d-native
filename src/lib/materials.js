@@ -240,10 +240,9 @@ export function createMaterial(mesh, viewportMode = {}) {
   // Boost keeps open surfaces double-sided, but closed solids only shade their
   // outward-facing triangles. Disabling the toggle restores the original view.
   mat.side = theme.renderBoostEnabled && isClosedSurface(mesh) ? THREE.FrontSide : THREE.DoubleSide;
-  // Geometry-only imports start as actual wireframes. Their invisible depth
-  // surface still handles front/back edge occlusion and remains raycastable;
-  // no source shading, reflections or source color is drawn.
-  if (mesh.importedWireframeOnly) mat.colorWrite = false;
+  // Imported files carry geometry only, NOT their source materials or normals.
+  // Still draw Axis's neutral editable surface behind the structural edges;
+  // colorWrite=false made complex imports appear hollow/black.
   mat.needsUpdate = true;
   return objectShadowMaterial(mat);
 }
@@ -309,12 +308,14 @@ function _createMaterialInner(mesh) {
 }
 
 export function applyShadows(sm) {
-  const physicalLights = sm.sceneLights || [];
-  const on = physicalLights.length > 0 ? physicalLights.some((light) => light.shadows) : !!theme.shadowsEnabled;
-  const intensity = physicalLights.length > 0 ? 1 : Math.max(0, Math.min(1, theme.shadowIntensity ?? 0.5));
+  const { on, intensity } = sm._shadowState ? sm._shadowState() : { on: !!theme.shadowsEnabled, intensity: theme.shadowIntensity ?? 0.5 };
   sm.renderer.shadowMap.enabled = on;
   sm.renderer.shadowMap.needsUpdate = true;
-  if (sm.dirLight) sm.dirLight.castShadow = physicalLights.length === 0 && on;
+  // Default lighting's key light casts the shadows while Default is on.
+  if (sm.dirLight) {
+    sm.dirLight.castShadow = !!theme.defaultLightingEnabled && on;
+    sm.dirLight.shadow.intensity = intensity;
+  }
   if (sm.shadowGround) {
     sm.shadowGround.visible = on;
     sm.shadowGround.material.opacity = on ? intensity : 0;
@@ -335,7 +336,7 @@ export function applyShine(sm) {
     obj.material.dispose();
     obj.material = createMaterial(mesh, sm.viewportDisplayMode);
     obj.mesh.material = obj.material;
-    if (mesh.importedWireframeOnly) obj.material.colorWrite = !obj.wireframe?.visible;
+    // Imported geometry keeps its neutral visible surface with or without wires.
   }
   if (sm.refreshReflectionEnvMaps) sm.refreshReflectionEnvMaps();
   // Fill levels and environment strength are owned by the lighting controls, so
@@ -346,12 +347,9 @@ export function applyShine(sm) {
 // Toggle every object's wireframe overlay visibility from the theme setting.
 export function applyWireframe(sm) {
   const on = !!theme.wireframeEnabled && !sm.wireframesHidden;
-  for (const [id, obj] of sm.threeObjects) {
-    const mesh = sm.getMesh(id);
+  for (const obj of sm.threeObjects.values()) {
     if (obj.wireframe) obj.wireframe.visible = on && !obj.focusProxyGeometry;
-    // When wireframe is manually hidden, show the neutral editable solid so
-    // the geometry doesn't disappear. Restore wire-only when shown again.
-    if (obj.material && mesh?.importedWireframeOnly) obj.material.colorWrite = !obj.wireframe?.visible;
+    // Wireframe visibility must never turn an imported object's faces invisible.
   }
 }
 
@@ -362,6 +360,6 @@ export function updateObjectMaterial(sm, meshId) {
   obj.material.dispose();
   obj.material = createMaterial(mesh);
   obj.mesh.material = obj.material;
-  if (mesh.importedWireframeOnly) obj.material.colorWrite = !obj.wireframe?.visible;
+  // Changing a material must not hide the imported mesh surface.
   if (sm.refreshReflectionEnvMaps) sm.refreshReflectionEnvMaps();
 }

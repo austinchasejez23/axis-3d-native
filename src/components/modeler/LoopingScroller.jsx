@@ -3,17 +3,23 @@ import ScrollerTunnelShadows from './ScrollerTunnelShadows';
 
 const COPIES = 5;
 const MIDDLE = 2;
+const DRAG_START = 6;      // px of sideways travel before a touch becomes a swipe
+const FRICTION = 0.995;    // momentum decay per ms
+const MIN_SPEED = 0.02;    // px/ms where momentum stops
 
 // Endless sideways strip. When the items are wider than the strip they are
-// rendered COPIES times and, whenever scrolling settles, the view jumps by
-// whole copies back to the middle one — so the last item is followed by the
-// first, in both directions. When everything already fits, a single copy is
-// shown and nothing loops.
+// rendered COPIES times and the view is kept inside the middle copy by jumping
+// whole copies, so the last item is followed by the first in both directions.
+// When everything already fits, a single copy is shown and nothing loops.
+//
+// Swiping is done here, not by the browser: the modeler turns off native touch
+// panning on every button and slider, which left these strips unswipeable. A
+// finger anywhere on the strip (except on a slider's track) drags it, with
+// momentum on release. A drag never fires the button it started on.
 //   swipe       finger/wheel scrolling on (false: only step() moves it)
-//   snapCenter  items carry snap-center so the view always rests on one item
-//   shadows     edge fades (shadowWidth / shadowAlpha) hinting the strip loops;
-//               they span the whole outer box, padding from `className` included
-// The ref exposes step(-1 | 1): move one item and center it.
+//   snapCenter  the view comes to rest centered on an item
+//   shadows     edge fades (shadowWidth / shadowAlpha) hinting the strip loops
+// The ref exposes step(-1 | 1) and goTo(i).
 const LoopingScroller = forwardRef(/** @param {{
   children?: import('react').ReactNode,
   swipe?: boolean,
@@ -34,6 +40,10 @@ const LoopingScroller = forwardRef(/** @param {{
   const innerRef = useRef(null);
   const timer = useRef(null);
   const pending = useRef(null);
+  const drag = useRef(null);
+  const busy = useRef(false);
+  const fling = useRef(0);
+  const swallowClick = useRef(false);
   const [copies, setCopies] = useState(1);
   const copiesRef = useRef(1);
   copiesRef.current = copies;
@@ -60,17 +70,24 @@ const LoopingScroller = forwardRef(/** @param {{
     el.scrollLeft = snapCenter ? first.offsetLeft + first.offsetWidth / 2 - el.clientWidth / 2 : first.offsetLeft;
   }, [looping, count, snapCenter]);
 
-  // Once scrolling stops, jump by whole copies back into the middle one.
-  const settle = useCallback(() => {
-    pending.current = null;
+  // Jump by whole copies back into the middle one; returns how far it moved.
+  const wrap = useCallback(() => {
     const el = scrollRef.current;
     const inner = innerRef.current;
-    if (!el || !inner || copiesRef.current < COPIES) return;
+    if (!el || !inner || copiesRef.current < COPIES) return 0;
     const period = inner.getBoundingClientRect().width / COPIES;
     const x = el.scrollLeft;
     const next = (((x % period) + period) % period) + period * MIDDLE;
-    if (Math.abs(next - x) > 0.5) el.scrollLeft = next;
+    if (Math.abs(next - x) <= 0.5) return 0;
+    el.scrollLeft = next;
+    return el.scrollLeft - x;
   }, []);
+
+  const settle = useCallback(() => {
+    if (busy.current) return;
+    pending.current = null;
+    wrap();
+  }, [wrap]);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -78,6 +95,7 @@ const LoopingScroller = forwardRef(/** @param {{
     return () => {
       el.removeEventListener('scrollend', settle);
       clearTimeout(timer.current);
+      cancelAnimationFrame(fling.current);
     };
   }, [settle]);
 
@@ -87,46 +105,126 @@ const LoopingScroller = forwardRef(/** @param {{
     timer.current = setTimeout(settle, 140);
   };
 
+  const centerOn = useCallback((idx) => {
+    const el = scrollRef.current;
+    const k = innerRef.current.children[idx];
+    if (!el || !k) return;
+    pending.current = idx;
+    el.scrollTo({ left: k.offsetLeft + k.offsetWidth / 2 - el.clientWidth / 2, behavior: 'smooth' });
+    clearTimeout(timer.current);
+    timer.current = setTimeout(settle, 500);
+  }, [settle]);
+
+  const nearest = () => {
+    const el = scrollRef.current;
+    const mid = el.scrollLeft + el.clientWidth / 2;
+    let idx = 0;
+    let best = Infinity;
+    [...innerRef.current.children].forEach((k, i) => {
+      const d = Math.abs(k.offsetLeft + k.offsetWidth / 2 - mid);
+      if (d < best) { best = d; idx = i; }
+    });
+    return idx;
+  };
+
+  // Hand the strip back once a drag (and its momentum) is over.
+  const release = useCallback(() => {
+    const el = scrollRef.current;
+    busy.current = false;
+    if (!el) return;
+    el.style.scrollSnapType = '';
+    if (snapCenter) centerOn(nearest());
+    else settle();
+  }, [snapCenter, centerOn, settle]);
+
+  const glide = useCallback((speed) => {
+    const el = scrollRef.current;
+    let v = speed;
+    let last = performance.now();
+    const frame = (now) => {
+      const dt = Math.min(32, now - last);
+      last = now;
+      v *= Math.pow(FRICTION, dt);
+      el.scrollLeft -= v * dt;
+      wrap();
+      if (Math.abs(v) > MIN_SPEED) fling.current = requestAnimationFrame(frame);
+      else release();
+    };
+    if (Math.abs(v) > MIN_SPEED) fling.current = requestAnimationFrame(frame);
+    else release();
+  }, [wrap, release]);
+
+  const onPointerDown = (e) => {
+    if (!swipe || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    // A slider's track belongs to the slider.
+    if (e.target.closest?.('input[type="range"]')) return;
+    cancelAnimationFrame(fling.current);
+    if (busy.current) release();
+    drag.current = { id: e.pointerId, x0: e.clientX, y0: e.clientY, s0: scrollRef.current.scrollLeft, active: false, lastX: e.clientX, lastT: e.timeStamp, v: 0 };
+  };
+
+  const onPointerMove = (e) => {
+    const d = drag.current;
+    if (!d || e.pointerId !== d.id) return;
+    const el = scrollRef.current;
+    const dx = e.clientX - d.x0;
+    if (!d.active) {
+      if (Math.abs(dx) > DRAG_START && Math.abs(dx) > Math.abs(e.clientY - d.y0)) {
+        d.active = true;
+        busy.current = true;
+        el.style.scrollSnapType = 'none';
+        try { el.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+      } else {
+        return;
+      }
+    }
+    el.scrollLeft = d.s0 - dx;
+    d.s0 += wrap();
+    const dt = e.timeStamp - d.lastT;
+    if (dt > 0) d.v = 0.8 * ((e.clientX - d.lastX) / dt) + 0.2 * d.v;
+    d.lastX = e.clientX;
+    d.lastT = e.timeStamp;
+  };
+
+  const onPointerEnd = (e) => {
+    const d = drag.current;
+    if (!d || e.pointerId !== d.id) return;
+    drag.current = null;
+    if (!d.active) return;
+    swallowClick.current = true;
+    setTimeout(() => { swallowClick.current = false; }, 0);
+    // A finger that stopped before lifting should not glide.
+    glide(e.timeStamp - d.lastT > 80 ? 0 : d.v);
+  };
+
+  const onClickCapture = (e) => {
+    if (!swallowClick.current) return;
+    swallowClick.current = false;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
   useImperativeHandle(ref, () => ({
     step(dir) {
-      const el = scrollRef.current;
-      const kids = [...innerRef.current.children];
-      let idx = pending.current;
-      if (idx == null) {
-        const mid = el.scrollLeft + el.clientWidth / 2;
-        let best = Infinity;
-        kids.forEach((k, i) => {
-          const d = Math.abs(k.offsetLeft + k.offsetWidth / 2 - mid);
-          if (d < best) { best = d; idx = i; }
-        });
-      }
-      idx = Math.max(0, Math.min(kids.length - 1, idx + dir));
-      pending.current = idx;
-      const k = kids[idx];
-      el.scrollTo({ left: k.offsetLeft + k.offsetWidth / 2 - el.clientWidth / 2, behavior: 'smooth' });
-      clearTimeout(timer.current);
-      timer.current = setTimeout(settle, 500);
+      const kids = innerRef.current.children;
+      const idx = pending.current ?? nearest();
+      centerOn(Math.max(0, Math.min(kids.length - 1, idx + dir)));
     },
     // Bring item `i` (0-based within one copy) to the center, using whichever
     // copy is nearest to where the view is now.
     goTo(i) {
       const el = scrollRef.current;
-      const kids = [...innerRef.current.children];
       const mid = el.scrollLeft + el.clientWidth / 2;
       let idx = i;
       let best = Infinity;
-      kids.forEach((k, j) => {
+      [...innerRef.current.children].forEach((k, j) => {
         if (j % count !== i) return;
         const d = Math.abs(k.offsetLeft + k.offsetWidth / 2 - mid);
         if (d < best) { best = d; idx = j; }
       });
-      pending.current = idx;
-      const k = kids[idx];
-      el.scrollTo({ left: k.offsetLeft + k.offsetWidth / 2 - el.clientWidth / 2, behavior: 'smooth' });
-      clearTimeout(timer.current);
-      timer.current = setTimeout(settle, 500);
+      centerOn(idx);
     },
-  }), [settle, count]);
+  }), [centerOn, count]);
 
   const list = Array.from({ length: copies }, (_, c) =>
     items.map((item, i) => (
@@ -141,8 +239,13 @@ const LoopingScroller = forwardRef(/** @param {{
       <div
         ref={scrollRef}
         onScroll={onScroll}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
+        onClickCapture={onClickCapture}
         className={`${swipe ? 'overflow-x-auto' : 'overflow-x-hidden'} no-scrollbar ${snapCenter ? 'snap-x snap-mandatory' : ''}`}
-        style={{ touchAction: swipe ? 'pan-x' : 'pan-y' }}
+        style={{ touchAction: 'none' }}
       >
         <div ref={innerRef} className={`flex w-max ${innerClass}`}>{list}</div>
       </div>

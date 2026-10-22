@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { Check, X, Layers, Move3D, CircleDot } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
-import { toDisplayUnit, fromDisplayUnit } from '@/lib/units';
 import { toolMemory } from '@/lib/toolMemory';
 import { RadialArrayIcon } from '@/lib/toolIcons';
 import HorizontalChevronStepper from './HorizontalChevronStepper';
 import ModelingPanel from '@/components/modeler/ModelingPanel';
 
 export default function RadialArrayPanel({ onPreview, onApply, onCancel }) {
-  const { uiColor, highlightColor, unit } = useTheme();
+  const { uiColor, highlightColor } = useTheme();
   const [values, setValues] = useState(() => ({ ...toolMemory.radialArray }));
   const [keypadOpen, setKeypadOpen] = useState(false);
   const update = (change) => {
@@ -42,8 +41,8 @@ export default function RadialArrayPanel({ onPreview, onApply, onCancel }) {
               <HorizontalChevronStepper label="Count" value={values.count} onChange={(count) => update({ count })} step={1} min={2} max={64} color={uiColor} highlightColor={highlightColor} appearance="radial" keypadOpen={keypadOpen} onKeypadOpen={(open = true) => setKeypadOpen(open)} />
             </div>
             <div className="min-w-0 pl-3">
-              <div className="mb-1 flex items-center gap-1 text-[12px] font-semibold" style={{ color: uiColor }}><CircleDot className="h-3.5 w-3.5 shrink-0 opacity-80" />Radius ({unit})</div>
-              <HorizontalChevronStepper label="Radius" value={toDisplayUnit(values.radius ?? 3, unit)} onChange={(radius) => update({ radius: fromDisplayUnit(radius, unit) })} step={toDisplayUnit(0.25, unit)} decimals={unit === 'in' ? 2 : 1} min={0} max={toDisplayUnit(1000, unit)} color={uiColor} highlightColor={highlightColor} appearance="radial" keypadOpen={keypadOpen} onKeypadOpen={(open = true) => setKeypadOpen(open)} />
+              <div className="mb-1 flex items-center gap-1 text-[12px] font-semibold" style={{ color: uiColor }}><CircleDot className="h-3.5 w-3.5 shrink-0 opacity-80" />Radius (scale units)</div>
+              <HorizontalChevronStepper label="Radius" value={values.radius ?? 3} onChange={(radius) => update({ radius })} step={0.25} decimals={2} min={0} max={1000} color={uiColor} highlightColor={highlightColor} appearance="radial" keypadOpen={keypadOpen} onKeypadOpen={(open = true) => setKeypadOpen(open)} />
             </div>
           </div>
           <div className="mt-1.5 flex items-center border-t border-white/10 pt-1.5">

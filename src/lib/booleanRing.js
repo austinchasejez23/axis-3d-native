@@ -63,6 +63,16 @@ export function bridgeContactRing(outerLoop, holeLoop, world, project, idAt) {
   if (!pointInside(center, originalOuter)) return decline('center outside base ring');
   const splits = new Map();
   const anchors = [];
+  const occupiedAnchors = new Set();
+  const perimeter = originalOuter.reduce((sum, p, i) => {
+    const q = originalOuter[(i + 1) % originalOuter.length];
+    return sum + Math.hypot(q.x - p.x, q.y - p.y);
+  }, 0);
+  const spacing = cornerPoints.reduce((min, p, i) => {
+    const q = cornerPoints[(i + 1) % cornerPoints.length];
+    return Math.min(min, Math.hypot(q.x - p.x, q.y - p.y));
+  }, Infinity);
+  const maxAnchorShift = Math.min(spacing * .75, perimeter * .14);
   // Radial projection is stable for the convex/star-shaped contact patches
   // produced by ordinary cylinder-to-face cuts. The projection remains within
   // an original base edge. No new free-floating vertex is created.
@@ -88,8 +98,19 @@ export function bridgeContactRing(outerLoop, holeLoop, world, project, idAt) {
     const { side, t } = hit;
     const a = outer[side], b = outer[(side + 1) % outer.length];
     let anchor;
-    if (t < 1e-6) anchor = a;
-    else if (t > 1 - 1e-6) anchor = b;
+    const hitPosition = {
+      x: originalOuter[side].x + (originalOuter[(side + 1) % outer.length].x - originalOuter[side].x) * t,
+      y: originalOuter[side].y + (originalOuter[(side + 1) % outer.length].y - originalOuter[side].y) * t
+    };
+    const candidates = outer.map((id, index) => ({ id,
+      distance: Math.sqrt(distanceSq(originalOuter[index], hitPosition)) }))
+      .filter(candidate => !occupiedAnchors.has(candidate.id) && candidate.distance <= maxAnchorShift)
+      .sort((left, right) => left.distance - right.distance);
+    // Connect to a nearby existing base vertex rather than inserting
+    // another vertex into a previously untouched base edge.
+    if (candidates.length) anchor = candidates[0].id;
+    else if (t < 1e-6 && !occupiedAnchors.has(a)) anchor = a;
+    else if (t > 1 - 1e-6 && !occupiedAnchors.has(b)) anchor = b;
     else {
       const first = world.get(a), second = world.get(b);
       const position = first.clone().lerp(second, t);
@@ -100,6 +121,7 @@ export function bridgeContactRing(outerLoop, holeLoop, world, project, idAt) {
       splits.get(key).push({ a, b, t, id: anchor });
     }
     anchors.push(anchor);
+    occupiedAnchors.add(anchor);
   }
   const expanded = [];
   for (let i = 0; i < outer.length; i++) {

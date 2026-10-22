@@ -22,7 +22,7 @@ export default function InlineSlider({ label, value, display = undefined, min = 
         onPointerDown={() => onActiveChange?.(true)}
         onPointerUp={() => onActiveChange?.(false)}
         onPointerCancel={() => onActiveChange?.(false)}
-        className={`gs-slider w-full touch-none ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'} ${hue ? 'gs-slider-hue' : ''}`}
+        className={`gs-slider w-full touch-none ${disabled ? 'pointer-events-none' : 'cursor-pointer'} ${hue ? 'gs-slider-hue' : ''}`}
         style={/** @type {import('react').CSSProperties & { '--gs-accent': string, '--gs-pct': string }} */ ({ '--gs-accent': hue ? `hsl(${value} 100% 50%)` : highlightColor, '--gs-pct': `${pct}%` })}
       />
     </div>

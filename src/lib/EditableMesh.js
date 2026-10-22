@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { buildPaintUvs, serializePaintLayer, deserializePaintLayer } from './paintLayer';
 import { edgeKey } from './meshTopology';
+import { cleanupCommittedTopology, resolveLegacyDeletedBorders } from './meshTopologyInvariants';
 import { splitFaceBetween } from './cutTools';
 
 let nextId = 1;
@@ -12,6 +13,9 @@ export class EditableMesh {
     this.name = name;
     this.vertices = [];
     this.faces = [];
+    // Surface triangles kept for rendering dissolved folded faces; they are
+    // NOT selectable border edges and cannot exist as standalone geometry.
+    this.faceRenderTriangles = {};
     this.position = new THREE.Vector3();
     this.rotation = new THREE.Euler();
     this.scale = new THREE.Vector3(1, 1, 1);
@@ -34,7 +38,7 @@ export class EditableMesh {
     this.mapTexture = null;     // runtime THREE.Texture (session only)
     this.textureUrl = null;     // runtime image URL (session only)
     this.referenceUrl = null;   // persistent, uploaded image for a reference plane
-    this.textureTransform = { scale: 1, rotation: 0, mirror: false };
+    this.textureTransform = { scale: 0.25, rotation: 0, mirror: false };
     this.uvMode = 'box';        // texture projection: box | planar | cylindrical | spherical
     this.reflectionEnabled = false;     // real-time scene reflections on/off
     this.reflectionIntensity = 0.6;    // 0–1, controls reflected-env visibility
@@ -81,7 +85,7 @@ export class EditableMesh {
     this.material = null;
     this.mapTexture = null;
     this.textureUrl = null;
-    this.textureTransform = { scale: 1, rotation: 0, mirror: false };
+    this.textureTransform = { scale: 0.25, rotation: 0, mirror: false };
     this.uvMode = 'box';
     this.reflectionEnabled = false;
     this.reflectionIntensity = 0.6;
@@ -154,14 +158,20 @@ export class EditableMesh {
     this._edgeCache = [];
     const addedKeys = new Set();
     const visible = this._visibleEdgeSet();
+    // Real user-created dividing edges must remain selectable for deletion.
+    const explicit = new Set(this.explicitEdges.map(e => edgeKey(e.v1, e.v2)));
     for (const e of map.values()) {
       const key = `${e.v1},${e.v2}`;
-      if (hidden.has(key) && this._hiddenApplies(hidden.get(key), e.faces)) continue;
+      // A face's exposed border must always remain an actual selectable edge.
+      // An old hidden-edge record cannot make a single face edgeless.
+      if (!explicit.has(key) && e.faces.length > 1 && hidden.has(key) &&
+          this._hiddenApplies(hidden.get(key), e.faces)) continue;
       // One-time permanent classification: an edge never seen before is judged
       // NOW (while its geometry is fresh) and the verdict is locked — diagonal
       // edges go into hiddenEdges forever, real edges into visibleEdges forever.
       // Deforming the mesh later can never flip either verdict.
-      if (!this.importedWireframeOnly && e.faces.length === 2 && !visible.has(key)) {
+      if (!this.importedWireframeOnly && e.faces.length === 2 &&
+          !visible.has(key) && !explicit.has(key)) {
         if (this.edgeIsTriangulationDiagonal(e.v1, e.v2, e.faces[0], e.faces[1])) {
           this.hiddenEdges.push({ v1: e.v1, v2: e.v2 });
           continue;
@@ -174,7 +184,8 @@ export class EditableMesh {
     }
     for (const e of this.explicitEdges) {
       const key = `${Math.min(e.v1, e.v2)},${Math.max(e.v1, e.v2)}`;
-      if (hidden.has(key)) continue;
+      // Explicit lines without any bordering face are not real mesh edges.
+      if (!map.has(key)) continue;
       if (!addedKeys.has(key) && this.getVertex(e.v1) && this.getVertex(e.v2)) {
         this._edgeCache.push({ v1: e.v1, v2: e.v2 });
         addedKeys.add(key);
@@ -244,6 +255,39 @@ export class EditableMesh {
   _edgeThirdVertex(face, v1, v2) {
     for (const vid of face) if (vid !== v1 && vid !== v2) return vid;
     return null;
+  }
+
+  // Only hide a triangle seam from an imported mesh when both triangles
+  // convincingly reconstruct one quad. Do not use the permissive editing
+  // classifier here: it can delete genuine edges at tube joints.
+  _isConfidentImportedDiagonal(v1, v2, f0, f1) {
+    if (this.faces[f0]?.length !== 3 || this.faces[f1]?.length !== 3) return false;
+    const cId = this._edgeThirdVertex(this.faces[f0], v1, v2);
+    const dId = this._edgeThirdVertex(this.faces[f1], v1, v2);
+    if (cId == null || dId == null || cId === dId) return false;
+    const a = this.getVertexVector(v1), b = this.getVertexVector(v2);
+    const c = this.getVertexVector(cId), d = this.getVertexVector(dId);
+    const ab = b.clone().sub(a);
+    // Different planes or sharp creases are actual structural edges.
+    if (this.getFaceNormal(f0).dot(this.getFaceNormal(f1)) < 0.965) return false;
+    const sideC = ab.clone().cross(c.clone().sub(a));
+    const sideD = ab.clone().cross(d.clone().sub(a));
+    if (sideC.lengthSq() < 1e-20 || sideD.lengthSq() < 1e-20 ||
+        sideC.dot(sideD) >= 0) return false;
+    const length = (p, q) => p.distanceTo(q);
+    const diagonal = ab.length();
+    const perimeter = [
+      length(a, c), length(b, c), length(a, d), length(b, d),
+    ];
+    if (diagonal <= Math.max(...perimeter) * 1.0001) return false;
+    const paired = (p, q, r, s) => {
+      const u = q.clone().sub(p), v = s.clone().sub(r);
+      const lu = u.length(), lv = v.length();
+      if (Math.min(lu, lv) < 1e-10) return false;
+      return Math.abs(u.dot(v) / (lu * lv)) > 0.97 &&
+        Math.abs(lu - lv) / Math.max(lu, lv) < 0.2;
+    };
+    return paired(a, c, b, d) && paired(a, d, b, c);
   }
 
   // A coplanar internal edge is a triangulation diagonal (hide it) when it is
@@ -419,6 +463,14 @@ export class EditableMesh {
     const face = this.faces[faceIdx];
     if (face.length < 3) return [];
     if (face.length === 3) return [[0, 1, 2]];
+    const preserved = this.faceRenderTriangles?.[faceIdx];
+    if (preserved?.length) {
+      const lookup = new Map(face.map((id, index) => [id, index]));
+      const mapped = preserved.map(tri => tri.map(id => lookup.get(id)));
+      if (mapped.length === face.length - 2 && mapped.every(tri =>
+        tri.length === 3 && tri.every(index => index !== undefined) &&
+        new Set(tri).size === 3)) return mapped;
+    }
     const pts = face.map((id) => this.getVertexVector(id));
     const normal = this.getFaceNormal(faceIdx);
     const ax = Math.abs(normal.x), ay = Math.abs(normal.y), az = Math.abs(normal.z);
@@ -580,13 +632,22 @@ export class EditableMesh {
       const faceColor = this.faceColors[fi] ? new THREE.Color(this.faceColors[fi]) : null;
       const fn = faceNormals ? null : this.getFaceNormal(fi);
       for (const tri of this.getFaceTriangleIndices(fi)) {
+        // Keep the original normals on a folded surface after dissolving its
+        // dividing edge, instead of flattening the whole polygon's shading.
+        let preservedNormal = null;
+        if (this.faceRenderTriangles?.[fi]) {
+          const a = this.getVertexVector(face[tri[0]]);
+          const b = this.getVertexVector(face[tri[1]]);
+          const c = this.getVertexVector(face[tri[2]]);
+          preservedNormal = b.sub(a).cross(c.sub(a)).normalize();
+        }
         for (const vi of tri) {
           const vid = face[vi];
           const v = this.getVertex(vid);
           const color = faceColor || (this.vertexColors[vid] ? new THREE.Color(this.vertexColors[vid]) : base);
           positions.push(v.x, v.y, v.z);
           colors.push(color.r, color.g, color.b);
-          const n = faceNormals ? cornerNormal(fi, vid) : fn;
+          const n = preservedNormal || (faceNormals ? cornerNormal(fi, vid) : fn);
           normals.push(n.x, n.y, n.z);
         }
       }
@@ -677,24 +738,37 @@ export class EditableMesh {
     }
     const edgeMap = this._ensureEdgeFaceMap();
     const positions = [];
-    const featureNormals = this.importedFeatureEdges
+    // In explicit crease-only mode, filter by 25 degrees. Do not use that
+    // filter for geometry-only imported wireframes: smooth curved surfaces
+    // (e.g. spheres) would otherwise disappear entirely.
+    const featureNormals = this.importedFeatureEdges && !this.importedWireframeOnly
       ? this.faces.map((_, fi) => this.getFaceNormal(fi)) : null;
-    // 25° keeps sharp CAD edges and open boundaries visible without drawing
-    // a triangulation grid over every curved imported surface.
+    // Crease-only mode uses 25° for hard edges. Geometry-only imports below
+    // instead remove artificial tessellation diagonals, retaining curved grids.
     const featureThreshold = Math.cos(THREE.MathUtils.degToRad(25));
     const hidden = this._hiddenEdgeMap();
     const shownKeys = new Set();
     const visible = this._visibleEdgeSet();
+    const explicit = new Set(this.explicitEdges.map(e => edgeKey(e.v1, e.v2)));
     for (const { v1, v2, faces } of edgeMap.values()) {
       const key = `${v1},${v2}`;
-      if (hidden.has(key) && this._hiddenApplies(hidden.get(key), faces)) continue;
+      // Keep every exposed border visible. Shared hidden triangulation
+      // diagonals may be cosmetic, but a face must retain its outer edges.
+      if (!explicit.has(key) && faces.length > 1 && hidden.has(key) &&
+          this._hiddenApplies(hidden.get(key), faces)) continue;
+      // Imported triangle data has no reliable original quad boundaries.
+      // Remove only high-confidence tessellation seams: otherwise a complex
+      // tube/joint loses genuine structural wireframe lines.
+      if (this.importedWireframeOnly && faces.length === 2 && !explicit.has(key) &&
+          !visible.has(key) && this._isConfidentImportedDiagonal(v1, v2, faces[0], faces[1])) continue;
       // Keep triangle edges available to modeling tools; only the displayed
       // imported wireframe suppresses smooth triangulation seams.
-      if (featureNormals && faces.length === 2 &&
+      if (featureNormals && faces.length === 2 && !explicit.has(key) &&
           featureNormals[faces[0]].dot(featureNormals[faces[1]]) > featureThreshold) continue;
       // Same one-time permanent classification as getEdges: first sighting
       // decides forever. Diagonals never appear, real edges never vanish.
-      if (!this.importedWireframeOnly && faces.length === 2 && !visible.has(key)) {
+      if (!this.importedWireframeOnly && faces.length === 2 &&
+          !visible.has(key) && !explicit.has(key)) {
         if (this.edgeIsTriangulationDiagonal(v1, v2, faces[0], faces[1])) {
           this.hiddenEdges.push({ v1, v2 });
           continue;
@@ -708,7 +782,8 @@ export class EditableMesh {
     }
     for (const e of this.explicitEdges) {
       const key = `${Math.min(e.v1, e.v2)},${Math.max(e.v1, e.v2)}`;
-      if (hidden.has(key) || shownKeys.has(key)) continue;
+      // Never render a detached line; visible borders already come from faces.
+      if (!edgeMap.has(key) || shownKeys.has(key)) continue;
       const va = this.getVertex(e.v1), vb = this.getVertex(e.v2);
       if (va && vb) {
         positions.push(va.x, va.y, va.z, vb.x, vb.y, vb.z);
@@ -725,6 +800,8 @@ export class EditableMesh {
     m.id = this.id;
     m.vertices = this.vertices.map(v => ({ ...v }));
     m.faces = this.faces.map(f => [...f]);
+    m.faceRenderTriangles = Object.fromEntries(Object.entries(this.faceRenderTriangles || {})
+      .map(([fi, tris]) => [fi, tris.map(tri => [...tri])]));
     m.position.copy(this.position);
     m.rotation.copy(this.rotation);
     m.scale.copy(this.scale);
@@ -776,6 +853,8 @@ export class EditableMesh {
       id: this.id, name: this.name,
       vertices: this.vertices.map(v => ({ id: v.id, x: v.x, y: v.y, z: v.z })),
       faces: this.faces.map(f => [...f]),
+      faceRenderTriangles: Object.fromEntries(Object.entries(this.faceRenderTriangles || {})
+        .map(([fi, tris]) => [fi, tris.map(tri => [...tri])])), 
       position: { x: this.position.x, y: this.position.y, z: this.position.z },
       rotation: { x: this.rotation.x, y: this.rotation.y, z: this.rotation.z },
       scale: { x: this.scale.x, y: this.scale.y, z: this.scale.z },
@@ -818,6 +897,8 @@ export class EditableMesh {
     m.id = data.id;
     m.vertices = data.vertices.map(v => ({ ...v }));
     m.faces = data.faces.map(f => [...f]);
+    m.faceRenderTriangles = Object.fromEntries(Object.entries(data.faceRenderTriangles || {})
+      .map(([fi, tris]) => [fi, tris.map(tri => [...tri])]));
     m.position.set(data.position.x, data.position.y, data.position.z);
     m.rotation.set(data.rotation.x, data.rotation.y, data.rotation.z);
     m.scale.set(data.scale.x, data.scale.y, data.scale.z);
@@ -858,6 +939,10 @@ export class EditableMesh {
     for (const e of [...m.explicitEdges]) splitFaceBetween(m, e.v1, e.v2);
     m.hiddenEdges = (data.hiddenEdges || []).map(e => ({ ...e }));
     m.visibleEdges = (data.visibleEdges || []).map(e => ({ ...e }));
+    // Repair older saved topology in memory; no stored file is overwritten
+    // until the user explicitly saves or normal autosave runs.
+    resolveLegacyDeletedBorders(m);
+    cleanupCommittedTopology(m);
     return m;
   }
 }

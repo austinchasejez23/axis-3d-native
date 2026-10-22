@@ -32,9 +32,9 @@ assert.match(read('src/lib/projectStore.js'), /indexedDB\.open/);
 assert.match(read('src/lib/storage.js'), /forge3d_projects/);
 assert.match(read('src/pages/Splash.jsx'), /navigate\('\/library'/);
 const splash = read('src/pages/Splash.jsx');
-assert.match(splash, /setTimeout\(\(\) => setVideoEnded\(true\), MAX_SPLASH_MS\)/,
+assert.match(splash, /setTimeout\(leave, \d+\)/,
   'Android video playback must have a bounded splash fallback');
-assert.match(splash, /onError=\{\(\) => setVideoEnded\(true\)\}/,
+assert.match(splash, /onError=\{leave\}/,
   'Video decoding failure must not strand the user');
 // Free-tier limits must not silently fail. The SceneManager enforces the cap
 // and ThreeViewport must relay the event to the existing upgrade explanation.

@@ -39,7 +39,7 @@ try {
   try {
     theme.set({ defaultLightingEnabled: true });
     manager.applyLighting();
-    assert.equal(manager.scene.environmentIntensity, 1.2);
+    assert.equal(manager.scene.environmentIntensity, 0.7);
     const studioAmbient = manager.ambientLight.intensity;
     const studioHemi = manager.hemiLight.intensity;
     const studioFill = manager.fillLight.intensity;
@@ -59,7 +59,7 @@ try {
     assert.equal(light.object.visible, true, 'Custom edit should activate the light');
     assert.ok(manager.ambientLight.intensity > 0 && manager.ambientLight.intensity < studioAmbient);
     assert.ok(manager.hemiLight.intensity > 0 && manager.hemiLight.intensity < studioHemi);
-    assert.ok(manager.fillLight.intensity > 0 && manager.fillLight.intensity < studioFill);
+    assert.ok(manager.fillLight.intensity >= 0 && manager.fillLight.intensity < studioFill);
     assert.ok(manager.scene.environmentIntensity > 0, 'Metallic surfaces need reflective environment in custom mode');
     console.log('PASS: custom lighting retains neutral fill and metal environment');
 

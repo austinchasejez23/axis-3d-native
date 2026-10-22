@@ -1,13 +1,14 @@
-import { PaintBucket, Paintbrush, SprayCan, Blend, Droplet, Droplets } from 'lucide-react';
+import { PaintBucket, Paintbrush, SprayCan, Blend, Droplet, Droplets, Pipette } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
 import LoopingScroller from './LoopingScroller';
 
 const GREY = 'rgba(150,150,150,0.55)';
 
-// Fill · Brush · Spray · Multi · Primary · Shift as one endless, swipeable row
-// of icon-only buttons on a single backing strip. Primary and Shift pick which
-// Multi color the wheel edits, so they stay grey (inactive) until Multi is on.
-export default function PaintToolButtons({ paintTool, multi, strokesBlocked, onPaintTool, onMulti, colorTarget, onColorTarget, onPress }) {
+// Fill · Brush · Spray · Multi · Primary · Shift · Eyedropper as one endless,
+// swipeable row of icon-only buttons on a single backing strip. Primary and
+// Shift pick which Multi color the wheel edits, so they stay grey (inactive)
+// until Multi is on. The eyedropper stays highlighted until a color is taken.
+export default function PaintToolButtons({ paintTool, multi, strokesBlocked, onPaintTool, onMulti, colorTarget, onColorTarget, onPress, eyedropper, onEyedropper }) {
   const { highlightColor } = useTheme();
   const items = [
     { id: 'fill', label: 'Fill', icon: PaintBucket, active: paintTool === 'fill', onClick: () => onPaintTool('fill') },
@@ -16,6 +17,7 @@ export default function PaintToolButtons({ paintTool, multi, strokesBlocked, onP
     { id: 'multi', label: 'Multi', flash: 'Color shift', icon: Blend, active: multi, onClick: onMulti },
     { id: 'primary', label: 'Primary color', flash: 'Base color', icon: Droplet, active: multi && colorTarget === 'primary', disabled: !multi, onClick: () => onColorTarget('primary') },
     { id: 'shift', label: 'Shift color', flash: 'Secondary color', icon: Droplets, active: multi && colorTarget === 'shift', disabled: !multi, onClick: () => onColorTarget('shift') },
+    { id: 'eyedropper', label: 'Eyedropper', flash: 'Eyedropper', icon: Pipette, active: !!eyedropper, onClick: () => onEyedropper?.() },
   ];
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)' }}>
@@ -26,7 +28,9 @@ export default function PaintToolButtons({ paintTool, multi, strokesBlocked, onP
             <button
               key={it.id}
               onClick={it.disabled ? undefined : () => { onPress?.(it.id, it.flash || it.label); it.onClick(); }}
-              disabled={it.disabled}
+              // aria-disabled, not disabled: a disabled button swallows the touch,
+              // so a swipe starting on a grey tool would not move the strip.
+              aria-disabled={it.disabled || undefined}
               aria-label={it.label}
               aria-pressed={!!it.active}
               className="w-9 h-8 rounded-lg flex items-center justify-center active:scale-95 transition-transform"

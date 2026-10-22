@@ -13,8 +13,8 @@ const WIREFRAME_ON_MIGRATION = 'gestura_wireframe_on_v5';
 const STARTUP_DEFAULTS_OFF_MIGRATION = 'axis_startup_defaults_off_v1';
 const RENDER_BOOST_MANUAL_ONLY_MIGRATION = 'axis_render_boost_manual_only_v1';
 const GRID_DEFAULT_ON_MIGRATION = 'axis_grid_default_on_v1';
-const TOOL_LABELS_DEFAULT_OFF_MIGRATION = 'axis_tool_labels_default_off_v1';
-const DEFAULTS = { backgroundColor: '#1c1c1c', highlightColor: '#0066ff', gridColor: '#3a7bbf', shadowsEnabled: false, shadowIntensity: 0.6, defaultLightingEnabled: true, shineEnabled: true, shineIntensity: 0.7, wireframeEnabled: true, toolLabelsEnabled: false, unit: 'in', gridSquareSize: 1, gridSize: 100, snapToGrid: false, snapDistance: 0.0625, snapAngle: 15, lightFollowCamera: false, lightAzimuth: 45, lightElevation: 50, lightDistance: 8, lightColor: '#ffffff', lightIntensity: 1.5, savedColors: [], gestureMoveThreshold: 5, gestureHoldDelay: 500, gestureSelectReach: 0.025, gesturePinchThreshold: 6, gestureRotateSensitivity: 1, gestureScaleSensitivity: 1, hideDetailWhileEditing: true, renderBoostEnabled: false, focusRenderBoostEnabled: false, gridVisible: true, objectArrowsEnabled: false, measurementsOn: false, measurementOption: 'edge' };
+const TOOL_LABELS_DEFAULT_ON_MIGRATION = 'axis_tool_labels_default_on_v1';
+const DEFAULTS = { backgroundColor: '#1c1c1c', highlightColor: '#0066ff', gridColor: '#3a7bbf', shadowsEnabled: false, shadowIntensity: 0.6, defaultLightingEnabled: true, shineEnabled: true, shineIntensity: 0.7, wireframeEnabled: true, toolLabelsEnabled: true, unit: 'in', gridSquareSize: 1, gridSize: 100, snapToGrid: false, snapDistance: 0.0625, snapAngle: 15, lightFollowCamera: false, lightAzimuth: 45, lightElevation: 50, lightDistance: 8, lightColor: '#ffffff', lightIntensity: 1.5, savedColors: [], gestureMoveThreshold: 5, gestureHoldDelay: 500, gestureSelectReach: 0.025, gesturePinchThreshold: 6, gestureRotateSensitivity: 1, gestureScaleSensitivity: 1, hideDetailWhileEditing: true, renderBoostEnabled: false, focusRenderBoostEnabled: false, gridVisible: true, objectArrowsEnabled: false, measurementsOn: false, measurementOption: 'edge' };
 
 // Display settings that belong to one model. They are saved with it and restored
 // when it opens; everything else here (highlight color, gestures, tool labels,
@@ -92,12 +92,11 @@ function load() {
       saved.gridVisible = true;
       localStorage.setItem(GRID_DEFAULT_ON_MIGRATION, '1');
     }
-    // Tool labels now default off. Only apply this migration when there is no
-    // explicit saved preference, so a user who deliberately enabled/disabled
-    // labels keeps that choice.
-    if (!localStorage.getItem(TOOL_LABELS_DEFAULT_OFF_MIGRATION)) {
-      if (saved.toolLabelsEnabled === undefined) saved.toolLabelsEnabled = false;
-      localStorage.setItem(TOOL_LABELS_DEFAULT_OFF_MIGRATION, '1');
+    // Tool labels are on by default; one-time switch for anyone who had them
+    // turned off.
+    if (!localStorage.getItem(TOOL_LABELS_DEFAULT_ON_MIGRATION)) {
+      saved.toolLabelsEnabled = true;
+      localStorage.setItem(TOOL_LABELS_DEFAULT_ON_MIGRATION, '1');
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
     return { ...DEFAULTS, ...saved };

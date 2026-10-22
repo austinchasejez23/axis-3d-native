@@ -152,6 +152,13 @@ export function endPaintStroke(sm) {
   sm._paintStroke = null;
   const patches = finishPaintStroke(stroke);
   if (!patches.length) return;
+  // While paint is pending the stroke waits for Apply rather than becoming an
+  // undo step of its own.
+  if (sm._paintPending) {
+    sm._paintPending.strokes.push(patches);
+    sm._notifyPaintPending?.();
+    return;
+  }
   const top = sm.undoStack[sm.undoStack.length - 1];
   if (top) top.paintPatches = (top.paintPatches || []).concat(patches);
 }

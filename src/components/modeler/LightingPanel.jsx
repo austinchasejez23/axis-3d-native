@@ -15,10 +15,13 @@ const TYPES = [
 // Lighting: same docked sheet as the other tool panels. Every change applies
 // live; Check keeps it, X puts the lights back the way they were on opening.
 export default function LightingPanel({ state, managerRef, onClose }) {
-  const { uiColor, highlightColor, defaultLightingEnabled } = useTheme();
+  const { uiColor, highlightColor, defaultLightingEnabled, shadowsEnabled, shadowIntensity } = useTheme();
   const [opening] = useState(() => {
     const manager = managerRef.current;
-    return manager ? { lights: manager.serializeSceneLights(), selectedId: manager.selectedLightId, defaultLightingEnabled: theme.defaultLightingEnabled } : null;
+    return manager ? {
+      lights: manager.serializeSceneLights(), selectedId: manager.selectedLightId, defaultLightingEnabled: theme.defaultLightingEnabled,
+      shadowsEnabled: !!theme.shadowsEnabled, shadowIntensity: theme.shadowIntensity,
+    } : null;
   });
   // Small color wheel that pops up at the left, above the panel (the phone's
   // own color picker covered the whole viewport).
@@ -45,6 +48,8 @@ export default function LightingPanel({ state, managerRef, onClose }) {
     if (manager && opening) {
       const lightsChanged = JSON.stringify(manager.serializeSceneLights()) !== JSON.stringify(opening.lights);
       const modeChanged = theme.defaultLightingEnabled !== opening.defaultLightingEnabled;
+      const defaultShadowsChanged = !!theme.shadowsEnabled !== opening.shadowsEnabled || theme.shadowIntensity !== opening.shadowIntensity;
+      if (defaultShadowsChanged) theme.set({ shadowsEnabled: opening.shadowsEnabled, shadowIntensity: opening.shadowIntensity });
       if (lightsChanged || modeChanged) {
         manager.pushUndo();
         if (lightsChanged) manager.restoreSceneLights(opening.lights, opening.selectedId);
@@ -122,8 +127,14 @@ export default function LightingPanel({ state, managerRef, onClose }) {
           <InlineSlider grow compact label={spot ? 'Cone' : 'Radius'} value={light.radius} display={spot ? `${Math.round(light.radius)}°` : light.radius.toFixed(1)}
             min={spot ? 5 : 0.1} max={spot ? 85 : 5} step={spot ? 1 : 0.1} disabled={light.type === 'directional'}
             onChange={(radius) => change({ radius })} onActiveChange={begin} />
-          <InlineSlider grow compact label="Shadow" value={Math.round(light.shadowIntensity * 100)} display={`${Math.round(light.shadowIntensity * 100)}%`} min={0} max={100}
-            disabled={!light.shadows} onChange={(value) => change({ shadowIntensity: value / 100 })} onActiveChange={begin} />
+          {/* While Default lighting is on, Shadow and Shadows set Default's own
+              shadows instead of switching Default off. */}
+          <InlineSlider grow compact label="Shadow"
+            value={Math.round((defaultLightingEnabled ? (shadowIntensity ?? 0.6) : light.shadowIntensity) * 100)}
+            display={`${Math.round((defaultLightingEnabled ? (shadowIntensity ?? 0.6) : light.shadowIntensity) * 100)}%`} min={0} max={100}
+            disabled={defaultLightingEnabled ? !shadowsEnabled : !light.shadows}
+            onChange={(value) => (defaultLightingEnabled ? theme.set({ shadowIntensity: value / 100 }) : change({ shadowIntensity: value / 100 }))}
+            onActiveChange={defaultLightingEnabled ? undefined : begin} />
           <InlineSlider grow compact hue label="Hue" value={hue} display={`${hue}°`} min={0} max={360}
             onChange={(value) => change({ color: hsvToHex(value, 100, 100) })} onActiveChange={begin} />
           <InlineSlider grow compact label="Color strength" value={Math.round(light.colorIntensity * 100)} display={`${Math.round(light.colorIntensity * 100)}%`} min={0} max={100}
@@ -131,8 +142,10 @@ export default function LightingPanel({ state, managerRef, onClose }) {
         </div>
 
         <div className="grid grid-cols-4 gap-1">
-          <button type="button" onClick={() => change({ shadows: !light.shadows }, true)} aria-pressed={!!light.shadows} aria-label="Toggle shadows"
-            className={rowBtn} style={{ color: light.shadows ? highlightColor : uiColor, borderColor: light.shadows ? highlightColor : undefined }}>
+          <button type="button"
+            onClick={() => (defaultLightingEnabled ? theme.set({ shadowsEnabled: !shadowsEnabled }) : change({ shadows: !light.shadows }, true))}
+            aria-pressed={defaultLightingEnabled ? !!shadowsEnabled : !!light.shadows} aria-label="Toggle shadows"
+            className={rowBtn} style={{ color: (defaultLightingEnabled ? shadowsEnabled : light.shadows) ? highlightColor : uiColor, borderColor: (defaultLightingEnabled ? shadowsEnabled : light.shadows) ? highlightColor : undefined }}>
             <span className="truncate">Shadows</span>
           </button>
           <button type="button" onClick={() => manager?.duplicateSelectedSceneLight()} aria-label="Duplicate light" className={rowBtn} style={{ color: uiColor }}>

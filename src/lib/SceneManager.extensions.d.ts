@@ -59,6 +59,11 @@ export interface RadialArrayState {
 
 declare module './SceneManager.js' {
   interface SceneManager {
+    /** Set by the modeler UI. */
+    surfaceSection?: string;
+    /** Movement multiplier while Precision is on (1 = normal). */
+    precisionFactor?: number;
+    _postMultiActionSelection?: boolean;
     // Optional state populated by attached modules or UI callbacks.
     // Preview and input state populated lazily by individual modeling tools.
     cutPreviewGroup?: import('three').Group | null;
@@ -128,6 +133,8 @@ declare module './SceneManager.js' {
     _beginWheelStep(): any;
     /** Implemented by sceneReflections.js */
     _buildStudioEnvironment(): any;
+    /** Implemented by sceneLights.js */
+    _shadowState(): any;
     /** Implemented by sceneLights.js */
     _createSceneLight(source: any): any;
     /** Implemented by sceneReflections.js */
@@ -225,7 +232,7 @@ declare module './SceneManager.js' {
     /** Implemented by sceneLights.js */
     duplicateSelectedSceneLight(): any;
     /** Implemented by sceneCut.js */
-    edgeParamAtScreen(mesh: any, edge: any, ndcX: number, ndcY: number): any;
+    edgeParamAtScreen(mesh: any, edge: any, ndcX: number, ndcY: number, margin?: number): any;
     /** Implemented by sceneDrawFace.js */
     emitDrawState(nearStart?: boolean): any;
     /** Implemented by sceneCut.js */

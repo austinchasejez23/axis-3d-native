@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { theme } from './theme';
 import { makeFatSegments } from './fatLines';
 import { drawCutIntersects } from '@/lib/cutIntersections';
+import { cleanupCommittedTopology, resolveLegacyDeletedBorders } from './meshTopologyInvariants';
 import {
   buildCutLoopPlan, cutLoopPreviewPoints, applyCutLoopPlan, applyDrawCut, pointOnEdge,
 } from './cutTools';
@@ -83,8 +84,13 @@ export function applySceneCut(SceneManager) {
     }
   };
 
-  // Position along the tapped edge, in screen space (0 = v1, 1 = v2).
-  P.edgeParamAtScreen = /** @this {import('./SceneManager.js').SceneManager} */ function (mesh, edge, ndcX, ndcY) {
+  // How close to an edge's end a Cut loop may sit: right up to the edge of the
+  // object (a hair inside, so the cut never lands on the corner itself).
+  const LOOP_END_MARGIN = 0.002;
+
+  // Position along the tapped edge, in screen space (0 = v1, 1 = v2), kept
+  // `margin` away from either end.
+  P.edgeParamAtScreen = /** @this {import('./SceneManager.js').SceneManager} */ function (mesh, edge, ndcX, ndcY, margin = 0.05) {
     const wm = this.getWorldMatrix(mesh);
     const a = mesh.getVertex(edge.v1), b = mesh.getVertex(edge.v2);
     const sa = new THREE.Vector3(a.x, a.y, a.z).applyMatrix4(wm).project(this.camera);
@@ -93,7 +99,7 @@ export function applySceneCut(SceneManager) {
     const len2 = dx * dx + dy * dy;
     if (len2 <= 0) return 0.5;
     const t = ((ndcX - sa.x) * dx + (ndcY - sa.y) * dy) / len2;
-    return Math.max(0.05, Math.min(0.95, t));
+    return Math.max(margin, Math.min(1 - margin, t));
   };
 
   P.handleCutTap = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
@@ -139,7 +145,9 @@ export function applySceneCut(SceneManager) {
     if (!mesh || !edge) return;
     if (c.meshId && c.meshId !== hit.meshId) return; // one object per cut
     c.meshId = hit.meshId;
-    let t = c.kind === 'loop' && c.snapCenter ? 0.5 : this.edgeParamAtScreen(mesh, edge, x, y);
+    let t = c.kind === 'loop'
+      ? (c.snapCenter ? 0.5 : this.edgeParamAtScreen(mesh, edge, x, y, LOOP_END_MARGIN))
+      : this.edgeParamAtScreen(mesh, edge, x, y);
     if (c.kind === 'draw' && c.snapPoint) {
       const wm = this.getWorldMatrix(mesh);
       const proposed = pointOnEdge(mesh, edge.v1, edge.v2, t)?.applyMatrix4(wm);
@@ -205,7 +213,7 @@ export function applySceneCut(SceneManager) {
     const mesh = this.getMesh(c.meshId);
     if (!mesh) return;
     const { x, y } = this.screenToNDC(clientX, clientY);
-    const t = c.snapCenter ? 0.5 : this.edgeParamAtScreen(mesh, c.dragEdge, x, y);
+    const t = c.snapCenter ? 0.5 : this.edgeParamAtScreen(mesh, c.dragEdge, x, y, LOOP_END_MARGIN);
     c.points = [{ v1: c.dragEdge.v1, v2: c.dragEdge.v2, t }];
     c.plan = buildCutLoopPlan(mesh, c.dragEdge.v1, c.dragEdge.v2, t, c.pathMode);
     this.updateCutPreview();
@@ -298,6 +306,8 @@ export function applySceneCut(SceneManager) {
       ? (c.plan ? applyCutLoopPlan(mesh, c.plan) : 0)
       : (c.points.length >= 2 ? applyDrawCut(mesh, c.points, c.closed) : 0);
     if (!cuts) { this.undoStack.pop(); this.exitCutMode(); return false; }
+    resolveLegacyDeletedBorders(mesh);
+    cleanupCommittedTopology(mesh);
     this.rebuildThreeMesh(mesh.id);
     this.clearSelection();
     this.updateStats();

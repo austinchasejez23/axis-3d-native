@@ -95,7 +95,8 @@ const RenderThreeViewport = ({ onStatsChange, onTriangleCountChange, onHudChange
     // Resize and re-frame only after the viewport has its final first-frame size.
     const raf = requestAnimationFrame(() => {
       manager.handleResize();
-      manager.frameScene();
+      // The async ready callback frames both new and loaded projects.
+      // Reframing here races with it and can override the requested start zoom.
     });
     return () => {
       cancelAnimationFrame(raf);

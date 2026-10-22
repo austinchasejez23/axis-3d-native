@@ -14,7 +14,7 @@ export function beginFreeScale(manager, gesture) {
 }
 
 export function updateFreeScale(manager, gesture, x, y) {
-  const delta = manager.screenToWorldDrag(gesture.startMidX, gesture.startMidY, x, y, gesture.freeScaleCenter);
+  const delta = manager.screenToWorldDrag(gesture.startMidX, gesture.startMidY, x, y, gesture.freeScaleCenter).multiplyScalar(manager.precisionFactor ?? 1);
   if (gesture.freeScaleInverse) delta.applyQuaternion(gesture.freeScaleInverse);
   const factors = new THREE.Vector3(1, 1, 1);
   for (const axis of ['x', 'y', 'z']) {
@@ -64,7 +64,7 @@ export function updateFreeRotation(manager, gesture, x, y, angleDelta) {
   const up = new THREE.Vector3().setFromMatrixColumn(manager.camera.matrixWorld, 1);
   const axis = manager.camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(angleDelta);
   axis.addScaledVector(right, dy * gain).addScaledVector(up, dx * gain);
-  const angle = axis.length() * (theme.gestureRotateSensitivity ?? 1);
+  const angle = axis.length() * (theme.gestureRotateSensitivity ?? 1) * (manager.precisionFactor ?? 1);
   if (angle > 1e-8) manager.rotateSelectionAroundAxis(angle, axis.normalize());
   gesture.rotateLastX = x; gesture.rotateLastY = y;
   manager.activeAxis = null;

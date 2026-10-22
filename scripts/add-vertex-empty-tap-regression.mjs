@@ -79,7 +79,7 @@ try {
   assert.match(counter, /left-\[6px\] w-16.*justify-center/, 'Counter must center with 64px Menu button');
   assert.match(bar, /left-0 right-0.*safe-bottom pt-1/, 'Bottom bar should retain full viewport width');
   assert.match(bar, /rgba\(9,13,22,0\.26\)/, 'Bottom toolbar should have faint transparent background');
-  assert.match(top, /One subtle backdrop for all five right-side controls/, '5-button common backdrop missing');
+  assert.match(top, /One subtle backdrop for all six right-side controls/, 'Right-side button common backdrop missing');
   assert.match(top, /pointer-events-none absolute -top-1 -bottom-1/, 'Backdrop must not intercept touches');
 
   console.log('PASS: empty canvas exits Add Vertex and rolls back all unconfirmed vertices; face taps keep tool open; checkmark commits; both gesture paths use cancel-on-empty; HUD backgrounds and alignment');

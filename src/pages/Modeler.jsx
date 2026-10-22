@@ -22,6 +22,7 @@ import BevelPanel from '@/components/modeler/BevelPanel';
 import RadialArrayPanel from '@/components/modeler/RadialArrayPanel';
 import FreeTransformPanel from '@/components/modeler/FreeTransformPanel';
 import SnapPanel from '@/components/modeler/SnapPanel';
+import PrecisionPanel from '@/components/modeler/PrecisionPanel';
 import MeasurementOverlay from '@/components/modeler/MeasurementOverlay';
 import CutPanel from '@/components/modeler/CutPanel';
 import AddVertexPanel from '@/components/modeler/AddVertexPanel';
@@ -32,6 +33,7 @@ import ContextTip from '@/components/modeler/ContextTip';
 import GuideSheet from '@/components/modeler/GuideSheet';
 import ToolAnnouncement from '@/components/modeler/ToolAnnouncement';
 import PaintToolFlash from '@/components/modeler/PaintToolFlash';
+import MultiSelectLabel from '@/components/modeler/MultiSelectLabel';
 import GraphicsErrorBanner from '@/components/modeler/GraphicsErrorBanner';
 import TriangleCounter from '@/components/modeler/TriangleCounter';
 import SelectionPatternPanel from '@/components/modeler/SelectionPatternPanel';
@@ -92,7 +94,10 @@ export default function Modeler() {
   const [segValues, setSegValues] = useState({ x: 1, y: 1, z: 1 });
   const [materialsOpen, setMaterialsOpen] = useState(false);
   const [surfaceSub, setSurfaceSub] = useState(null);
-  const [surfaceSection, setSurfaceSection] = useState(null);
+  const [surfaceSection, setSurfaceSection] = useState(() => {
+    const saved = localStorage.getItem('axis.materials.lastSection');
+    return saved === 'paint' || saved === 'texture' ? saved : null;
+  });
   const [pickerOpen, setPickerOpen] = useState(true);
   const [paintTool, setPaintTool] = useState('fill');
   const [lastVertexPaintTool, setLastVertexPaintTool] = useState('fill');
@@ -110,6 +115,15 @@ export default function Modeler() {
   const [bevelOpen, setBevelOpen] = useState(false);
   const [radialArrayOpen, setRadialArrayOpen] = useState(false);
   const [snapPanelOpen, setSnapPanelOpen] = useState(false);
+  const [precision, setPrecision] = useState(false);
+  const [precisionPanelOpen, setPrecisionPanelOpen] = useState(false);
+  const [precisionIntensity, setPrecisionIntensity] = useState(80);
+  // Every right-column settings panel belongs to its toggle. Switching a
+  // tool off must dismiss its panel, regardless of how it was disabled.
+  useEffect(() => { if (!freeTransform) setFreeTransformPanelOpen(false); }, [freeTransform]);
+  useEffect(() => { if (!snapToGrid) setSnapPanelOpen(false); }, [snapToGrid]);
+  useEffect(() => { if (!precision) setPrecisionPanelOpen(false); }, [precision]);
+  useEffect(() => { if (managerRef.current) managerRef.current.precisionFactor = precision ? 1 - precisionIntensity / 100 : 1; }, [precision, precisionIntensity]);
   const [selectionPattern, setSelectionPattern] = useState(null);
   const [selectedMeshId, setSelectedMeshId] = useState(null);
   const [measurementsOn, setMeasurementsOn] = useState(() => theme.measurementsOn);
@@ -217,11 +231,15 @@ export default function Modeler() {
   // Surface mode preserves the selection while hiding its highlight. The
   // wireframe remains controlled exclusively by the Display setting.
   useEffect(() => {
-    managerRef.current?.setHighlightsHidden(materialsOpen);
+    managerRef.current?.setHighlightsHidden(materialsOpen && !(surfaceSection === 'paint' && multiSelect));
     managerRef.current?.setWireframesHidden(false);
     // Objects are never moved/scaled/rotated while Surface mode is open.
-    if (managerRef.current) managerRef.current.surfaceMode = materialsOpen;
-  }, [materialsOpen]);
+    if (managerRef.current) {
+      managerRef.current.surfaceMode = materialsOpen;
+      managerRef.current.surfaceSection = surfaceSection;
+      if (materialsOpen && surfaceSection === 'texture') managerRef.current.exitMultiSelect();
+    }
+  }, [materialsOpen, surfaceSection, multiSelect]);
 
   // Every model lives in the Library automatically — no Save needed.
   const showProjectLimit = useCallback(() => openUpgrade(`Free accounts can keep up to ${FREE_PROJECT_LIMIT} projects.`), [openUpgrade]);
@@ -251,7 +269,8 @@ export default function Modeler() {
       mgr.projectId = generateProjectId();
       mgr.projectName = 'Untitled';
       mgr.addPrimitive('cube', 12);
-      mgr.frameScene(3.6);
+      mgr._newProjectStartingView = true;
+      mgr.frameScene(7.8);
     }
     mgr.triangleLimit = isPro ? Infinity : FREE_TRIANGLE_LIMIT;
     mgr.setViewportDisplayMode({ clay: clayViewport, transparent: transparentViewport });
@@ -277,13 +296,16 @@ export default function Modeler() {
 
   const closePaint = useCallback(() => {
     managerRef.current?.cancelPaintPreview();
+    // However the sheet closes (another tool opening, the system back button),
+    // strokes that were never applied are rolled back, the same as X. The
+    // checkmark commits them before it gets here, so this is a no-op for it.
+    managerRef.current?.cancelPendingPaint?.();
     managerRef.current?.exitPaintMode();
   }, []);
 
   const closeMaterials = useCallback(() => {
     closePaint();
     setSurfaceSub(null);
-    setSurfaceSection(null);
     setMaterialsOpen(false);
     window.dispatchEvent(new CustomEvent('axis-tool-closed', { detail: { label: 'Materials' } }));
   }, [closePaint]);
@@ -614,8 +636,8 @@ export default function Modeler() {
     dismissActiveTool();
     const mgr = managerRef.current;
     const mesh = mgr?.getMesh(mgr.selection.meshId);
-    if (!mesh || !mesh.primitiveType) {
-      showToolPrompt('Select a basic shape to change segments');
+    if (!mesh || mgr.selection.type !== 'object') {
+      showToolPrompt('Select an object to change segments');
       return;
     }
     segmentSnapshotRef.current = mgr.captureSnapshot();
@@ -691,7 +713,7 @@ export default function Modeler() {
       toast.error('Nothing to export');
       return;
     }
-    const filename = (projectName || 'forge3d').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const filename = (projectName || 'AXIS_Model').replace(/[^a-zA-Z0-9_\-]/g, '_');
     try {
       let content, mimeType;
       if (format === 'obj') { content = exportOBJ(meshes); mimeType = 'text/plain'; }
@@ -704,8 +726,8 @@ export default function Modeler() {
         else throw new Error(`Unsupported export format: ${format}`);
       }
       const result = await downloadFile(content, `${filename}.${format}`, mimeType);
-      if (result === 'saved') toast.success(`${format.toUpperCase()} saved successfully`);
-      if (result === 'shared') toast.success(`${format.toUpperCase()} sent to Android save/share sheet`);
+      if (result === 'saved') toast.success(`${format.toUpperCase()} saved`);
+      else if (result === 'shared') toast.success(`${format.toUpperCase()} sent to Android save/share sheet`);
       else toast.message(`${format.toUpperCase()} download attempted. Check Downloads.`);
     } catch (error) {
       console.error('Model export failed:', error);
@@ -749,9 +771,9 @@ export default function Modeler() {
         await new Promise((r) => setTimeout(r, 0));
       }
       if (meshes[0]) managerRef.current?.setSelection({ meshId: meshes[0].id, type: 'object', indices: [] });
-      // Preserve the original CAD dimensions and reframe the camera.
-      const importManager = /** @type {import('@/lib/SceneManager').SceneManager | undefined} */ (managerRef.current);
-      importManager?.frameScene();
+      // Imported files retain their actual coordinates. Fit the camera around
+      // the result instead of silently resizing the geometry.
+      managerRef.current?.frameScene();
       toast.success(`Imported ${meshes.length} object${meshes.length === 1 ? '' : 's'} from ${file.name}`);
       setLibraryOpen(false);
     } catch (err) {
@@ -774,10 +796,11 @@ export default function Modeler() {
   }, [selectedMeshId, showToolPrompt]);
 
   const handleToggleMultiSelect = useCallback(() => {
+    if (materialsOpen && surfaceSection === 'texture') return;
     if (multiSelect) managerRef.current?.exitMultiSelect();
     else managerRef.current?.enterMultiSelect();
     setToolsOpen(false);
-  }, [multiSelect]);
+  }, [multiSelect, materialsOpen, surfaceSection]);
 
   // "Display selected": hide everything not selected; when anything is hidden
   // the same button becomes "Display hidden" and unhides all objects.
@@ -796,6 +819,7 @@ export default function Modeler() {
     mgr.pushUndo();
     for (const m of mgr.meshes) m.visible = ids.includes(m.id);
     for (const m of mgr.meshes) mgr.rebuildThreeMesh(m.id);
+    mgr.focusSelection();
   }, [showToolPrompt]);
 
   const handleToggleAngle = useCallback(() => {
@@ -831,6 +855,7 @@ export default function Modeler() {
         onSelectionChange={() => {
           setFreeTransformPanelOpen(false);
           setSelectedMeshId(managerRef.current?.selection.meshId || null);
+          window.dispatchEvent(new CustomEvent('axis-selection-change'));
         }}
         onBeforeSelectionTap={(selection) => {
           if (bevelOpen && selection?.type === 'edge') cancelOpenBevel();
@@ -877,6 +902,9 @@ export default function Modeler() {
         renderBoost={renderBoostEnabled}
         freeTransform={freeTransform}
         snapping={snapToGrid}
+        precision={precision}
+        onTogglePrecision={() => { setPrecision(v => { if (v) setPrecisionPanelOpen(false); return !v; }); }}
+        onOpenPrecisionPanel={() => { setPrecision(true); setPrecisionPanelOpen(true); setSnapPanelOpen(false); setFreeTransformPanelOpen(false); }}
         onToggleClayViewport={() => { setSnapPanelOpen(false); setFreeTransformPanelOpen(false); setClayViewport((value) => !value); }}
         onToggleTransparentViewport={() => { setSnapPanelOpen(false); setFreeTransformPanelOpen(false); setTransparentViewport((value) => !value); }}
         onToggleRenderBoost={() => { setSnapPanelOpen(false); setFreeTransformPanelOpen(false); setRenderBoostManual(!renderBoostEnabled); }}
@@ -884,10 +912,11 @@ export default function Modeler() {
         onToggleSnapping={() => {
           const next = !snapToGrid;
           theme.set({ snapToGrid: next });
-          // The settings panel must remain available even when snapping is off.
+          if (!next) setSnapPanelOpen(false);
         }}
         onOpenFreeTransformPanel={() => { dismissActiveTool(); setSnapPanelOpen(false); setFreeTransformPanelOpen(true); }}
         onOpenSnapPanel={() => { dismissActiveTool(); theme.set({ snapToGrid: true }); setFreeTransformPanelOpen(false); setSnapPanelOpen(true); }}
+        onFocus={() => { if (!managerRef.current?.focusSelection()) showToolPrompt('Select something to focus on'); }}
         onMenu={() => {
           setSnapPanelOpen(false); setFreeTransformPanelOpen(false);
           dismissActiveTool();
@@ -940,12 +969,7 @@ export default function Modeler() {
       />
       </>)}
 
-      {multiSelect && (
-        <div className="absolute top-[calc(env(safe-area-inset-top,0px)+5.25rem)] left-0 z-30 px-2 py-1 font-mono text-base font-semibold leading-tight pointer-events-none"
-          style={{ color: uiColor, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>
-          Multi Select
-        </div>
-      )}
+      <MultiSelectLabel active={multiSelect} />
 
       {modeToolsOpen && (
         <ModeToolGrid
@@ -993,6 +1017,7 @@ export default function Modeler() {
               toolMemory.primitiveSegments = next.x;
               setSegments(next.x);
             }
+            if (!next.primitiveType && segmentSnapshotRef.current) managerRef.current?.restoreSnapshot(segmentSnapshotRef.current);
             managerRef.current?.changeSegments(next.x, next.y, next.z, next.primitiveParams);
             if (!isPro && totalTriangles(managerRef.current) > FREE_TRIANGLE_LIMIT) {
               if (segmentSnapshotRef.current) managerRef.current?.restoreSnapshot(segmentSnapshotRef.current);
@@ -1021,10 +1046,11 @@ export default function Modeler() {
 
         onMaterial={() => {
           closePaint(); closeSculpt(); setToolsOpen(false);
-          // Multi-select is never active inside Surface tools.
-          managerRef.current?.exitMultiSelect();
-          // Opens on the Material tab, which works on whole objects.
-          enterObjectMode();
+          // Material permits object multi-select; Paint permits all modes.
+          // Only Texture disables multi-select.
+          // Reopen the last Materials/Paint/Texture tab. Only Material and
+          // Texture require object mode; Paint preserves the edit mode.
+          if (surfaceSection !== 'paint') enterObjectMode();
           setMaterialsOpen(true);
         }}
         onSculpt={() => {
@@ -1116,7 +1142,11 @@ export default function Modeler() {
           onBack={() => { closeMaterials(); setToolsOpen(true); }}
           onOpenChange={setSurfaceSub}
           section={surfaceSection}
-          onSectionChange={setSurfaceSection}
+          onSectionChange={(section) => {
+            if (section === 'texture') managerRef.current?.exitMultiSelect();
+            localStorage.setItem('axis.materials.lastSection', section || 'material');
+            setSurfaceSection(section);
+          }}
           selectionMode={selectionMode}
           onSelectionMode={enterObjectMode}
           onPickerOpenChange={setPickerOpen}
@@ -1220,6 +1250,7 @@ export default function Modeler() {
       )}
 
       {snapPanelOpen && <SnapPanel onClose={() => setSnapPanelOpen(false)} />}
+      {precisionPanelOpen && precision && <PrecisionPanel intensity={precisionIntensity} onChange={setPrecisionIntensity} onClose={() => setPrecisionPanelOpen(false)} />}
 
       {transformDrawerOpen && (
         <TransformDrawer

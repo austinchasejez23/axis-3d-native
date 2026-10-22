@@ -28,7 +28,7 @@ export function applySceneTexture(SceneManagerClass) {
         for (const id of ids) {
           const mesh = this.getMesh(id);
           if (!mesh) continue;
-          const t = mesh.textureTransform || { scale: 1, rotation: 0, mirror: false };
+          const t = mesh.textureTransform || { scale: 0.25, rotation: 0, mirror: false };
           const copy = tex.clone();
           const wrap = t.mirror ? 1002 : THREE.RepeatWrapping;
           copy.wrapS = wrap;

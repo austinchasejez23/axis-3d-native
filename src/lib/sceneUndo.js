@@ -77,8 +77,10 @@ export function applySceneUndo(SceneManager) {
   };
 
   P.undo = /** @this {import('./SceneManager.js').SceneManager} */ function () {
-    if (this.undoStack.length === 0) return false;
     this.endPaintStroke?.();
+    // Strokes not yet applied come off first, newest first, before history.
+    if (this.undoPendingStroke?.()) return true;
+    if (this.undoStack.length === 0) return false;
     const current = this.captureSnapshot();
     const target = this.undoStack.pop();
     // The pixels about to be reverted become the redo step's own patch.

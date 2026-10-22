@@ -396,3 +396,19 @@ export function deserializePaintLayer(saved) {
   img.src = saved.image;
   return layer;
 }
+
+// Eyedropper: the paint layer's color at a local-space point on face `fi`, as
+// straight (un-premultiplied) sRGB 0-255 plus coverage 0-1, or null when the
+// layer has nothing painted there.
+export function samplePaintLayer(layer, mesh, fi, localPoint) {
+  if (!layer?.painted || !mesh.faces[fi]) return null;
+  const t = tileForNormal(mesh.getFaceNormal(fi));
+  const frame = tileFrame(layer, t);
+  const [px, py] = pixelOf(layer, t, frame, localPoint, true);
+  const x = Math.min(layer.size - 1, Math.max(0, Math.floor(px)));
+  const y = Math.min(layer.size - 1, Math.max(0, Math.floor(py)));
+  const i = (y * layer.size + x) * 4;
+  const a = layer.data[i + 3] / 255;
+  if (a <= 0) return null;
+  return { r: layer.data[i] / a, g: layer.data[i + 1] / a, b: layer.data[i + 2] / a, a };
+}
