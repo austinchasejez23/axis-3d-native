@@ -56,6 +56,8 @@ export default function ColorTabContent({
           </div>
           <PaintToolButtons
             paintTool={paintTool}
+            strokesBlocked={strokesBlocked}
+            onPaintTool={onPaintTool}
             onPress={onPress}
             eyedropper={eyedropper}
             onEyedropper={onEyedropper}
