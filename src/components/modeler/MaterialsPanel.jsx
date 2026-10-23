@@ -6,7 +6,6 @@ import SurfaceSheetHeader from './SurfaceSheetHeader';
 import ColorTabContent from './ColorTabContent';
 import MaterialTabContent from './MaterialTabContent';
 import TextureTabContent from './TextureTabContent';
-import useChameleon from '@/hooks/use-chameleon';
 
 // Legacy preset PBR values: only used to read initial slider values from
 // objects that had a preset applied before presets were removed.
@@ -49,10 +48,7 @@ export default function MaterialsPanel({
   const [tintHue, setTintHue] = useState(0);
   const [tintAmount, setTintAmount] = useState(0);
   const [sizeDragging, setSizeDragging] = useState(false);
-  const [colorTarget, setColorTarget] = useState('primary');
-  const [multi, setMulti] = useState(false);
   const [softNormalsOn, setSoftNormalsOn] = useState(false);
-  const cham = useChameleon(meshId, managerRef);
   const tab = section === 'paint' ? 'paint' : section === 'texture' ? 'texture' : 'material';
 
   // Read every material slider from the object (on open, and after Default).
@@ -281,17 +277,16 @@ export default function MaterialsPanel({
   // Vertex selections have no paintable surface. Edge selections paint their
   // adjacent faces with an independent fade away from each selected edge.
   const strokesBlocked = selectionMode === 'vertex';
-  const strokeActive = !multi && (paintTool === 'brush' || paintTool === 'spray') && !strokesBlocked;
+  const strokeActive = (paintTool === 'brush' || paintTool === 'spray') && !strokesBlocked;
 
-  const activeColor = multi ? (colorTarget === 'primary' ? cham.primary : cham.shiftColor) : paintColor;
+  const activeColor = paintColor;
   const applied = !!lastApplyRef.current && !!liveManager
     && lastApplyRef.current.key === selectionKey()
     && lastApplyRef.current.color === activeColor
     && !liveManager.hasPendingPaint?.()
     && !liveManager.hasPaintPreview?.();
   const setActiveColor = (c) => {
-    if (multi) cham.setColor(colorTarget, c);
-    else onPaintColor(c);
+    onPaintColor(c);
     // Fill previews live: every color source (wheel, value slider and saved
     // swatches) shows on the current selection, but only Apply (or the
     // checkmark) commits it, as one undoable edit rather than an undo entry
@@ -342,19 +337,14 @@ export default function MaterialsPanel({
               <ColorTabContent
                 color={activeColor}
                 onChange={setActiveColor}
-                multi={multi}
-                colorTarget={colorTarget}
-                onColorTarget={setColorTarget}
                 strokeActive={strokeActive}
                 showSliders
                 size={paintSize} smoothness={paintSmoothness} opacity={paintOpacity}
                 onSize={onPaintSize} onSmoothness={onPaintSmoothness} onOpacity={onPaintOpacity}
                 onSizeActive={setSizeDragging}
-                shift={cham.intensity} onShift={cham.setShift}
                 paintTool={paintTool}
                 strokesBlocked={strokesBlocked}
                 onPaintTool={onPaintTool}
-                onMulti={() => { setMulti((v) => !v); setColorTarget('primary'); }}
                 onApply={applyPaint}
                 onUndo={undoPaint}
                 canApply={canApply}
