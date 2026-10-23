@@ -324,6 +324,65 @@ export function bevelLoopEdges(sm, options = {}) {
   // keeps its self-intersection clamp; Sweep uses the entered bend radius.
   const r = sweep ? requested : (Number.isFinite(maxAmount) ? Math.min(requested, maxAmount) : requested);
 
+  // Straight tube / prism legs. On a closed loop, each loop vertex is checked
+  // for its own wall edge running down each leg; the walls all have to run in
+  // one direction, so a tapered loop (cone, pyramid tip, chamfer) never
+  // qualifies. Returns that leg's next ring of vertices and its axis.
+  const loopVertexSet = new Set(order);
+  const neighbors = new Map();
+  for (const f of mesh.faces) {
+    for (let j = 0; j < f.length; j++) {
+      const a = f[j], b = f[(j + 1) % f.length];
+      if (!neighbors.has(a)) neighbors.set(a, new Set());
+      if (!neighbors.has(b)) neighbors.set(b, new Set());
+      neighbors.get(a).add(b);
+      neighbors.get(b).add(a);
+    }
+  }
+  const straightLeg = (key) => {
+    if (!closed) return null;
+    let hint = new THREE.Vector3();
+    for (const pe of perEdge) hint.add(pe[key]);
+    if (hint.lengthSq() < 1e-12) return null;
+    hint.normalize();
+    // Pick each vertex's wall edge, then re-pick against the average of those
+    // picks: on a triangulated wall a diagonal can look closer to the rough
+    // first direction than the straight wall edge does.
+    let ring = [], dirs = [];
+    for (let pass = 0; pass < 3; pass++) {
+      ring = []; dirs = [];
+      for (let i = 0; i < N; i++) {
+        const pv = V3(mesh.getVertex(order[i]));
+        let best = null, bestDot = -Infinity, bestDir = null;
+        for (const w of neighbors.get(order[i]) || []) {
+          if (loopVertexSet.has(w)) continue;
+          const d = V3(mesh.getVertex(w)).sub(pv);
+          if (d.lengthSq() < 1e-14) continue;
+          d.normalize();
+          const dot = d.dot(hint);
+          if (dot > bestDot) { bestDot = dot; best = w; bestDir = d; }
+        }
+        if (best == null || bestDot < 0.5) return null;
+        ring.push(best);
+        dirs.push(bestDir);
+      }
+      const next = new THREE.Vector3();
+      for (const d of dirs) next.add(d);
+      if (next.lengthSq() < 1e-12) return null;
+      hint = next.normalize();
+    }
+    if (new Set(ring).size !== N) return null;
+    for (let i = 0; i < N; i++) if (!neighbors.get(ring[i])?.has(ring[(i + 1) % N])) return null;
+    for (const d of dirs) if (d.dot(hint) < 0.995) return null;
+    return { ring, axis: hint };
+  };
+  // A normal (non-Sweep) bevel across a straight tube moves every loop vertex
+  // straight along its leg, so the tube's cross-section stays its true size.
+  // Offsetting along each wall facet's own direction pushed vertices sideways
+  // and swelled the tube into a lumpy, oversized band.
+  const rigidLegs = !sweep && closed ? { dA: straightLeg('dA'), dB: straightLeg('dB') } : null;
+  const rigidAxis = (pick) => (rigidLegs?.dA && rigidLegs?.dB ? rigidLegs[pick].axis : null);
+
   // Edges incident to each loop vertex (one for chain ends, two otherwise).
   const at = order.map(() => []);
   for (let i = 0; i < walk.length; i++) {
@@ -368,6 +427,8 @@ export function bevelLoopEdges(sm, options = {}) {
     originals.push(vid);
     const inc = at[i];
     const mitered = (pick) => {
+      const rigid = rigidAxis(pick);
+      if (rigid) return vv.clone().addScaledVector(rigid, r);
       const shared = pick === 'dA' ? sharedA : sharedB;
       if (shared) return vv.clone().addScaledVector(shared, r);
       const dirs = inc.map((ei) => perEdge[ei][pick]);
@@ -441,6 +502,49 @@ export function bevelLoopEdges(sm, options = {}) {
       legB: legAxis(sides.map((s) => s.b)),
     })
     : null;
+
+  // A Sweep's tangent points can reach past the next loop along a leg (a cut
+  // loop close to the bend). The bend then overlapped that loop: faces folded
+  // back through the tube and opened holes. A loop the bend passes is inside
+  // the bend, so it is merged into the selected loop and the bend is rebuilt;
+  // the leg beyond it is left where it was.
+  const absorbDepth = options._absorbDepth || 0;
+  if (tubeSweep && absorbDepth < 64) {
+    for (const [key, t] of [['dA', 0], ['dB', 1]]) {
+      const leg = straightLeg(key);
+      if (!leg) continue;
+      let passes = false;
+      for (let i = 0; i < N && !passes; i++) {
+        const pv = corners[i].vv;
+        const end = tubeSweep(i, t);
+        const reach = V3(mesh.getVertex(leg.ring[i])).sub(pv).dot(leg.axis);
+        if (end && end.clone().sub(pv).dot(leg.axis) >= reach * 0.98) passes = true;
+      }
+      if (!passes) continue;
+      const into = new Map(leg.ring.map((w, i) => [w, order[i]]));
+      const remap = (id) => (into.has(id) ? into.get(id) : id);
+      mesh.faces = mesh.faces.map((f) => {
+        const out = [];
+        for (const vid of f.map(remap)) if (out.length === 0 || out[out.length - 1] !== vid) out.push(vid);
+        if (out.length > 1 && out[0] === out[out.length - 1]) out.pop();
+        return out;
+      }).filter((f) => new Set(f).size >= 3);
+      const remapEdges = (list) => (list || [])
+        .map((e) => ({ ...e, v1: remap(e.v1), v2: remap(e.v2) }))
+        .filter((e) => e.v1 !== e.v2);
+      // A hidden triangulation diagonal of the merged strip lands on a loop
+      // edge; it must not hide the loop the bend is rebuilt from.
+      const loopKeys = new Set(walk.map((e) => edgeKey(e.v1, e.v2)));
+      mesh.explicitEdges = remapEdges(mesh.explicitEdges);
+      mesh.hiddenEdges = remapEdges(mesh.hiddenEdges).filter((e) => !loopKeys.has(edgeKey(e.v1, e.v2)));
+      mesh.visibleEdges = remapEdges(mesh.visibleEdges);
+      mesh.vertices = mesh.vertices.filter((v) => !into.has(v.id));
+      mesh.invalidateCache();
+      sel.indices = mesh.getEdges().map((e, i) => (loopKeys.has(edgeKey(e.v1, e.v2)) ? i : -1)).filter((i) => i >= 0);
+      bevelLoopEdges(sm, { ...options, _singleComponent: true, _absorbDepth: absorbDepth + 1 });
+      return;
+    }
+  }
 
   for (let i = 0; i < N; i++) {
     const { vv, pA, pB } = corners[i];
