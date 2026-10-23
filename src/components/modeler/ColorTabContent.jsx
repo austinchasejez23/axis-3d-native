@@ -8,26 +8,22 @@ import InlineSlider from './InlineSlider';
 import SurfaceSliderRow from './SurfaceSliderRow';
 
 const WHEEL = 118;
-const SHIFT_SLIDER = 3; // index of Shift in the slider strip
 
 // Paint tab. Top row: the color wheel and its vertical brightness slider, and
-// beside them Apply and Undo, the six tool icons, then the saved colors (led
+// beside them Apply and Undo, the paint tool icons, then the saved colors (led
 // by Remove paint). Below the wheel, full width, the same swipeable slider
-// strip the Material tab uses. Shift lives in the strip at all times and stays
-// grey until Multi is on, so nothing swaps when Multi toggles.
+// strip the Material tab uses.
 export default function ColorTabContent({
-  color, onChange, multi, colorTarget, onColorTarget, strokeActive, showSliders,
-  size, smoothness, opacity, onSize, onSmoothness, onOpacity, onSizeActive, shift, onShift,
-  paintTool, strokesBlocked, onPaintTool, onMulti, onRemovePaint,
+  color, onChange, strokeActive, showSliders,
+  size, smoothness, opacity, onSize, onSmoothness, onOpacity, onSizeActive,
+  paintTool, strokesBlocked, onPaintTool, onRemovePaint,
   onApply, onUndo, canApply, canUndo, applied, eyedropper, onEyedropper,
 }) {
   const { uiColor, highlightColor } = useTheme();
   const sliderRef = useRef(null);
-  // Name the pressed button on screen (under the tool label); Multi (when
-  // turning on), Primary and Shift also bring the Shift slider to the center.
+  // Name the pressed button on screen (under the tool label).
   const onPress = (id, label) => {
     window.dispatchEvent(new CustomEvent('axis-paint-label', { detail: { label } }));
-    if ((id === 'multi' && !multi) || id === 'primary' || id === 'shift') sliderRef.current?.goTo(SHIFT_SLIDER);
   };
   const actionBtn = 'modeling-value flex h-8 min-w-0 items-center justify-center rounded-lg px-1 text-[13px] font-semibold active:scale-95 disabled:opacity-35 disabled:active:scale-100';
   return (
@@ -66,12 +62,8 @@ export default function ColorTabContent({
           </div>
           <PaintToolButtons
             paintTool={paintTool}
-            multi={multi}
             strokesBlocked={strokesBlocked}
             onPaintTool={onPaintTool}
-            onMulti={onMulti}
-            colorTarget={colorTarget}
-            onColorTarget={onColorTarget}
             onPress={onPress}
             eyedropper={eyedropper}
             onEyedropper={onEyedropper}
@@ -84,7 +76,6 @@ export default function ColorTabContent({
           <InlineSlider label="Size" value={size} min={4} max={100} onChange={onSize} onActiveChange={onSizeActive} disabled={!strokeActive} />
           <InlineSlider label="Opacity" value={opacity} min={1} max={100} onChange={onOpacity} />
           <InlineSlider label="Hardness" value={smoothness} min={0} max={100} onChange={onSmoothness} disabled={!strokeActive} />
-          <InlineSlider label="Shift" value={shift} display={`${shift}`} min={0} max={100} onChange={onShift} disabled={!multi} />
         </SurfaceSliderRow>
       )}
     </div>

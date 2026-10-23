@@ -49,10 +49,6 @@ export class EditableMesh {
     this.emissive = 0;                 // 0–1 self-illumination (glow)
     this.tintHue = 0;
     this.tintAmount = 0;
-    this.chamEnabled = false;
-    this.chamPrimary = '#ff0000';
-    this.chamSecondary = '#00aaff';
-    this.chamIntensity = 0;
     this.textureMergeColor = false;
     this.vertexColors = {};
     this.faceColors = {};
@@ -96,10 +92,6 @@ export class EditableMesh {
     this.emissive = 0;
     this.tintHue = 0;
     this.tintAmount = 0;
-    this.chamEnabled = false;
-    this.chamPrimary = '#ff0000';
-    this.chamSecondary = '#00aaff';
-    this.chamIntensity = 0;
     this.vertexColors = {};
     this.faceColors = {};
     this.paintLayer = null;
@@ -831,10 +823,6 @@ export class EditableMesh {
     m.emissive = this.emissive;
     m.tintHue = this.tintHue;
     m.tintAmount = this.tintAmount;
-    m.chamEnabled = this.chamEnabled;
-    m.chamPrimary = this.chamPrimary;
-    m.chamSecondary = this.chamSecondary;
-    m.chamIntensity = this.chamIntensity;
     m.textureMergeColor = this.textureMergeColor;
     m.vertexColors = { ...this.vertexColors };
     m.faceColors = { ...this.faceColors };
@@ -877,10 +865,6 @@ export class EditableMesh {
       emissive: this.emissive,
       tintHue: this.tintHue,
       tintAmount: this.tintAmount,
-      chamEnabled: this.chamEnabled,
-      chamPrimary: this.chamPrimary,
-      chamSecondary: this.chamSecondary,
-      chamIntensity: this.chamIntensity,
       textureMergeColor: this.textureMergeColor,
       vertexColors: { ...this.vertexColors },
       faceColors: { ...this.faceColors },
@@ -925,10 +909,7 @@ export class EditableMesh {
     m.emissive = data.emissive ?? 0;
     m.tintHue = data.tintHue ?? 0;
     m.tintAmount = data.tintAmount ?? 0;
-    m.chamEnabled = data.chamEnabled ?? ((data.chamIntensity ?? 0) > 0);
-    m.chamPrimary = data.chamPrimary ?? '#ff0000';
-    m.chamSecondary = data.chamSecondary ?? '#00aaff';
-    m.chamIntensity = data.chamIntensity ?? 0;
+    // Color shift was removed; models saved with it load with their normal paint.
     m.textureMergeColor = data.textureMergeColor || false;
     m.vertexColors = { ...(data.vertexColors || {}) };
     m.faceColors = { ...(data.faceColors || {}) };

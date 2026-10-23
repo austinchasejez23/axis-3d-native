@@ -84,10 +84,6 @@ export function separateMesh(sm) {
     target.emissive = mesh.emissive;
     target.tintHue = mesh.tintHue;
     target.tintAmount = mesh.tintAmount;
-    target.chamEnabled = mesh.chamEnabled;
-    target.chamPrimary = mesh.chamPrimary;
-    target.chamSecondary = mesh.chamSecondary;
-    target.chamIntensity = mesh.chamIntensity;
     target.textureMergeColor = mesh.textureMergeColor;
     target.paintLayer = clonePaintLayer(mesh.paintLayer);
   };

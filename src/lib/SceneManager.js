@@ -735,18 +735,6 @@ export class SceneManager {
     return true;
   }
 
-  // Chameleon two-tone color-shift finish: primary and secondary colors plus
-  // the intensity of the secondary color at grazing angles.
-  setMaterialChameleon(primaryColor, secondaryColor, intensity) {
-    const i = Math.max(0, Math.min(1, intensity));
-    this._setMaterialProp((mesh) => {
-      mesh.chamEnabled = true;
-      mesh.chamPrimary = primaryColor;
-      mesh.chamSecondary = secondaryColor;
-      mesh.chamIntensity = i;
-    });
-  }
-
   // Texture + paint blending toggle ("Merge with color" in the texture tools).
   setTextureMergeColor(on) {
     this._setMaterialProp((mesh) => { mesh.textureMergeColor = !!on; });
@@ -1908,10 +1896,6 @@ export class SceneManager {
     newMesh.emissive = mesh.emissive;
     newMesh.tintHue = mesh.tintHue;
     newMesh.tintAmount = mesh.tintAmount;
-    newMesh.chamEnabled = mesh.chamEnabled;
-    newMesh.chamPrimary = mesh.chamPrimary;
-    newMesh.chamSecondary = mesh.chamSecondary;
-    newMesh.chamIntensity = mesh.chamIntensity;
     newMesh.textureMergeColor = mesh.textureMergeColor;
     // Paint atlas UVs are projection-based and remain valid for the rebuilt
     // primitive. Vertex/face colors and paintWireEdges are intentionally not
