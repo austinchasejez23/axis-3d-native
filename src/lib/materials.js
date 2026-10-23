@@ -4,10 +4,6 @@ import { applyPaintLayerShader } from './paintLayer';
 import { isClosedSurface } from './renderBoost';
 import objectShadowMaterial from '@/lib/objectShadowMaterial';
 
-const chameleonColor = (value, fallbackHue) => typeof value === 'string'
-  ? new THREE.Color(value)
-  : new THREE.Color().setHSL(((value ?? fallbackHue) % 360) / 360, 1, 0.5);
-
 // Legacy projects stored the old near-white default. Render that untouched
 // default as neutral modeling clay, while preserving every chosen/painted color.
 const solidViewportColor = (mesh, painted) => {
@@ -173,29 +169,6 @@ export function createMaterial(mesh, viewportMode = {}) {
   // makes high metalness read as glossy plastic instead of metal.
   if ((mesh.metalness ?? 0) > 0 && !mesh.clearCoatEnabled && mesh.material?.preset !== 'clearcoat' && mat.isMeshPhysicalMaterial) {
     mat.clearcoat = 0;
-  }
-  // Chameleon paint: primary base color with a secondary color that shifts in
-  // at grazing view angles (two-tone color-shift finish).
-  if (mesh.chamEnabled === true) {
-    const prim = chameleonColor(mesh.chamPrimary, 0);
-    const sec = chameleonColor(mesh.chamSecondary, 200);
-    if (!mat.isMeshPhysicalMaterial) {
-      const prev = mat;
-      mat = new THREE.MeshPhysicalMaterial({
-        vertexColors: prev.vertexColors,
-        metalness: 0.6, roughness: 0.35,
-        envMapIntensity: prev.envMapIntensity ?? 1.5,
-        flatShading: !mesh.smoothShading, side: THREE.DoubleSide,
-      });
-      prev.dispose();
-    }
-    // Keep vertex paint as the underlying detail, then multiply it by the
-    // continuously view-dependent primary-to-secondary chameleon color.
-    mat.vertexColors = mesh.hasPaint?.() || false;
-    mat.color = new THREE.Color(0xffffff);
-    applyChameleonShader(mat, prim, sec, Math.max(0, Math.min(1, mesh.chamIntensity ?? 0)));
-    mat.clearcoat = 1.0;
-    mat.clearcoatRoughness = 0.08;
   }
   // Common adjustments available on every material type.
   if (mesh.opacity != null && mesh.opacity < 1) {
