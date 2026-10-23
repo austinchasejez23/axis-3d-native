@@ -45,7 +45,7 @@ export default function Splash() {
         className="pointer-events-none absolute bottom-6 left-0 right-0 z-10 flex justify-center transition-opacity ease-out"
         style={{ opacity: creditIn ? 1 : 0, transitionDuration: creditIn ? '700ms' : '400ms' }}
       >
-        <img src={CREDIT_URL} alt="A First App Production" className="block h-auto w-[52vw] max-w-[220px]" />
+        <img src={CREDIT_URL} alt="A First App Production" className="block h-auto w-[52vw] max-w-[220px]" style={{ mixBlendMode: "screen", filter: "brightness(0.9) contrast(2.2)", WebkitMaskImage: "radial-gradient(ellipse 70% 80% at center, black 40%, transparent 100%)", maskImage: "radial-gradient(ellipse 70% 80% at center, black 40%, transparent 100%)" }} />
       </div>
     </div>
   );
