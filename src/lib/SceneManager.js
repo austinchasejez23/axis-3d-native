@@ -764,6 +764,11 @@ export class SceneManager {
       const mesh = this.getMesh(id);
       if (!mesh) continue;
       mesh.color = 0xaeb4bc;
+      // Clear retired color-shift finishes as well as ordinary paint.
+      mesh.chamEnabled = false;
+      mesh.chamIntensity = 0;
+      mesh.chamPrimary = null;
+      mesh.chamSecondary = null;
       mesh.faceColors = {};
       mesh.vertexColors = {};
       if (mesh.paintLayer) clearPaintLayer(mesh.paintLayer);
