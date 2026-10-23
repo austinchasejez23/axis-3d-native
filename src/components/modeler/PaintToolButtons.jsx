@@ -1,22 +1,16 @@
-import { PaintBucket, Paintbrush, SprayCan, Blend, Droplet, Droplets, Pipette } from 'lucide-react';
+import { PaintBucket, Paintbrush, SprayCan, Pipette } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
 import LoopingScroller from './LoopingScroller';
 
 const GREY = 'rgba(150,150,150,0.55)';
 
-// Fill · Brush · Spray · Multi · Primary · Shift · Eyedropper as one endless,
-// swipeable row of icon-only buttons on a single backing strip. Primary and
-// Shift pick which Multi color the wheel edits, so they stay grey (inactive)
-// until Multi is on. The eyedropper stays highlighted until a color is taken.
-export default function PaintToolButtons({ paintTool, multi, strokesBlocked, onPaintTool, onMulti, colorTarget, onColorTarget, onPress, eyedropper, onEyedropper }) {
+// Fill, Brush, Spray and Eyedropper. Color shift is retired.
+export default function PaintToolButtons({ paintTool, strokesBlocked, onPaintTool, onPress, eyedropper, onEyedropper }) {
   const { highlightColor } = useTheme();
   const items = [
     { id: 'fill', label: 'Fill', icon: PaintBucket, active: paintTool === 'fill', onClick: () => onPaintTool('fill') },
     { id: 'brush', label: 'Brush', icon: Paintbrush, active: paintTool === 'brush', disabled: strokesBlocked, onClick: () => onPaintTool('brush') },
     { id: 'spray', label: 'Spray', icon: SprayCan, active: paintTool === 'spray', disabled: strokesBlocked, onClick: () => onPaintTool('spray') },
-    { id: 'multi', label: 'Multi', flash: 'Color shift', icon: Blend, active: multi, onClick: onMulti },
-    { id: 'primary', label: 'Primary color', flash: 'Base color', icon: Droplet, active: multi && colorTarget === 'primary', disabled: !multi, onClick: () => onColorTarget('primary') },
-    { id: 'shift', label: 'Shift color', flash: 'Secondary color', icon: Droplets, active: multi && colorTarget === 'shift', disabled: !multi, onClick: () => onColorTarget('shift') },
     { id: 'eyedropper', label: 'Eyedropper', flash: 'Eyedropper', icon: Pipette, active: !!eyedropper, onClick: () => onEyedropper?.() },
   ];
   return (
