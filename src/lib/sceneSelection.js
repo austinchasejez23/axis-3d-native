@@ -209,6 +209,11 @@ export function applySceneSelection(SceneManager) {
   P.isWorldPointVisible = /** @this {import('./SceneManager.js').SceneManager} */ function (point) {
     const direction = point.clone().sub(this.camera.position), distance = direction.length();
     if (distance < 1e-6) return true;
+    // A point behind the camera is never visible. The occlusion ray below
+    // points away from the scene there and hits nothing, which used to pass
+    // geometry behind a zoomed-in camera as visible.
+    const forward = this.camera.getWorldDirection(new THREE.Vector3());
+    if (direction.dot(forward) <= (this.camera.near ?? 0)) return false;
     this.raycaster.set(this.camera.position, direction.normalize());
     const objects = [...this.threeObjects.values()].filter(o => o.mesh.visible).map(o => o.mesh);
     const first = this.raycaster.intersectObjects(objects, false)[0];
@@ -246,11 +251,21 @@ export function applySceneSelection(SceneManager) {
       for (let i = 0; i < edges.length; i++) {
         const va = mesh.getVertex(edges[i].v1);
         const vb = mesh.getVertex(edges[i].v2);
-        const wa = new THREE.Vector3(va.x, va.y, va.z).applyMatrix4(wm);
-        const wb = new THREE.Vector3(vb.x, vb.y, vb.z).applyMatrix4(wm);
+        let wa = new THREE.Vector3(va.x, va.y, va.z).applyMatrix4(wm);
+        let wb = new THREE.Vector3(vb.x, vb.y, vb.z).applyMatrix4(wm);
+        // Clip the edge to the part in front of the camera. Projecting a
+        // point behind the camera flips it across the screen, so a zoomed-in
+        // view picked edges of objects behind the camera (or the far end of
+        // an edge passing beside it) as if they were under the finger.
+        const near = (this.camera.near ?? 0.01) * 1.001;
+        const za = -wa.clone().applyMatrix4(this.camera.matrixWorldInverse).z;
+        const zb = -wb.clone().applyMatrix4(this.camera.matrixWorldInverse).z;
+        if (za <= near && zb <= near) continue;
+        if (za < near) wa = wa.clone().lerp(wb, (near - za) / (zb - za));
+        else if (zb < near) wb = wb.clone().lerp(wa, (near - zb) / (za - zb));
         const sa = wa.clone().project(this.camera);
         const sb = wb.clone().project(this.camera);
-        if (sa.z < -1 || sb.z < -1) continue;
+        if (sa.z < -1 || sb.z < -1 || sa.z > 1 || sb.z > 1) continue;
         const px = ndcX, py = ndcY;
         const ax = sa.x, ay = sa.y, bx = sb.x, by = sb.y;
         const dx = bx - ax, dy = by - ay;

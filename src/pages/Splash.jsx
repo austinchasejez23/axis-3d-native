@@ -32,7 +32,7 @@ export default function Splash() {
         playsInline
         preload="auto"
         poster={BLANK_POSTER}
-        className="h-full w-full bg-black object-contain"
+        className="h-full w-full bg-black object-cover"
         aria-label="AXIS splash animation"
         onTimeUpdate={(e) => {
           const t = e.currentTarget.currentTime;
