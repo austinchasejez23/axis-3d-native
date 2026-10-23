@@ -11,31 +11,6 @@ const solidViewportColor = (mesh, painted) => {
   return mesh.color === 0xf0f0f0 ? 0xaeb4bc : mesh.color;
 };
 
-function applyChameleonShader(material, primary, secondary, intensity) {
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.axisChamPrimary = { value: primary.clone() };
-    shader.uniforms.axisChamSecondary = { value: secondary.clone() };
-    shader.uniforms.axisChamIntensity = { value: intensity };
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        '#include <common>',
-        `#include <common>
-uniform vec3 axisChamPrimary;
-uniform vec3 axisChamSecondary;
-uniform float axisChamIntensity;`
-      )
-      .replace(
-        '#include <normal_fragment_maps>',
-        `#include <normal_fragment_maps>
-float axisFacing = abs(dot(normalize(normal), normalize(vViewPosition)));
-float axisFresnel = pow(clamp(1.0 - axisFacing, 0.0, 1.0), 1.5);
-float axisShift = clamp(axisFresnel * axisChamIntensity, 0.0, 1.0);
-diffuseColor.rgb *= mix(axisChamPrimary, axisChamSecondary, axisShift);`
-      );
-  };
-  material.customProgramCacheKey = () => 'axis-chameleon-angle-blend-v1';
-}
-
 // Workbench-style form shading for the ordinary solid viewport. A stable
 // camera-space studio key separates broad planes at every orbit angle, while
 // derivative cavity shading keeps creases and silhouettes readable.
