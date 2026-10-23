@@ -70,7 +70,7 @@ export default function Library() {
         />
       </div>
       <div className="fixed inset-0 z-0 pointer-events-none opacity-25">
-        <Image src={LOGO_URL} alt="Axis 3D" className="w-full h-full object-contain" fittingType="fit" />
+        <Image src={LOGO_URL} alt="Axis 3D" className="w-full h-full object-contain" style={{ mixBlendMode: "screen", filter: "brightness(0.85) contrast(2.4)", WebkitMaskImage: "radial-gradient(ellipse 48% 48% at center, black 35%, transparent 100%)", maskImage: "radial-gradient(ellipse 48% 48% at center, black 35%, transparent 100%)" }} fittingType="fit" />
       </div>
       <div className="sticky top-0 z-30 bg-zinc-950 px-4 pt-[calc(env(safe-area-inset-top,0px)+1.25rem)] pb-3 border-b border-white/10">
         <div className="mb-3 flex items-center justify-between gap-3">
