@@ -17,7 +17,7 @@ import { useProAccess } from '@/lib/ProAccessContext';
 import { FREE_PROJECT_LIMIT } from '@/lib/proAccess';
 
 
-const LOGO_URL = '/media/92bec63fb_file_00000000a990820d8515bede88972084.png';
+const LOGO_URL = '/media/axis_logo_clear.png';
 
 export default function Library() {
   const navigate = useNavigate();

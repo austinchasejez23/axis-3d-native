@@ -5,7 +5,7 @@ const VIDEO_URL = '/splash/axis_splash_v4.mp4';
 // A video with no poster draws the browser's own huge grey play button until
 // its first frame decodes, which in the native app covers the whole screen for
 // a moment. A 1x1 black poster fills that gap with the background instead.
-const CREDIT_URL = '/media/4557d27b8_Picsart_26-08-20_14-42-35-065.jpg';
+const CREDIT_URL = '/media/first_app_production_credit.png';
 // The "A First App Production" credit fades in at 4s and out with the
 // video's own fade to black (from 5.5s), timed against the video itself.
 const CREDIT_IN_S = 4;
