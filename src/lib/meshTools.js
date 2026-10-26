@@ -495,9 +495,31 @@ export function splitEdge(sm) {
 // closed loops like a cylinder rim).
 export function bevelEdge(sm, options = {}) {
   if (!options.skipUndo) sm.pushUndo();
-  // The Radius tool is a section bend (corner radius), not an edge bevel.
-  if (options.cornerRadius) cornerRadiusLoop(sm, options);
-  else bevelLoopEdges(sm, options);
+  // Bevel the object as it appears on screen. An object resized with W / H / D
+  // keeps its original vertex positions plus a per-axis scale, so beveling the
+  // raw vertices measured angles and the radius on the unstretched shape; the
+  // stretch then flattened the rounding into a wide, straight band that rose
+  // across the neighbouring faces. Apply the scale for the bevel, then take it
+  // back out so the object keeps its own scale.
+  const mesh = sm.getMesh?.(sm.selection?.meshId);
+  const s = mesh?.scale;
+  const stretched = !!s && s.x !== 0 && s.y !== 0 && s.z !== 0 &&
+    (Math.abs(s.x - 1) > 1e-9 || Math.abs(s.y - 1) > 1e-9 || Math.abs(s.z - 1) > 1e-9);
+  const bake = (fx, fy, fz) => {
+    for (const v of mesh.vertices) { v.x *= fx; v.y *= fy; v.z *= fz; }
+    mesh.invalidateCache();
+  };
+  if (stretched) bake(s.x, s.y, s.z);
+  try {
+    // The Radius tool is a section bend (corner radius), not an edge bevel.
+    if (options.cornerRadius) cornerRadiusLoop(sm, options);
+    else bevelLoopEdges(sm, options);
+  } finally {
+    if (stretched) {
+      bake(1 / s.x, 1 / s.y, 1 / s.z);
+      sm.rebuildThreeMesh?.(mesh.id);
+    }
+  }
 }
 
 // === LIVE BEVEL PREVIEW ===

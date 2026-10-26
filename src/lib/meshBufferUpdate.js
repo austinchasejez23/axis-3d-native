@@ -23,6 +23,9 @@ export function updateGeometryInPlace(mesh, geometry) {
   let corners = 0;
   for (let fi = 0; fi < faces.length; fi++) {
     const f = faces[fi];
+    // Folded polygons need a normal per preserved triangle, not one flat
+    // normal for the whole wall. The full builder already supplies these.
+    if (mesh.faceRenderTriangles?.[fi]?.length) return false;
     const triangles = mesh.getFaceTriangleIndices(fi);
     // The fast buffer writer assumes a triangle fan. For concave Boolean
     // faces or removed collinear corners, the renderer uses ear clipping

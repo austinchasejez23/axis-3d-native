@@ -146,7 +146,22 @@ export function applySceneUndo(SceneManager) {
         scale: [1, 1, 1],
       } : transform;
     }
-    if (this.selection.type === 'object') return transform;
+    if (this.selection.type === 'object') {
+      // Position fields describe the visible object's world-space center,
+      // not its potentially offset modeling origin.
+      const mesh = this.getMesh(meshId);
+      if (mesh?.vertices?.length) {
+        const world = this.getWorldMatrix(mesh);
+        const lo = new THREE.Vector3(Infinity, Infinity, Infinity);
+        const hi = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+        for (const v of mesh.vertices) {
+          const p = new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(world);
+          lo.min(p); hi.max(p);
+        }
+        transform.position = lo.add(hi).multiplyScalar(0.5).toArray();
+      }
+      return transform;
+    }
     const center = this.getSelectionCenter();
     const rotation = this.subRotation || { x: 0, y: 0, z: 0 };
     const toDeg = (r) => (r * 180) / Math.PI;

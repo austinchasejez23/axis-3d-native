@@ -12,7 +12,7 @@ const FREE_HINT = 'Double-tap the Free Transform icon for settings';
 const FREE_HINT_WIDTH_REM = 12;
 const RESISTANCE_HINT = 'Double-tap the Resistance icon for settings';
 
-export default function RenderBoostButtons({ renderBoost, freeTransform, snapping, onRenderBoost, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel, onFocus, precision, onTogglePrecision, onOpenPrecisionPanel }) {
+export default function RenderBoostButtons({ renderBoost, freeTransform, snapping, onRenderBoost, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel, onFocus, precision, onTogglePrecision, onOpenPrecisionPanel, group = 'all' }) {
   const { uiColor, highlightColor } = useTheme();
   const [notice, setNotice] = useState(null);
   const timerRef = useRef(null);
@@ -71,10 +71,11 @@ export default function RenderBoostButtons({ renderBoost, freeTransform, snappin
 
   return (
     <div className="relative z-10 flex flex-col items-end gap-2.5 mr-4">
-      <button {...tapProps('boost', () => select('Render boost', onRenderBoost))} aria-label="Toggle navigation render boost" aria-pressed={renderBoost} style={style(renderBoost)} className={button}>
+      {(group === 'all' || group === 'visual') && <button {...tapProps('boost', () => select('Render boost', onRenderBoost))} aria-label="Toggle navigation render boost" aria-pressed={renderBoost} style={style(renderBoost)} className={button}>
         {notice === 'Render boost' && <span className="text-sm whitespace-nowrap translate-y-[3px]">Render boost</span>}
         <Gauge className="w-5 h-5 shrink-0" strokeWidth={2} />
-      </button>
+      </button>}
+      {(group === 'all' || group === 'action') && <>
       <button
         {...tapProps('free', handleFreeTap, onOpenFreeTransformPanel)}
         aria-label="Toggle free transform"
@@ -108,6 +109,7 @@ export default function RenderBoostButtons({ renderBoost, freeTransform, snappin
         {notice === 'Focus' && <span className="text-sm whitespace-nowrap translate-y-[3px]">Focus</span>}
         <Crosshair className="w-5 h-5 shrink-0" strokeWidth={2} />
       </button>
+      </>}
     </div>
   );
 }

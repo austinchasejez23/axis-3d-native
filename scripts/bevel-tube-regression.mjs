@@ -50,7 +50,8 @@ function run(label, opts){
   const fn=(f)=>{const ps=f.map(V);const n=new THREE.Vector3();for(let j=0;j<ps.length;j++){const a=ps[j],b=ps[(j+1)%ps.length];n.x+=(a.y-b.y)*(a.z+b.z);n.y+=(a.z-b.z)*(a.x+b.x);n.z+=(a.x-b.x)*(a.y+b.y);}return n.lengthSq()>1e-16?n.normalize():null;};
   const em=new Map(); m.faces.forEach((f,fi)=>{for(let j=0;j<f.length;j++){const k=edgeKey(f[j],f[(j+1)%f.length]); if(!em.has(k)) em.set(k,[]); em.get(k).push(fi);}});
   const norms=m.faces.map(fn); let inward=0; for(const fs of em.values()){ if(fs.length!==2) continue; const a=norms[fs[0]],b=norms[fs[1]]; if(a&&b&&a.dot(b)<-0.3) inward++; }
-  return { folds: inward, open, nonman, radii: byRing.map(rv=>{ const c=new THREE.Vector3(); rv.forEach(v=>c.add(new THREE.Vector3(v.x,v.y,v.z))); c.divideScalar(rv.length); const ds=rv.map(v=>new THREE.Vector3(v.x,v.y,v.z).distanceTo(c)); return [Math.min(...ds), Math.max(...ds)]; }) };
+  const midRing = byRing[Math.floor(byRing.length / 2)]; const mid = new THREE.Vector3(); midRing.forEach(v => mid.add(new THREE.Vector3(v.x, v.y, v.z))); mid.divideScalar(midRing.length);
+  return { mid, folds: inward, open, nonman, radii: byRing.map(rv=>{ const c=new THREE.Vector3(); rv.forEach(v=>c.add(new THREE.Vector3(v.x,v.y,v.z))); c.divideScalar(rv.length); const ds=rv.map(v=>new THREE.Vector3(v.x,v.y,v.z).distanceTo(c)); return [Math.min(...ds), Math.max(...ds)]; }) };
 }
 const cases = [
   { near: 0, tri: false, ang: 40 }, { near: 0.3, tri: false, ang: 40 },
@@ -59,8 +60,7 @@ const cases = [
 try {
   for (const c of cases) {
     NEAR_D = c.near; TRI = c.tri; ANG = c.ang * Math.PI / 180;
-    const miterMax = R / Math.cos(ANG / 2);
-    for (const [label, opts] of [
+      for (const [label, opts] of [
       ['default', { radius: 1.7, segments: 3, smooth: true, sweep: false }],
       ['sweep r1.7', { radius: 1.7, segments: 3, sweep: true }],
       ['sweep r1', { radius: 1, segments: 3, sweep: true }],
@@ -73,8 +73,13 @@ try {
       assert.equal(res.folds, 0, name + ': no folded faces');
       for (const [lo, hi] of res.radii) {
         assert.ok(lo > R * 0.98, name + ': section not pinched');
-        assert.ok(hi < (opts.sweep ? R * 1.02 : miterMax * 1.02), name + ': section not swollen');
+        assert.ok(hi < R * 1.02, name + ': section not swollen');
       }
+      // Rounded, not just widened: the middle of the bend cuts inside the
+      // sharp corner, toward the inside of the turn.
+      const legA = new THREE.Vector3(0, -1, 0), legB = new THREE.Vector3(Math.sin(ANG), Math.cos(ANG), 0);
+      const inside = legA.clone().add(legB).normalize();
+      assert.ok(res.mid.dot(inside) > 0.05, name + ': bend is rounded');
     }
   }
   console.log('Tube bevel keeps its section; Sweep absorbs loops inside the bend without folds.');

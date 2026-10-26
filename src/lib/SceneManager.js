@@ -583,7 +583,11 @@ export class SceneManager {
     const mesh = this.getMesh(sel.meshId);
     if (!mesh || mesh.locked) return;
     if (sel.type === 'object') {
-      mesh.position.set(x, y, z);
+      // Move the actual geometry center to the entered coordinates. Setting
+      // mesh.position directly moves its origin, which can be far off-center.
+      const center = this.getSelectionTransform(mesh.id)?.position;
+      if (!center) return;
+      mesh.position.add(new THREE.Vector3(x - center[0], y - center[1], z - center[2]));
       this.updateObjectTransform(mesh.id);
     } else {
       const center = this.getSelectionCenter();
@@ -1575,7 +1579,7 @@ export class SceneManager {
       this.updateObjectTransform(mesh.id);
     } else {
       const center = this.rotatePivot || this.getSelectionCenter();
-      mesh.lockTriangulationDiagonals();
+      mesh.lockFaceRenderTriangles(); mesh.lockTriangulationDiagonals();
       const wm = this.getWorldMatrix(mesh);
       const vids = this.getSelectedVertexIds();
       const rotAxis = axis === 'x' ? new THREE.Vector3(1, 0, 0) : axis === 'y' ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
@@ -1647,9 +1651,22 @@ export class SceneManager {
       // Pivot stays pinned to where the selection was when the gesture started,
       // so a sub-object rotation can never drift off its own center.
       const center = this.rotatePivot || this.getSelectionCenter();
-      mesh.lockTriangulationDiagonals();
+      mesh.lockFaceRenderTriangles(); mesh.lockTriangulationDiagonals();
       const wm = this.getWorldMatrix(mesh);
-      const vids = this.getSelectedVertexIds();
+      // A face can share positions with separately indexed wall vertices.
+      // Rotate those coincident seam vertices together to prevent visible gaps.
+      const selectedIds = this.getSelectedVertexIds();
+      const positions = selectedIds.map(id => mesh.getVertex(id)).filter(Boolean)
+        .map(v => ({ x: v.x, y: v.y, z: v.z }));
+      const vids = new Set(selectedIds);
+      if (sel.type === 'face' && positions.length) {
+        const epsilon = 1e-7;
+        for (const v of mesh.vertices) {
+          if (positions.some(p => Math.abs(v.x - p.x) <= epsilon &&
+            Math.abs(v.y - p.y) <= epsilon &&
+            Math.abs(v.z - p.z) <= epsilon)) vids.add(v.id);
+        }
+      }
       for (const vid of vids) {
         const v = mesh.getVertex(vid);
         const vWorld = new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(wm);

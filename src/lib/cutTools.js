@@ -56,8 +56,30 @@ function mergeGroup(mesh, group) {
   return mesh.faces.indexOf(loop);
 }
 
-// Every 4-sided polygon (real n-gon face or a coplanar triangle pair) that uses
-// the edge a-b, returned as ordered vertex loops.
+// A triangle and its neighbor across a hidden triangulation diagonal form one
+// quad on screen even when the quad is slightly bent (not coplanar). Returns
+// the neighbor's index and the quad outline in the triangle's winding.
+function hiddenDiagonalPair(mesh, fi) {
+  const f = mesh.faces[fi];
+  if (!f || f.length !== 3) return null;
+  const shown = new Set(mesh.getEdges().map((e) => edgeKey(e.v1, e.v2)));
+  for (let j = 0; j < 3; j++) {
+    const u = f[j], v = f[(j + 1) % 3], x = f[(j + 2) % 3];
+    if (shown.has(edgeKey(u, v))) continue;
+    const other = adjacentFaceIndicesForEdge(mesh, u, v).filter((g) => g !== fi);
+    if (other.length !== 1) continue;
+    const g = mesh.faces[other[0]];
+    if (g.length !== 3) continue;
+    const w = g.find((id) => id !== u && id !== v);
+    if (w == null || w === x) continue;
+    return { other: other[0], loop: [u, w, v, x] };
+  }
+  return null;
+}
+
+// Every 4-sided polygon (real n-gon face, a coplanar triangle pair, or a
+// triangle pair split by a hidden diagonal) that uses the edge a-b, returned
+// as ordered vertex loops.
 export function quadLoopsForEdge(mesh, a, b) {
   const loops = [];
   const seen = new Set();
@@ -67,6 +89,9 @@ export function quadLoopsForEdge(mesh, a, b) {
     else {
       const group = mesh.getCoplanarFaceGroup(fi);
       if (group.length >= 2) loop = boundaryLoop(mesh, group);
+      // A bent quad's two triangles are not coplanar, so the cut used to stop
+      // in the first triangle and run to its far corner (a diagonal line).
+      if (!loop || loop.length !== 4) loop = hiddenDiagonalPair(mesh, fi)?.loop || loop;
     }
     if (!loop || loop.length !== 4) continue;
     const key = [...loop].sort((x, y) => x - y).join(',');
@@ -98,6 +123,14 @@ function ensureQuadFace(mesh, loop) {
     const bl = boundaryLoop(mesh, group);
     if (!bl || [...bl].sort((x, y) => x - y).join(',') !== key) continue;
     return mergeGroup(mesh, group);
+  }
+  for (const fi of adjacentFaceIndicesForEdge(mesh, loop[0], loop[1])) {
+    const pair = hiddenDiagonalPair(mesh, fi);
+    if (!pair || [...pair.loop].sort((x, y) => x - y).join(',') !== key) continue;
+    mesh.faces[fi] = pair.loop;
+    mesh.faces = mesh.faces.filter((_, i) => i !== pair.other);
+    mesh.invalidateCache();
+    return mesh.faces.indexOf(pair.loop);
   }
   return null;
 }

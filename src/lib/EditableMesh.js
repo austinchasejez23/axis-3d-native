@@ -243,6 +243,19 @@ export class EditableMesh {
     this.invalidateCache();
   }
 
+  // Deformed walls are no longer planar. Keep their original surface instead
+  // of re-projecting them and discarding triangles that fold past the normal.
+  lockFaceRenderTriangles() {
+    for (let fi = 0; fi < this.faces.length; fi++) {
+      const face = this.faces[fi];
+      if (face.length <= 3 || this.faceRenderTriangles[fi]?.length) continue;
+      const triangles = this.getFaceTriangleIndices(fi);
+      if (triangles.length === face.length - 2) {
+        this.faceRenderTriangles[fi] = triangles.map(tri => tri.map(i => face[i]));
+      }
+    }
+  }
+
   // The third vertex of a triangle face that isn't v1 or v2.
   _edgeThirdVertex(face, v1, v2) {
     for (const vid of face) if (vid !== v1 && vid !== v2) return vid;

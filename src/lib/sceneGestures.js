@@ -292,7 +292,11 @@ export function applySceneGestures(SceneManager) {
         // selection in every mode. Releasing after a real drag exits the
         // staging mode while retaining the selected elements; only a clean tap
         // continues to the selection-toggle behavior below.
-        if (!this.surfaceMode && this.selection.meshId && this.isPointOverSelection(e.clientX, e.clientY)) {
+        // The same small screen-space margin as the normal one-finger drag, so a
+        // thin selected part (a tube, a frame rail) can be grabbed without a
+        // pixel-perfect hit.
+        if (!this.surfaceMode && this.selection.meshId && (this.isPointOverSelection(e.clientX, e.clientY)
+          || this.isPointNearSelection(e.clientX, e.clientY, theme.gestureSelectReach))) {
           this.gesture = 'translate_pending';
           this.gestureData = { lastX: e.clientX, lastY: e.clientY, startX: e.clientX, startY: e.clientY, axis: null };
           return;
