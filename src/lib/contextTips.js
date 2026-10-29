@@ -3,7 +3,7 @@
 // always matches the active mode. Keep every line SHORT — one glance.
 
 const WORKSPACE_TIPS = [
-  'Tap a tool name on the left to read what it does',
+  'Tap the info button on the right to learn what each tool does',
   'Double-tap Snapping or Resistance for settings',
   'Hold and drag a tool icon to rearrange your tools',
   'Use Focus to center the view without changing zoom',

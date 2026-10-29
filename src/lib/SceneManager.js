@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { EditableMesh } from './EditableMesh';
 import { createPrimitive, createPrimitiveSegments } from './primitives';
 import { generateProjectId } from './storage';
+import { dissolveSelection } from './dissolveTools';
 import { toggleSmoothShading, separateMesh as separateMeshTool, createFaceFromVertices, targetMergeVertices, connectVertices, detachFaces, cloneFaces, splitEdge, bevelEdge, selectLoop, selectRing, createFaceFromBorder } from './meshTools';
 import { theme } from './theme';
 import { createMaterial as buildMaterial, applyShadows as applyShadowsFn, applyShine as applyShineFn, applyWireframe as applyWireframeFn, updateObjectMaterial as updateObjectMaterialFn } from './materials';
@@ -256,6 +257,13 @@ export class SceneManager {
     this.camera.up.set(-se * sa, ce, -se * ca);
     this.camera.lookAt(this.cameraTarget);
     this.camera.updateMatrixWorld();
+    // The near plane closes in with the orbit distance, so geometry right in
+    // front of the camera is never sliced away while moving through it.
+    const near = THREE.MathUtils.clamp(R * 0.02, 0.005, 0.1);
+    if (Math.abs(this.camera.near - near) > 1e-9) {
+      this.camera.near = near;
+      this.camera.updateProjectionMatrix();
+    }
     updateViewportGridFade(this.grid, this.camera, this.cameraDist, theme.backgroundColor);
     // Sun follows the camera (offset up and to the side) so the shadow is
     // always cast to the side visible from the viewing angle — natural,
@@ -569,6 +577,7 @@ export class SceneManager {
     const mesh = this.getMesh(sel.meshId);
     if (!mesh || mesh.locked || sel.type !== 'object') return;
     this.pushUndo();
+    this.recenterOrigin(mesh);
     mesh.scale.set(Math.max(0.01, sx), Math.max(0.01, sy), Math.max(0.01, sz));
     this.updateObjectTransform(mesh.id);
     refreshTransformHighlights(this);
@@ -1010,19 +1019,40 @@ export class SceneManager {
     return used.length > 0 ? used : mesh.vertices;
   }
 
-  // Move a mesh's local origin onto the bounds center of the geometry that is
-  // actually rendered WITHOUT moving that geometry in world space.
-  recenterOrigin(mesh) {
+  // The point an object spins around: the average of its face centers, the same
+  // point used when every one of its faces is selected. (The bounds center can
+  // sit in empty space beside bent or lopsided shapes, which made them look like
+  // they were orbiting an invisible point.) Local coordinates.
+  objectRotationPivot(mesh) {
+    const sum = new THREE.Vector3();
+    let count = 0;
+    for (const face of mesh.faces) {
+      let x = 0, y = 0, z = 0, n = 0;
+      for (const id of face) {
+        const v = mesh.getVertex(id);
+        if (!v) continue;
+        x += v.x; y += v.y; z += v.z; n++;
+      }
+      if (n === 0) continue;
+      sum.x += x / n; sum.y += y / n; sum.z += z / n; count++;
+    }
+    if (count > 0) return sum.divideScalar(count);
     const pivotVertices = this.objectPivotVertices(mesh);
-    if (pivotVertices.length === 0) return;
+    if (pivotVertices.length === 0) return null;
     const min = new THREE.Vector3(Infinity, Infinity, Infinity);
     const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
     for (const v of pivotVertices) {
       min.x = Math.min(min.x, v.x); min.y = Math.min(min.y, v.y); min.z = Math.min(min.z, v.z);
       max.x = Math.max(max.x, v.x); max.y = Math.max(max.y, v.y); max.z = Math.max(max.z, v.z);
     }
-    const c = min.add(max).multiplyScalar(0.5);
-    if (c.lengthSq() < 1e-12) return;
+    return min.add(max).multiplyScalar(0.5);
+  }
+
+  // Move a mesh's local origin onto its rotation pivot WITHOUT moving the
+  // geometry in world space.
+  recenterOrigin(mesh) {
+    const c = this.objectRotationPivot(mesh);
+    if (!c || c.lengthSq() < 1e-12) return;
     for (const v of mesh.vertices) { v.x -= c.x; v.y -= c.y; v.z -= c.z; }
     const q = new THREE.Quaternion().setFromEuler(mesh.rotation);
     mesh.position.add(c.clone().multiply(mesh.scale).applyQuaternion(q));
@@ -1492,6 +1522,8 @@ export class SceneManager {
     const mesh = this.getMesh(sel.meshId);
     if (!mesh || mesh.locked) return;
     if (sel.type === 'object') {
+      // Scale around the object's own center, not its local origin.
+      this.recenterOrigin(mesh);
       // Unlimited: no floor or ceiling on the scale.
       mesh.scale.multiplyScalar(factor);
       this.updateObjectTransform(mesh.id);
@@ -1607,6 +1639,8 @@ export class SceneManager {
     const mesh = this.getMesh(sel.meshId);
     if (!mesh || mesh.locked) return;
     if (sel.type === 'object') {
+      // Scale around the object's own center, not its local origin.
+      this.recenterOrigin(mesh);
       // Unlimited: no floor or ceiling on the scale.
       mesh.scale[axis] = mesh.scale[axis] * factor;
       this.updateObjectTransform(mesh.id);
@@ -1773,6 +1807,7 @@ export class SceneManager {
       case 'split': splitEdge(this); break;
       case 'add_vertex': this.clearSelection(); this.enterAddVertexMode(); break;
       case 'bevel': bevelEdge(this); break;
+      case 'dissolve': dissolveSelection(this); break;
       case 'select_loop': selectLoop(this, options); break;
       case 'select_ring': selectRing(this, options); break;
       case 'create_face_border': createFaceFromBorder(this); break;
@@ -2157,6 +2192,12 @@ export class SceneManager {
         v.x = world.x; v.y = world.y; v.z = world.z;
       }
       clone.faces = clone.faces.map((face) => [...face].reverse());
+      // Saved render triangles (bent / deformed faces) carry their own winding.
+      // Reflecting flips it, so they must be reversed together with the faces
+      // or those faces render inside-out.
+      clone.faceRenderTriangles = Object.fromEntries(
+        Object.entries(clone.faceRenderTriangles || {})
+          .map(([fi, tris]) => [fi, tris.map((tri) => [...tri].reverse())]));
       clone.position.set(0, 0, 0);
       clone.rotation.set(0, 0, 0);
       clone.scale.set(1, 1, 1);
@@ -2551,7 +2592,17 @@ export class SceneManager {
       if (this.addMesh(mesh) === null) { skipped++; continue; }
       ids.push(mesh.id);
     }
-    if (ids.length) this.setSelection({ meshId: ids[0], type: 'object', indices: [] });
+    if (ids.length) {
+      // Everything that just arrived is selected and highlighted in Object
+      // mode, not only the first object.
+      if (this.selectionMode !== 'object') {
+        this.setSelectionMode('object');
+        this.cb.onSelectionModeChange?.('object');
+      }
+      this.setSelection({ meshId: ids[0], type: 'object', indices: [] });
+      this.selectedMeshIds = [...ids];
+      this.updateHighlights(true);
+    }
     this.updateStats();
     return { added: ids.length, skipped, ids };
   }

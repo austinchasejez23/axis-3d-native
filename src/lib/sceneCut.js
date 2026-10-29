@@ -302,9 +302,10 @@ export function applySceneCut(SceneManager) {
     // Freeze every existing quad diagonal before the topology changes, so
     // untouched faces can never sprout stray diagonal lines after the cut.
     mesh.lockTriangulationDiagonals();
+    const created = [];
     const cuts = c.kind === 'loop'
-      ? (c.plan ? applyCutLoopPlan(mesh, c.plan) : 0)
-      : (c.points.length >= 2 ? applyDrawCut(mesh, c.points, c.closed) : 0);
+      ? (c.plan ? applyCutLoopPlan(mesh, c.plan, created) : 0)
+      : (c.points.length >= 2 ? applyDrawCut(mesh, c.points, c.closed, created) : 0);
     if (!cuts) { this.undoStack.pop(); this.exitCutMode(); return false; }
     resolveLegacyDeletedBorders(mesh);
     cleanupCommittedTopology(mesh);
@@ -312,6 +313,9 @@ export function applySceneCut(SceneManager) {
     this.clearSelection();
     this.updateStats();
     this.exitCutMode();
+    // The new loop / cut is selected as soon as it exists.
+    const indices = created.length ? this.edgeIndicesForPairs(mesh, created) : [];
+    if (indices.length) this.selectCreated('edge', mesh.id, indices);
     return true;
   };
 }

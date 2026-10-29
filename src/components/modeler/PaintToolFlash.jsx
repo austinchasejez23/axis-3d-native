@@ -21,7 +21,11 @@ export default function PaintToolFlash({ suppressed = false }) {
       clearTimeout(timer.current);
       setText(label);
       setShown(true);
-      timer.current = setTimeout(() => setShown(false), HOLD_MS);
+      // Once faded out it is removed, so it never leaves an empty gap in the label stack.
+      timer.current = setTimeout(() => {
+        setShown(false);
+        timer.current = setTimeout(() => setText(null), FADE_MS);
+      }, HOLD_MS);
     };
     window.addEventListener('axis-paint-label', onLabel);
     return () => {
@@ -33,7 +37,7 @@ export default function PaintToolFlash({ suppressed = false }) {
   if (!text || suppressed) return null;
   return (
     <div
-      className="absolute top-[calc(max(env(safe-area-inset-top,0px),1.75rem)+8.25rem)] left-0 z-50 px-2 py-1 font-mono font-semibold text-lg leading-tight pointer-events-none"
+      className="w-full py-1 text-center font-mono font-semibold text-lg leading-tight pointer-events-none"
       style={{
         color: uiColor,
         textShadow: '0 1px 3px rgba(0,0,0,0.6)',

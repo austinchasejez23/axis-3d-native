@@ -67,30 +67,3 @@ export const TOOL_GUIDE_SECTIONS = [
     ],
   },
 ];
-
-// Grid buttons announce which grid they belong to, so tools that share a name
-// across modes (Clone, Extrude, Bridge) get the description for that mode.
-const SECTION_MODE = { 'General tools': 'general', 'Object tools': 'object', 'Face tools': 'face', 'Edge tools': 'edge', 'Vertex tools': 'vertex' };
-const descriptionByMode = {};
-const descriptionByName = {};
-for (const section of TOOL_GUIDE_SECTIONS) {
-  const mode = SECTION_MODE[section.title];
-  for (const item of section.items) {
-    const key = item.name.toLowerCase();
-    if (mode) (descriptionByMode[mode] ||= {})[key] = item.description;
-    if (!(key in descriptionByName)) descriptionByName[key] = item.description;
-  }
-}
-
-// Labels that only appear as a button's alternate state, or in every mode.
-const EXTRA_DESCRIPTIONS = {
-  delete: 'Removes the current selection.',
-  unlock: 'Releases locked objects so they can be edited again.',
-  'hard normals': 'Restores hard, faceted shading between faces.',
-  'display hidden': 'Shows objects and geometry that were hidden by Display selected.',
-};
-
-export function getToolDescription(label, mode) {
-  const key = (label || '').toLowerCase();
-  return descriptionByMode[mode]?.[key] || descriptionByName[key] || EXTRA_DESCRIPTIONS[key] || 'Opens or applies this modeling tool to the current selection.';
-}

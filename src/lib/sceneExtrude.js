@@ -358,9 +358,25 @@ export function applySceneExtrude(SceneManager) {
     this.updateHud();
   };
 
+  // True once the extrusion has actually changed: dragged along its normal, or
+  // moved / scaled / rotated by any other gesture (a two-finger scale of the new
+  // cap is how you inset it). Only a completely untouched extrude is a no-op.
+  P.extrudeWasMoved = function () {
+    const ed = this.extrudeDrag;
+    if (!ed) return false;
+    if (ed.hasDragged) return true;
+    const mesh = this.getMesh(ed.meshId);
+    if (!mesh) return false;
+    const byId = new Map(mesh.vertices.map((v) => [v.id, v]));
+    return ed.items.some((it) => {
+      const v = byId.get(it.capVid);
+      return !!v && (Math.abs(v.x - it.bx) > 1e-6 || Math.abs(v.y - it.by) > 1e-6 || Math.abs(v.z - it.bz) > 1e-6);
+    });
+  };
+
   P.commitExtrudeDrag = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (!this.extrudeDrag) return;
-    if (this.extrudeDrag.hasDragged) {
+    if (this.extrudeWasMoved()) {
       // Undo the MOVE only: step back to the extrude at zero height, still
       // active and selected — not back to before the extrude.
       this.pushUndoSnapshot(this.extrudeDrag.activeSnapshot);

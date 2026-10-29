@@ -24,17 +24,19 @@ export default function MultiSelectLabel({ active }) {
 
   if (!mounted) return null;
   return (
+    <div className="w-full flex justify-center overflow-hidden pointer-events-none">
     <div
-      className="absolute top-[calc(max(env(safe-area-inset-top,0px),1.75rem)+7rem)] left-0 z-50 font-mono font-semibold pointer-events-none"
+      className="font-mono font-semibold"
       style={{
         color: uiColor,
         textShadow: '0 1px 3px rgba(0,0,0,0.6)',
-        transform: visible ? 'translateX(0)' : 'translateX(-105%)',
+        transform: visible ? 'translateX(0)' : 'translateX(105%)',
         transition: `transform ${SLIDE_MS}ms ease`,
         maxWidth: '16rem',
       }}
     >
-      <div className="px-2 py-1.5 text-[1.375rem] leading-tight">Multi Select</div>
+      <div className="px-2 py-1.5 text-center text-[1.375rem] leading-tight">Multi Select</div>
+    </div>
     </div>
   );
 }

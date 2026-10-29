@@ -81,7 +81,13 @@ export function applySceneAddVertex(SceneManager) {
     this.cb.onAddVertexChange?.(null);
     if (mode.vertexIds.length) {
       const mesh = this.getMesh(mode.meshId);
-      if (mesh) cleanupCommittedTopology(mesh);
+      if (mesh) {
+        cleanupCommittedTopology(mesh);
+        // The added vertices stay selected (found again by id, since cleanup
+        // can renumber vertex positions).
+        const indices = mode.vertexIds.map((id) => mesh.vertices.findIndex((v) => v.id === id)).filter((i) => i >= 0);
+        if (indices.length) this.selectCreated('vertex', mesh.id, indices);
+      }
       this.pushUndoSnapshot(mode.snapshot);
     }
     return mode.vertexIds.length > 0;

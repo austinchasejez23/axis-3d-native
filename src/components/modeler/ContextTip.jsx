@@ -28,9 +28,9 @@ export default function ContextTip({ context }) {
   const tip = pickTip(context, turn);
 
   return (
-    <div className="absolute top-0 left-0 right-0 z-[55] safe-top px-12 pointer-events-none text-center">
+    <div className="flex min-h-[1.75rem] items-center justify-center px-2 py-0.5 pointer-events-none text-center">
       <div
-        className="mx-auto max-w-[82vw] font-mono leading-tight whitespace-normal line-clamp-2"
+        className="mx-auto font-mono leading-tight whitespace-normal line-clamp-2"
         style={{
           fontSize: '12px',
           color: uiColor,

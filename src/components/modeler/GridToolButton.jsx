@@ -1,5 +1,6 @@
 import { useTheme } from '@/lib/theme';
 import ProBadge from '@/components/pro/ProBadge';
+import { helpIntercept } from '@/lib/helpMode';
 
 // Tool icons are transparent. A shared backdrop is painted behind contiguous
 // occupied slots by GlassToolRow, and follows tool rearrangement.
@@ -8,6 +9,7 @@ export default function GridToolButton({ icon: Icon, label, announceLabel = unde
   return (
     <button
       onClick={(event) => {
+        if (helpIntercept({ label, announceLabel, mode })) return;
         window.dispatchEvent(new CustomEvent('axis-tool-selected', { detail: { label: announceLabel || label, icon: Icon, mode } }));
         onClick?.(event);
       }}

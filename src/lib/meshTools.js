@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { newVid, edgeKey, posKey, adjacentFaceIndicesForEdge, weldCoincidentVertices } from './meshTopology';
 import { cleanupCommittedTopology, resolveLegacyDeletedBorders } from './meshTopologyInvariants';
 import { bevelLoopEdges } from './bevelLoop';
+import { bevelVertices } from './vertexBevel';
 import { splitFaceBetween } from './cutTools';
 import { cornerRadiusLoop } from './cornerRadius';
 import { collectTopologicalEdgeLoop } from './edgeLoopTraversal';
@@ -91,6 +92,7 @@ export function separateMesh(sm) {
     .filter((edge) => usedVids.has(edge.v1) && usedVids.has(edge.v2))
     .map((edge) => ({ ...edge, v1: vidMap.get(edge.v1), v2: vidMap.get(edge.v2) }));
 
+  const separatedIds = [];
   for (let g = 1; g < groups.length; g++) {
     const groupFaces = groups[g];
     const newMesh = new EditableMesh(mesh.name + ' part');
@@ -121,6 +123,7 @@ export function separateMesh(sm) {
     newMesh.paintWireEdges = mesh.paintWireEdges ? remapEdges(mesh.paintWireEdges, usedVids, vidMap) : null;
     sm.meshes.push(newMesh);
     sm.buildThreeMesh(newMesh);
+    separatedIds.push(newMesh.id);
   }
 
   const allSeparated = new Set();
@@ -145,6 +148,8 @@ export function separateMesh(sm) {
   mesh.segments = null;
   mesh.invalidateCache();
   sm.rebuildThreeMesh(mesh.id);
+  // The separated parts arrive selected, in Object mode.
+  sm.selectCreated('object', separatedIds[0], [], separatedIds);
   sm.updateStats();
 }
 
@@ -230,6 +235,7 @@ export function connectVertices(sm) {
   sm.pushUndo();
   const vids = sel.indices.map(i => mesh.vertices[i].id);
   const hiddenKey = (a, b) => `${Math.min(a, b)},${Math.max(a, b)}`;
+  const connected = [];
   for (let i = 0; i < vids.length - 1; i++) {
     const v1 = vids[i], v2 = vids[i + 1];
     if (v1 === v2) continue;
@@ -243,6 +249,7 @@ export function connectVertices(sm) {
     // vertices may not leave a standalone line, even in an empty mesh.
     // Reject unsupported multi-face connections until they can split faces.
     if (!attached) continue;
+    connected.push([v1, v2]);
     mesh.hiddenEdges = mesh.hiddenEdges.filter(h => hiddenKey(h.v1, h.v2) !== key);
     if (!mesh.visibleEdges.some(e => hiddenKey(e.v1, e.v2) === key)) {
       mesh.visibleEdges.push({ v1: Math.min(v1, v2), v2: Math.max(v1, v2) });
@@ -250,7 +257,10 @@ export function connectVertices(sm) {
   }
   cleanupCommittedTopology(mesh);
   sm.rebuildThreeMesh(mesh.id);
-  sm.clearSelection();
+  // The connecting edges arrive selected, in Edge mode.
+  const indices = sm.edgeIndicesForPairs(mesh, connected);
+  if (indices.length) sm.selectCreated('edge', mesh.id, indices);
+  else sm.clearSelection();
 }
 
 // Chain a list of {v1,v2} edges into ordered vertex loops (by shared endpoints).
@@ -285,11 +295,13 @@ function orderLoops(edges) {
 // triangles into two. Winding is preserved by inserting the midpoint into the
 // original face's cyclic order.
 function splitEdgesByPair(mesh, pairs) {
+  const createdIds = [];
   for (const { v1, v2 } of pairs) {
     if (!mesh.getVertex(v1) || !mesh.getVertex(v2)) continue;
     const A = mesh.getVertex(v1), B = mesh.getVertex(v2);
     const mid = { id: newVid(), x: (A.x + B.x) / 2, y: (A.y + B.y) / 2, z: (A.z + B.z) / 2 };
     mesh.vertices.push(mid);
+    createdIds.push(mid.id);
     const adj = adjacentFaceIndicesForEdge(mesh, v1, v2);
     for (const fi of adj) {
       const f = mesh.faces[fi];
@@ -313,6 +325,7 @@ function splitEdgesByPair(mesh, pairs) {
       return [ex];
     });
   }
+  return createdIds;
 }
 
 // Coplanar-quad opposite edge (the edge across a quad, sharing no vertices).
@@ -479,10 +492,15 @@ export function splitEdge(sm) {
   const pairs = sel.indices.map(i => edges[i]).filter(Boolean).map(e => ({ v1: e.v1, v2: e.v2 }));
   if (pairs.length === 0) return;
   sm.pushUndo();
-  splitEdgesByPair(mesh, pairs);
+  const createdIds = splitEdgesByPair(mesh, pairs);
   mesh.invalidateCache();
   sm.rebuildThreeMesh(mesh.id);
-  sm.clearSelection();
+  // The new split vertices arrive selected, in Vertex mode.
+  const created = new Set(createdIds);
+  const indices = [];
+  mesh.vertices.forEach((v, i) => { if (created.has(v.id)) indices.push(i); });
+  if (indices.length) sm.selectCreated('vertex', mesh.id, indices);
+  else sm.clearSelection();
   sm.updateStats();
 }
 
@@ -494,6 +512,7 @@ export function splitEdge(sm) {
 // quad instead of two overlapping caps (which produced the inward "spikes" on
 // closed loops like a cylinder rim).
 export function bevelEdge(sm, options = {}) {
+  sm.bevelNotice = null;
   if (!options.skipUndo) sm.pushUndo();
   // Bevel the object as it appears on screen. An object resized with W / H / D
   // keeps its original vertex positions plus a per-axis scale, so beveling the
@@ -511,8 +530,10 @@ export function bevelEdge(sm, options = {}) {
   };
   if (stretched) bake(s.x, s.y, s.z);
   try {
-    // The Radius tool is a section bend (corner radius), not an edge bevel.
-    if (options.cornerRadius) cornerRadiusLoop(sm, options);
+    // Vertex mode rounds the selected corners; the Radius tool is a section
+    // bend (corner radius), not an edge bevel.
+    if (sm.selection?.type === 'vertex') bevelVertices(sm, options);
+    else if (options.cornerRadius) cornerRadiusLoop(sm, options);
     else bevelLoopEdges(sm, options);
   } finally {
     if (stretched) {
@@ -528,7 +549,7 @@ export function bevelEdge(sm, options = {}) {
 // instantly without pushing a new undo step per tick.
 export function beginBevelPreview(sm) {
   const sel = sm.selection;
-  if (!sel.meshId || sel.type !== 'edge') return false;
+  if (!sel.meshId || (sel.type !== 'edge' && sel.type !== 'vertex')) return false;
   sm._bevelSnapshot = { meshes: sm.meshes.map(m => m.clone()), selection: { ...sel, indices: [...sel.indices] } };
   return true;
 }

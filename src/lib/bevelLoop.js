@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { newVid, edgeKey, posKey, adjacentFaceIndicesForEdge, weldCoincidentVertices } from './meshTopology';
 import { createPipeBendSweep } from './pipeBendCode';
+import { mergeHiddenDiagonals } from './quadMerge';
 
 // Multi-segment edge-LOOP bevel.
 //
@@ -1218,6 +1219,8 @@ export function bevelLoopEdges(sm, options = {}) {
   // Smooth/soft normals is a single dedicated toggle (Soft/Hard normals) — a
   // shape tool must never flip it as a side effect.
   mesh.invalidateCache();
+  // Bevel pieces fanned into triangles with hidden lines become single faces.
+  mergeHiddenDiagonals(mesh);
   sm.rebuildThreeMesh(mesh.id);
   sm.clearSelection();
   sm.updateStats();

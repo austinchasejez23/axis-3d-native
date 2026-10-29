@@ -46,7 +46,7 @@ export default function PositionHud({ hud, onOpenTransform }) {
   const unitTag = display === 'rotation' ? '°' : unit;
 
   return (
-    <div className="absolute top-[calc(max(env(safe-area-inset-top,0px),1.75rem)+1.5rem)] left-1/2 -translate-x-1/2 z-[60] pointer-events-auto h-10 flex items-center justify-center" onPointerDown={(e) => e.stopPropagation()}>
+    <div className="pointer-events-auto h-7 px-2 flex items-center justify-center" onPointerDown={(e) => e.stopPropagation()}>
       <div className="flex items-center gap-1.5 font-mono text-[10px] leading-none whitespace-nowrap">
         <div className="flex items-center gap-1">
           <button

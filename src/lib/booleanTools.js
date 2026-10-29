@@ -1,6 +1,7 @@
 import { toast } from 'sonner';
 import { localBoolean, lastSkipReason } from './booleanLocal';
 import { closedTopologyProblem } from './booleanTopology';
+import { mergeHiddenDiagonals } from './quadMerge';
 
 // Boolean Subtract / Union / Intersect.
 //
@@ -87,6 +88,8 @@ function booleanSelection(manager, operation) {
   base.primitiveType = work.primitiveType;
   base.segments = work.segments;
   base.invalidateCache();
+  // Triangle pairs the Boolean left joined by a hidden diagonal become one face.
+  mergeHiddenDiagonals(base);
   for (const mesh of operands) manager.removeMesh(mesh.id);
   manager.selectedMeshIds = [];
   manager.rebuildThreeMesh(base.id);

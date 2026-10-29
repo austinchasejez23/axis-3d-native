@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { clamp } from './utils';
 import { newVid, edgeKey, posKey, adjacentFaceIndicesForEdge, weldCoincidentVertices } from './meshTopology';
 import { orderLoop, classifySides, arcSampler } from './bevelLoop';
+import { mergeHiddenDiagonals } from './quadMerge';
 
 // CORNER RADIUS — bends a whole mesh section, it is NOT an edge bevel.
 //
@@ -234,6 +235,8 @@ export function cornerRadiusLoop(sm, options = {}) {
   // Smooth/soft normals is a single dedicated toggle (Soft/Hard normals) — a
   // shape tool must never flip it as a side effect.
   mesh.invalidateCache();
+  // Pieces left joined by a hidden line become single faces.
+  mergeHiddenDiagonals(mesh);
   sm.rebuildThreeMesh(mesh.id);
   sm.clearSelection();
   sm.updateStats();

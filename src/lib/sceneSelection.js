@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { edgeKey } from './meshTopology';
 
 // Selection methods for SceneManager, extracted so SceneManager.js stays under
 // the edit size limit and selection logic lives in one focused module. All
@@ -64,6 +65,30 @@ export function applySceneSelection(SceneManager) {
     this.updateStats();
   };
 
+  // Newly created geometry arrives selected, in the mode that matches what was
+  // created (objects -> Object, faces -> Face, edges -> Edge, vertices ->
+  // Vertex). `objectIds` selects several new objects as one group.
+  P.selectCreated = function (mode, meshId, indices = [], objectIds = null) {
+    if (this.selectionMode !== mode) {
+      this.setSelectionMode(mode);
+      this.cb.onSelectionModeChange?.(mode);
+    }
+    this.setSelection({ meshId, type: mode, indices: mode === 'object' ? [] : indices });
+    if (mode === 'object' && objectIds && objectIds.length > 1) {
+      this.selectedMeshIds = [...objectIds];
+      this.updateHighlights(true);
+      this.updateStats();
+    }
+  };
+
+  // Indices (in mesh.getEdges() order) of the edges joining the given vertex pairs.
+  P.edgeIndicesForPairs = function (mesh, pairs) {
+    const keys = new Set(pairs.map(([a, b]) => edgeKey(a, b)));
+    const indices = [];
+    mesh.getEdges().forEach((e, i) => { if (keys.has(edgeKey(e.v1, e.v2))) indices.push(i); });
+    return indices;
+  };
+
   P.clearSelection = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     this.targetMergePair = null;
     this.selection = { meshId: null, type: this.selectionMode, indices: [] };
@@ -94,17 +119,23 @@ export function applySceneSelection(SceneManager) {
     return this.selectionMode === 'object' && this.selectedMeshIds.length > 1;
   };
 
+  // The point a multi-selection spins/scales around: the average of each
+  // selected object's OWN center (the exact point it spins about on its own),
+  // in world space. Averaging the objects' ORIGINS instead put the pivot far
+  // from the visible geometry whenever the origins weren't at the shapes
+  // (imported parts all sit at the world origin), so the group swung wide.
   P.getGroupCenter = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (this.selectedMeshIds.length === 0) return null;
-    const c = new THREE.Vector3();
+    const sum = new THREE.Vector3();
     let n = 0;
     for (const id of this.selectedMeshIds) {
       const m = this.getMesh(id);
       if (!m) continue;
-      c.add(m.position);
+      const local = this.objectRotationPivot(m);
+      sum.add(local ? local.applyMatrix4(this.getWorldMatrix(m)) : m.position);
       n++;
     }
-    return n > 0 ? c.divideScalar(n) : null;
+    return n > 0 ? sum.divideScalar(n) : null;
   };
 
   // Object-mode multi-select: tap to toggle an object in/out of the group.

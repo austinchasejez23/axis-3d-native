@@ -342,7 +342,9 @@ export function cutLoopPreviewPoints(mesh, plan) {
   return out;
 }
 
-export function applyCutLoopPlan(mesh, plan) {
+// `created`, when given, receives the [a, b] vertex pair of every new edge the
+// cut adds, so the caller can select the new loop.
+export function applyCutLoopPlan(mesh, plan, created = null) {
   for (const seg of plan.segments) if (seg.loop) ensureQuadFace(mesh, seg.loop);
   const vidByKey = new Map();
   const vidFor = (a, b, fraction) => {
@@ -358,7 +360,7 @@ export function applyCutLoopPlan(mesh, plan) {
     if (v1 == null) continue;
     if (seg.end != null) {
       // Triangle: cut from the point to its far corner.
-      if (splitFaceBetween(mesh, v1, seg.end)) cuts++;
+      if (splitFaceBetween(mesh, v1, seg.end)) { cuts++; created?.push([v1, seg.end]); }
       continue;
     }
     const v2 = vidFor(seg.to[0], seg.to[1], seg.toT ?? plan.t);
@@ -366,11 +368,11 @@ export function applyCutLoopPlan(mesh, plan) {
     if (seg.hub != null) {
       // Through a fan: point -> center in the entry triangle, center -> point
       // in the opposite one.
-      if (splitFaceBetween(mesh, v1, seg.hub)) cuts++;
-      if (splitFaceBetween(mesh, seg.hub, v2)) cuts++;
+      if (splitFaceBetween(mesh, v1, seg.hub)) { cuts++; created?.push([v1, seg.hub]); }
+      if (splitFaceBetween(mesh, seg.hub, v2)) { cuts++; created?.push([seg.hub, v2]); }
       continue;
     }
-    if (splitFaceBetween(mesh, v1, v2)) cuts++;
+    if (splitFaceBetween(mesh, v1, v2)) { cuts++; created?.push([v1, v2]); }
   }
   mesh.invalidateCache();
   return cuts;
@@ -379,7 +381,7 @@ export function applyCutLoopPlan(mesh, plan) {
 // === DRAW CUT ===
 // Group points by original edge and split its remaining sub-edge in sorted order.
 // Tap order still determines the connected cut path, independently of insertion.
-export function applyDrawCut(mesh, points, closed = false) {
+export function applyDrawCut(mesh, points, closed = false, created = null) {
   const path = closed ? [...points, points[0]] : points;
   for (let i = 1; i < path.length; i++) {
     if (drawCutIntersects(mesh, path.slice(0, i + 1))) return 0;
@@ -413,7 +415,7 @@ export function applyDrawCut(mesh, points, closed = false) {
     if (edgeKey(points[i].v1, points[i].v2) === edgeKey(points[next].v1, points[next].v2)) continue;
     // A cut only commits when it creates a genuine face boundary.
     // Never leave an unsupported span behind as a detached explicit line.
-    if (splitFaceBetween(mesh, a, b)) cuts++;
+    if (splitFaceBetween(mesh, a, b)) { cuts++; created?.push([a, b]); }
   }
   // Extra points can make the first three boundary vertices collinear. Rotate
   // only those outlines so their existing normal calculation stays well-defined.

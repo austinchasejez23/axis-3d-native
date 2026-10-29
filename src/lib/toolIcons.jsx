@@ -355,6 +355,31 @@ export function BevelIcon(props) {
   );
 }
 
+export function VertexBevelIcon(props) {
+  const hl = useHl();
+  return (
+    <Svg {...props}>
+      {/* Cube whose front corner is rounded off into a highlighted patch. */}
+      <path d="M12 3 L20 7.5 V16.5 L12 21 L4 16.5 V7.5 Z" />
+      <path d="M4 7.5 L9.6 10.65 M20 7.5 L14.4 10.65 M12 21 V15" />
+      <path d="M9.6 10.65 Q12 12.4 14.4 10.65 Q13.9 13.2 12 15 Q10.1 13.2 9.6 10.65 Z" stroke={hl} fill={hl} fillOpacity="0.25" />
+    </Svg>
+  );
+}
+
+export function DissolveIcon(props) {
+  const hl = useHl();
+  return (
+    <Svg {...props}>
+      {/* Two faces merging into one: the dividing edge dissolves away. */}
+      <path d="M3.5 6.5 H20.5 V17.5 H3.5 Z" />
+      <path d="M12 6.5 V17.5" stroke={hl} strokeDasharray="1.6 2.2" />
+      <circle cx="12" cy="6.5" r="1.5" fill={hl} strokeWidth="0" />
+      <circle cx="12" cy="17.5" r="1.5" fill={hl} strokeWidth="0" />
+    </Svg>
+  );
+}
+
 export function SelectRingIcon(props) {
   const hl = useHl();
   return (

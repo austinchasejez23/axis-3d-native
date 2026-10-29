@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { EditableMesh } from './EditableMesh';
+import { mergeHiddenDiagonals } from './quadMerge';
 
 function buildHelixGeometry({ turns = 1, innerDiameter = 0.5, thickness = 0.25, height = 0.5, segmentsPerTurn = 12, sides = 6 } = {}) {
   turns = Math.max(0.05, Number(turns) || 1);
@@ -132,6 +133,9 @@ export function createPrimitiveSegments(type, segX, segY, segZ, params = {}) {
       if (shared.length === 2) mesh.hiddenEdges.push({ v1: shared[0], v2: shared[1], locked: true });
     }
   }
+  // A quad built from two triangles is one face: merge each pair now, so no
+  // hidden diagonal is left inside it.
+  mergeHiddenDiagonals(mesh, { classify: true });
   mesh.primitiveType = type;
   mesh.segments = { x: segX, y: segY, z: segZ };
   mesh.primitiveParams = type === 'helix'

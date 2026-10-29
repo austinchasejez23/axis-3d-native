@@ -1,3 +1,5 @@
+import { countVisualFaces } from './dissolveTools';
+
 const OBJECT_TOOLS = new Set([
   'merge', 'mirror', 'soft_normals', 'separate', 'divide', 'smooth',
   'clone', 'radial_array', 'delete',
@@ -5,7 +7,7 @@ const OBJECT_TOOLS = new Set([
 const FACE_TOOLS = new Set(['detach', 'clone', 'extrude', 'delete']);
 const EDGE_TOOLS = new Set([
   'create_face_border', 'split', 'bevel', 'extrude',
-  'select_ring', 'select_loop', 'delete',
+  'select_ring', 'select_loop', 'dissolve', 'delete',
 ]);
 
 export function getToolRequirementNotice(manager, toolId) {
@@ -26,6 +28,12 @@ export function getToolRequirementNotice(manager, toolId) {
     if (toolId === 'soft_normals') return 'select object to apply soft normals';
     return `Select an object to ${toolId === 'clone' ? 'clone' : toolId.replace(/_/g, ' ')}`;
   }
+  // Dissolve merges faces, so it needs at least two VISIBLE faces (a cube side
+  // stored as two triangles is one face).
+  if (mode === 'face' && toolId === 'dissolve') {
+    const mesh = selection.meshId ? manager.getMesh?.(selection.meshId) : null;
+    return countVisualFaces(mesh, selection.indices) < 2 ? 'Select two or more faces to dissolve' : null;
+  }
   if (mode === 'face' && FACE_TOOLS.has(toolId) && (!selection.meshId || count < 1)) {
     return `Select one or more faces to ${toolId}`;
   }
@@ -38,7 +46,7 @@ export function getToolRequirementNotice(manager, toolId) {
       const validPair = pair?.meshId === selection.meshId && pair.sourceId != null && pair.sourceId !== pair.targetId;
       if (!validPair && count < 2) return 'Select a source vertex, then a target vertex to merge into';
     }
-    const needed = toolId === 'create_face' ? 3 : ['connect', 'merge'].includes(toolId) ? 2 : toolId === 'delete' ? 1 : 0;
+    const needed = toolId === 'create_face' ? 3 : ['connect', 'merge'].includes(toolId) ? 2 : ['delete', 'bevel', 'dissolve'].includes(toolId) ? 1 : 0;
     if (count < needed) return `Select ${needed === 1 ? 'a vertex' : `${needed} or more vertices`} to ${toolId.replace(/_/g, ' ')}`;
   }
   return null;

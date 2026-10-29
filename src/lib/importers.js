@@ -5,6 +5,7 @@ import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { ThreeMFLoader } from 'three/examples/jsm/loaders/3MFLoader.js';
 import { EditableMesh } from './EditableMesh';
+import { reconstructImportedQuads } from './quadMerge';
 
 // Import a device-selected .obj, .fbx, .stl, .glb/.gltf or .3mf model file.
 // Bake imported transforms into geometry, then uniformly downscale the entire
@@ -87,6 +88,11 @@ export async function importModelFile(file) {
         // Suppress tessellation seams in the displayed import; retain every
         // triangle and edge in the editable geometry.
         mesh.importedFeatureEdges = true;
+        // Pair the triangles back into the quads they were written from, so
+        // the import shows its real grid with no triangulation diagonals.
+        // OBJ / FBX / glTF keep each quad's two triangles together in order;
+        // STL and 3MF are triangle soup and are paired by shape alone.
+        reconstructImportedQuads(mesh, { trustOrder: ext !== 'stl' && ext !== '3mf' });
         meshes.push(mesh);
       }
     }

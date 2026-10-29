@@ -3,6 +3,7 @@ import { buildPaintUvs, serializePaintLayer, deserializePaintLayer } from './pai
 import { edgeKey } from './meshTopology';
 import { cleanupCommittedTopology, resolveLegacyDeletedBorders } from './meshTopologyInvariants';
 import { splitFaceBetween } from './cutTools';
+import { mergeHiddenDiagonals, reconstructImportedQuads } from './quadMerge';
 
 let nextId = 1;
 const genId = () => nextId++;
@@ -32,6 +33,9 @@ export class EditableMesh {
     // Geometry-only file imports initially display as neutral wireframes.
     // The faces remain editable and available to modeling tools.
     this.importedWireframeOnly = false;
+    // True once an import's triangles were paired back into their quads. From
+    // then on the mesh's faces are the real faces and nothing is guessed away.
+    this.importedQuadsMerged = false;
     this.clearCoatEnabled = false;
     this.clearCoatIntensity = 0.5;
     this.material = null;
@@ -266,6 +270,8 @@ export class EditableMesh {
   // convincingly reconstruct one quad. Do not use the permissive editing
   // classifier here: it can delete genuine edges at tube joints.
   _isConfidentImportedDiagonal(v1, v2, f0, f1) {
+    // Reconstructed imports already hold their real quads: no seam to guess.
+    if (this.importedQuadsMerged) return false;
     if (this.faces[f0]?.length !== 3 || this.faces[f1]?.length !== 3) return false;
     const cId = this._edgeThirdVertex(this.faces[f0], v1, v2);
     const dId = this._edgeThirdVertex(this.faces[f1], v1, v2);
@@ -819,6 +825,7 @@ export class EditableMesh {
     m.smoothShading = this.smoothShading;
     m.importedFeatureEdges = this.importedFeatureEdges;
     m.importedWireframeOnly = this.importedWireframeOnly;
+    m.importedQuadsMerged = this.importedQuadsMerged;
     m.clearCoatEnabled = this.clearCoatEnabled;
     m.clearCoatIntensity = this.clearCoatIntensity;
     m.material = this.material ? { ...this.material } : null;
@@ -864,6 +871,7 @@ export class EditableMesh {
       smoothShading: this.smoothShading,
       importedFeatureEdges: this.importedFeatureEdges,
       importedWireframeOnly: this.importedWireframeOnly,
+      importedQuadsMerged: this.importedQuadsMerged,
       clearCoatEnabled: this.clearCoatEnabled,
       clearCoatIntensity: this.clearCoatIntensity,
       material: this.material ? { ...this.material } : null,
@@ -908,6 +916,7 @@ export class EditableMesh {
     m.smoothShading = data.smoothShading || false;
     m.importedFeatureEdges = !!data.importedFeatureEdges;
     m.importedWireframeOnly = !!data.importedWireframeOnly;
+    m.importedQuadsMerged = !!data.importedQuadsMerged;
     m.clearCoatEnabled = data.clearCoatEnabled || false;
     m.clearCoatIntensity = data.clearCoatIntensity ?? 0.5;
     m.material = data.material || null;
@@ -937,6 +946,17 @@ export class EditableMesh {
     // until the user explicitly saves or normal autosave runs.
     resolveLegacyDeletedBorders(m);
     cleanupCommittedTopology(m);
+    // Older saves keep quads as two triangles joined by a hidden diagonal.
+    // Merge each pair into the single face it really is. An untouched older
+    // import (still all triangles) also gets its quad grid rebuilt.
+    // A model with painted surface keeps its faces as saved: its paint was
+    // laid down face by face.
+    if (!m.paintLayer?.painted) {
+      const untouchedImport = m.importedWireframeOnly && !m.importedQuadsMerged &&
+        m.faces.every(f => f.length === 3);
+      mergeHiddenDiagonals(m);
+      if (untouchedImport) reconstructImportedQuads(m, { trustOrder: false });
+    }
     return m;
   }
 }

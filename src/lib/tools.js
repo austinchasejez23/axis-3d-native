@@ -6,6 +6,7 @@ import {
   CreateFaceBorderIcon, SplitIcon, DrawCutIcon, BevelIcon, EdgeBridgeIcon, FaceBridgeIcon,
   SelectRingIcon, SelectLoopIcon, CutLoopIcon,
   CreateFaceVerticesIcon, AddVertexIcon, ConnectIcon, TargetMergeIcon, MergeIcon,
+  VertexBevelIcon, DissolveIcon,
 } from '@/lib/toolIcons';
 
 export const TOOLS = {
@@ -35,6 +36,7 @@ export const TOOLS = {
       { id: 'clone', label: 'Clone', icon: FaceCloneIcon },
       { id: 'bridge', label: 'Bridge', icon: FaceBridgeIcon },
       { id: 'extrude', label: 'Extrude', icon: FaceExtrudeIcon },
+      { id: 'dissolve', label: 'Dissolve', icon: DissolveIcon },
       { id: 'delete', label: 'Delete', icon: DeleteIcon },
     ]],
   },
@@ -49,6 +51,7 @@ export const TOOLS = {
       { id: 'select_ring', label: 'Select ring', icon: SelectRingIcon },
       { id: 'select_loop', label: 'Select loop', icon: SelectLoopIcon },
       { id: 'cut_loop', label: 'Cut loop', icon: CutLoopIcon },
+      { id: 'dissolve', label: 'Dissolve', icon: DissolveIcon },
       { id: 'delete', label: 'Delete', icon: DeleteIcon },
     ]],
   },
@@ -59,6 +62,8 @@ export const TOOLS = {
       { id: 'connect', label: 'Connect', icon: ConnectIcon },
       { id: 'target_merge', label: 'Target merge', icon: TargetMergeIcon },
       { id: 'merge', label: 'Merge', icon: MergeIcon },
+      { id: 'bevel', label: 'Bevel', icon: VertexBevelIcon },
+      { id: 'dissolve', label: 'Dissolve', icon: DissolveIcon },
       { id: 'delete', label: 'Delete', icon: DeleteIcon },
     ]],
   },

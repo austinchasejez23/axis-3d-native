@@ -12,6 +12,11 @@ import { pulseNavigationResolution } from '@/lib/renderBoost';
 const empty = () => ({ orbitX: 0, orbitY: 0, panX: 0, panY: 0, zoom: 0 });
 const KEYS = Object.keys(empty());
 const MIN_DISTANCE = 0.05, MAX_DISTANCE = 800;
+// Geometry never slows or blocks the camera. Zoom and pan speed come from the
+// view alone: below this orbit distance they stop shrinking, so a camera
+// close to (or inside) an object keeps moving at the same pace, and zooming
+// past the orbit pivot carries the pivot forward instead of stopping there.
+const SPEED_FLOOR = 0.5;
 const TOUCH_ORBIT_RESISTANCE = 0.48;
 const TOUCH_PAN_RESISTANCE = 0.8;
 const TOUCH_ZOOM_RESISTANCE = 0.85;
@@ -24,10 +29,29 @@ const TAP_MS = 240, TAP_PX = 22;   // the quick-tap test used on release
 const GLIDE_MIN = { orbit: 55, pan: 80, zoom: 0.15 };
 const GLIDE_MAX = { orbit: 850, pan: 2500, zoom: 3 };
 
+// Dolly along the view direction. Away from the pivot (or far from it) this is
+// the usual exponential zoom. Close to the pivot the pace holds steady, and
+// travel beyond the minimum orbit distance moves the pivot with the camera, so
+// the camera passes straight through whatever is there.
+function zoomCamera(manager, zoom) {
+  const dist = manager.cameraDist;
+  const travel = Math.max(dist, SPEED_FLOOR) * (1 - Math.exp(zoom));
+  const next = dist - travel;
+  if (next >= MIN_DISTANCE) {
+    manager.cameraDist = Math.min(next, MAX_DISTANCE);
+    return;
+  }
+  // View direction from the orbit angles (the camera sits at target + R*(ce*sa, se, ce*ca)).
+  const ce = Math.cos(manager.cameraPhi), se = Math.sin(manager.cameraPhi);
+  const forward = new THREE.Vector3(-ce * Math.sin(manager.cameraTheta), -se, -ce * Math.cos(manager.cameraTheta));
+  manager.cameraTarget.addScaledVector(forward, MIN_DISTANCE - next);
+  manager.cameraDist = MIN_DISTANCE;
+}
+
 function applyMotion(manager, motion) {
   const height = Math.max(1, manager.renderer.domElement.getBoundingClientRect().height);
   const angle = 2 * Math.PI / height;
-  const scale = 2 * manager.cameraDist * Math.tan(THREE.MathUtils.degToRad(manager.camera.fov / 2)) / height;
+  const scale = 2 * Math.max(manager.cameraDist, SPEED_FLOOR) * Math.tan(THREE.MathUtils.degToRad(manager.camera.fov / 2)) / height;
   if (motion.panX || motion.panY) {
     const right = new THREE.Vector3().setFromMatrixColumn(manager.camera.matrixWorld, 0);
     const up = new THREE.Vector3().setFromMatrixColumn(manager.camera.matrixWorld, 1);
@@ -35,7 +59,7 @@ function applyMotion(manager, motion) {
   }
   manager.cameraTheta -= motion.orbitX * angle;
   manager.cameraPhi += motion.orbitY * angle;
-  if (motion.zoom) manager.cameraDist = THREE.MathUtils.clamp(manager.cameraDist * Math.exp(motion.zoom), MIN_DISTANCE, MAX_DISTANCE);
+  if (motion.zoom) zoomCamera(manager, motion.zoom);
   pulseNavigationResolution(manager);
   manager.applyCamera();
 }

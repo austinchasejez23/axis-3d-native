@@ -385,6 +385,11 @@ export function applySceneGestures(SceneManager) {
       }, theme.gestureHoldDelay);
     } else if (this.pointers.size === 2) {
       clearTimeout(this.pressHoldTimer);
+      // A second finger aborts a selection frame that is still being drawn.
+      if (this.gesture === 'marquee') {
+        this.cb.onMarqueeChange?.(null);
+        this.closeEmptyMultiSelect();
+      }
       const pts = [...this.pointers.values()];
       const midX = (pts[0].x + pts[1].x) / 2;
       const midY = (pts[0].y + pts[1].y) / 2;
@@ -559,7 +564,9 @@ export function applySceneGestures(SceneManager) {
       } else if (this.gesture === 'translate_pending') {
         // Faces and edges get a deliberate grace distance before a transform
         // commits, preventing a selection tap from immediately dragging geometry.
-        const translateGrace = this.selection.type === 'face' || this.selection.type === 'edge' ? 8 : 0.5;
+        // In multi-select the same grace applies, so a tap on a selected item
+        // toggles it off instead of being read as a tiny drag.
+        const translateGrace = this.multiSelect || this.selection.type === 'face' || this.selection.type === 'edge' ? 8 : 0.5;
         if (totalMove > translateGrace) {
           this.movedSignificantly = true;
           clearTimeout(this.pressHoldTimer);
@@ -957,6 +964,7 @@ export function applySceneGestures(SceneManager) {
     if (this.gesture === 'marquee') {
       this.applyMarquee();
       this.cb.onMarqueeChange?.(null);
+      this.closeEmptyMultiSelect();
     }
 
     if (this.pointers.size === 0) {
@@ -1114,6 +1122,16 @@ export function applySceneGestures(SceneManager) {
     const w = this.gestureData.curX - this.gestureData.startX;
     const h = this.gestureData.curY - this.gestureData.startY;
     this.cb.onMarqueeChange?.({ x, y, w, h });
+  };
+
+  // A selection frame that was aborted or captured nothing must not leave
+  // multi-select open when nothing is selected.
+  P.closeEmptyMultiSelect = function () {
+    if (!this.multiSelect) return;
+    const sel = this.selection;
+    const hasSelection = this.selectedMeshIds.length > 0
+      || (!!sel?.meshId && (sel.type === 'object' || (sel.indices?.length || 0) > 0));
+    if (!hasSelection) this.exitMultiSelect();
   };
 
   P.applyMarquee = /** @this {import('./SceneManager.js').SceneManager} */ function () {

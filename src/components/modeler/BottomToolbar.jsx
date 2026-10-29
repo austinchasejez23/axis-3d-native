@@ -54,7 +54,7 @@ export default function BottomToolbar({ selectionMode, onModeChange, onToggleToo
   return (
     <div
       className="absolute bottom-0 left-0 right-0 z-30 safe-bottom pt-1"
-      style={{ background: 'rgba(9,13,22,0.26)', borderTop: '1px solid rgba(255,255,255,0.07)' }}
+      style={{ background: 'rgba(9,13,22,0.38)', borderTop: '1px solid rgba(255,255,255,0.07)' }}
     >
       <div className="flex items-end justify-center gap-0 mx-0 mb-0">
         {modes.map((mode) => {

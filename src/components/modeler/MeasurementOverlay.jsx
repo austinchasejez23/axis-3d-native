@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatLength } from '@/lib/units';
 import { getMeasurements } from '@/lib/measurements';
-import { useTheme } from '@/lib/theme';
 
 // Renders floating measurement labels that track edges in screen space.
 // Polls getMeasurements(manager, option) every frame while enabled; only
@@ -10,7 +9,6 @@ export default function MeasurementOverlay({ managerRef, unit, option, enabled }
   const [labels, setLabels] = useState([]);
   const lastMoveRef = useRef(0);
   const selectionRef = useRef('');
-  const { highlightColor } = useTheme();
 
   useEffect(() => {
     if (!enabled) { setLabels([]); lastMoveRef.current = 0; return; }
@@ -62,7 +60,7 @@ export default function MeasurementOverlay({ managerRef, unit, option, enabled }
         <div
           key={i}
           className="absolute inset-0 font-mono"
-          style={{ color: l.stretchDimension ? highlightColor : '#ffffff', opacity: l.opacity, fontSize: '13px', fontWeight: 700,
+          style={{ color: '#ffffff', opacity: l.opacity, fontSize: '13px', fontWeight: 700,
             textShadow: '0 1px 0 rgba(0,0,0,0.9), 0 0 3px rgba(0,0,0,0.9)' }}
         >
           {l.line && (() => {

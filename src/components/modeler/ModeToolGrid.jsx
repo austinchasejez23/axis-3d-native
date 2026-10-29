@@ -20,15 +20,18 @@ export default function ModeToolGrid({ selectionMode, onTool, onSegments, onLock
   useEffect(() => { arrange.clearSelected(); }, [clearSelectionToken]);
   const rows = arrange.rows;
   if (!rows) return null;
-  // Use only true empty layout cells so the expanded tools never cover a
-  // rearranged or hidden tool. Keep their visual order top to bottom.
+  // The Boolean button collapses into its own slot when opened, so only three
+  // buttons show: its slot plus the two nearest true empty layout cells (never
+  // a rearranged or hidden tool). Keep their visual order top to bottom.
   const booleanRow = rows.findIndex((row) => row.includes('boolean'));
   const booleanCol = booleanRow < 0 ? 0 : rows[booleanRow].indexOf('boolean');
-  const booleanSlots = rows.flatMap((row, r) => row.map((cell, c) => ({ cell, r, c })))
-    .filter(({ cell }) => cell === null)
-    .sort((a, b) => (Math.abs(a.r - booleanRow) + Math.abs(a.c - booleanCol)) - (Math.abs(b.r - booleanRow) + Math.abs(b.c - booleanCol)))
-    .slice(0, 3)
-    .sort((a, b) => a.r - b.r || a.c - b.c);
+  const booleanSlots = [
+    ...(booleanRow < 0 ? [] : [{ r: booleanRow, c: booleanCol }]),
+    ...rows.flatMap((row, r) => row.map((cell, c) => ({ cell, r, c })))
+      .filter(({ cell }) => cell === null)
+      .sort((a, b) => (Math.abs(a.r - booleanRow) + Math.abs(a.c - booleanCol)) - (Math.abs(b.r - booleanRow) + Math.abs(b.c - booleanCol)))
+      .slice(0, booleanRow < 0 ? 3 : 2),
+  ].sort((a, b) => a.r - b.r || a.c - b.c);
   const expandedBoolean = new Map(booleanSlots.map(({ r, c }, index) => [`${r}:${c}`, ['subtract', 'union', 'intersect'][index]]));
 
   const byId = { segments: SEGMENTS_TOOL };
@@ -54,6 +57,7 @@ export default function ModeToolGrid({ selectionMode, onTool, onSegments, onLock
   // never acquire a background.
   const backdropRows = rows.map((row, r) => row.map((cell, c) => {
     if (cell === VOID) return false;
+    if (booleanOpen && !dragging && expandedBoolean.has(`${r}:${c}`)) return true;
     if (cell === null) return booleanOpen && !dragging && expandedBoolean.has(`${r}:${c}`);
     if (BOOLEAN_TOOLS.has(cell) && !booleanOpen) return false;
     return !!byId[cell] && !(arrange.hidden.includes(cell) && !arrange.expanded && !dragging);
@@ -80,9 +84,9 @@ export default function ModeToolGrid({ selectionMode, onTool, onSegments, onLock
       <div className="relative z-10">
       <ToolGridActions
         mode={selectionMode}
-        showHide={arrange.selected.length >= 2}
-        hideLabel={arrange.allSelectedHidden ? 'Show' : 'Hide'}
-        onHide={arrange.toggleHideSelected}
+        showHide={arrange.selected.length >= 1}
+        onHide={arrange.hideSelected}
+        onShow={arrange.showSelected}
         showChevron={arrange.hidden.length > 0}
         expanded={arrange.expanded}
         onToggleExpanded={arrange.toggleExpanded}
@@ -97,13 +101,13 @@ export default function ModeToolGrid({ selectionMode, onTool, onSegments, onLock
           cells={row.map((cell, c) => {
             if (cell === VOID) return null;
             if (BOOLEAN_TOOLS.has(cell) && !booleanOpen) return null;
+            const expandedId = booleanOpen && !dragging ? expandedBoolean.get(`${r}:${c}`) : null;
+            if (expandedId) {
+              const tool = byId[expandedId];
+              return <div className="rounded-lg pointer-events-auto"><GridToolButton fullWidth mode={selectionMode} icon={tool.icon} label={tool.label} locked={!isPro} onClick={() => runTool(expandedId)} /></div>;
+            }
             const hiddenAway = cell !== null && arrange.hidden.includes(cell) && !arrange.expanded && !dragging;
             if (cell === null || hiddenAway) {
-              const expandedId = booleanOpen && !dragging && cell === null ? expandedBoolean.get(`${r}:${c}`) : null;
-              if (expandedId) {
-                const tool = byId[expandedId];
-                return <div className="rounded-lg pointer-events-auto"><GridToolButton fullWidth mode={selectionMode} icon={tool.icon} label={tool.label} locked={!isPro} onClick={() => runTool(expandedId)} /></div>;
-              }
               // Free empty slot (or a tucked-away hidden tool's slot): only a
               // drop target, and only while dragging, so it never takes a tap
               // or any space during normal modeling.

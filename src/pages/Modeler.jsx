@@ -31,6 +31,7 @@ import MeasureOverlay from '@/components/modeler/MeasureOverlay';
 import TransformDrawer from '@/components/modeler/TransformDrawer';
 import ContextTip from '@/components/modeler/ContextTip';
 import GuideSheet from '@/components/modeler/GuideSheet';
+import HelpPanel from '@/components/modeler/HelpPanel';
 import ToolAnnouncement from '@/components/modeler/ToolAnnouncement';
 import PaintToolFlash from '@/components/modeler/PaintToolFlash';
 import MultiSelectLabel from '@/components/modeler/MultiSelectLabel';
@@ -141,6 +142,7 @@ export default function Modeler() {
   const [cut, setCut] = useState(null);
   const [addVertex, setAddVertex] = useState(null);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [graphicsError, setGraphicsError] = useState(null);
   const [selectionMetric, setSelectionMetric] = useState({ type: 'object', count: 0, label: '0 selected triangles' });
 
@@ -385,13 +387,14 @@ export default function Modeler() {
   // canvas back-tap walks (menu, guide, drawer, library, panels, modes).
   const handleBackStep = useCallback((fromCanvas = false) => {
     if (menuOpen && menuBackRef.current?.()) return true;
+    if (helpOpen && fromCanvas !== true) { setHelpOpen(false); return true; }
     if (segmentsOpen) { setSegmentsOpen(false); return true; }
     if (toolsOpen) { setToolsOpen(false); return true; }
     if (modeToolsOpen) { setModeToolsOpen(false); return true; }
     return handleCanvasBack(fromCanvas === true);
-  }, [menuOpen, segmentsOpen, toolsOpen, modeToolsOpen, handleCanvasBack]);
+  }, [menuOpen, helpOpen, segmentsOpen, toolsOpen, modeToolsOpen, handleCanvasBack]);
 
-  const anyPanelOpen = menuOpen || libraryOpen || materialsOpen || sculptOpen || transformDrawerOpen || guideOpen || lightingOpen
+  const anyPanelOpen = menuOpen || libraryOpen || materialsOpen || sculptOpen || transformDrawerOpen || guideOpen || lightingOpen || helpOpen
     || toolsOpen || modeToolsOpen || segmentsOpen || radialArrayOpen || snapPanelOpen || freeTransformPanelOpen || !!selectionPattern || !!addVertex;
   useBackDismiss(anyPanelOpen, handleBackStep);
 
@@ -424,7 +427,11 @@ export default function Modeler() {
     setLibraryOpen(false);
     setMenuOpen(false);
     setGuideOpen(false);
+    setHelpOpen(false);
     setLightingOpen(false);
+    setSnapPanelOpen(false);
+    setFreeTransformPanelOpen(false);
+    setPrecisionPanelOpen(false);
     if (keep !== 'material') closeMaterials();
     if (keep !== 'sculpt') closeSculpt();
     const mgr = managerRef.current;
@@ -592,7 +599,7 @@ export default function Modeler() {
     if (toolId === 'bevel') {
       setModeToolsOpen(false);
       setToolsOpen(false);
-      if (!beginBevelPreview(managerRef.current)) { showToolPrompt('Select an edge first'); return; }
+      if (!beginBevelPreview(managerRef.current)) { showToolPrompt(managerRef.current?.selection?.type === 'vertex' ? 'Select a vertex first' : 'Select an edge first'); return; }
       setBevelOpen(true);
       return;
     }
@@ -620,6 +627,8 @@ export default function Modeler() {
     }
     const limitSnapshot = !isPro && TRIANGLE_GROWTH_TOOLS.has(toolId) ? manager?.captureSnapshot() : null;
     manager?.executeTool(toolId);
+    // Dissolve reports why it could not merge (open boundary, non-planar result, ...).
+    if (toolId === 'dissolve' && manager?.toolNotice) showToolPrompt(manager.toolNotice);
     if (!isPro && totalTriangles(manager) > FREE_TRIANGLE_LIMIT) {
       if (limitSnapshot) manager.restoreSnapshot(limitSnapshot);
       openUpgrade(`Free scenes are limited to ${FREE_TRIANGLE_LIMIT.toLocaleString()} triangles.`);
@@ -858,7 +867,7 @@ export default function Modeler() {
           window.dispatchEvent(new CustomEvent('axis-selection-change'));
         }}
         onBeforeSelectionTap={(selection) => {
-          if (bevelOpen && selection?.type === 'edge') cancelOpenBevel();
+          if (bevelOpen && (selection?.type === 'edge' || selection?.type === 'vertex')) cancelOpenBevel();
         }}
         onSelectionTap={(selection) => {
           if (selectionPattern && selection?.type === 'edge') setSelectionPattern(null);
@@ -903,13 +912,14 @@ export default function Modeler() {
         freeTransform={freeTransform}
         snapping={snapToGrid}
         precision={precision}
-        onTogglePrecision={() => { setPrecision(v => { if (v) setPrecisionPanelOpen(false); return !v; }); }}
-        onOpenPrecisionPanel={() => { setPrecision(true); setPrecisionPanelOpen(true); setSnapPanelOpen(false); setFreeTransformPanelOpen(false); }}
+        onTogglePrecision={() => { dismissActiveTool(); setPrecision(v => { if (v) setPrecisionPanelOpen(false); return !v; }); }}
+        onOpenPrecisionPanel={() => { dismissActiveTool(); setPrecision(true); setPrecisionPanelOpen(true); setSnapPanelOpen(false); setFreeTransformPanelOpen(false); }}
         onToggleClayViewport={() => { setSnapPanelOpen(false); setFreeTransformPanelOpen(false); setClayViewport((value) => !value); }}
         onToggleTransparentViewport={() => { setSnapPanelOpen(false); setFreeTransformPanelOpen(false); setTransparentViewport((value) => !value); }}
         onToggleRenderBoost={() => { setSnapPanelOpen(false); setFreeTransformPanelOpen(false); setRenderBoostManual(!renderBoostEnabled); }}
-        onToggleFreeTransform={handleToggleFreeTransform}
+        onToggleFreeTransform={() => { dismissActiveTool(); handleToggleFreeTransform(); }}
         onToggleSnapping={() => {
+          dismissActiveTool();
           const next = !snapToGrid;
           theme.set({ snapToGrid: next });
           if (!next) setSnapPanelOpen(false);
@@ -924,16 +934,18 @@ export default function Modeler() {
           closeMaterials(); closeSculpt(); setLightingOpen(false);
           setMenuOpen(!menuOpen);
         }}
+        helpOpen={helpOpen}
+        counter={!(menuOpen || guideOpen || libraryOpen || transformDrawerOpen) ? <TriangleCounter metric={selectionMetric} /> : null}
+        onHelp={() => { if (helpOpen) { setHelpOpen(false); return; } dismissActiveTool(); setHelpOpen(true); }}
         onUndo={() => { setSnapPanelOpen(false); setFreeTransformPanelOpen(false); handleUndo(); }}
         onRedo={() => { setSnapPanelOpen(false); setFreeTransformPanelOpen(false); handleRedo(); }}
       />
-      {!(menuOpen || guideOpen || libraryOpen || transformDrawerOpen) && (
-        <TriangleCounter metric={selectionMetric} />
-      )}
 
       {/* The HUD and its tips only exist while the canvas is actually visible —
           menus, guides, the library and drawers hide them. */}
       {!(menuOpen || guideOpen || libraryOpen || transformDrawerOpen) && (<>
+      <div className="absolute left-[3.75rem] right-[4.25rem] top-[calc(max(env(safe-area-inset-top,0px),1.75rem)+0.25rem)] z-[60] flex flex-col items-center gap-1 pointer-events-none">
+      <div className="w-fit max-w-full overflow-hidden rounded-xl" style={{ background: 'rgba(9,13,22,0.26)', border: '1px solid rgba(255,255,255,0.07)' }}>
       <ContextTip
         context={
           cut?.kind === 'loop' ? 'cutLoop'
@@ -952,8 +964,8 @@ export default function Modeler() {
             : selectionMode
         }
       />
-      <ToolAnnouncement suppressed={multiSelect} toolActive={!!(draw?.active || cut || addVertex || selectionPattern || bevelOpen || radialArrayOpen || measureMode || angleMode || materialsOpen || sculptOpen || transformDrawerOpen)} />
-      <PaintToolFlash suppressed={multiSelect} />
+      </div>
+      <div className="w-fit max-w-full overflow-hidden rounded-xl" style={{ background: 'rgba(9,13,22,0.26)', border: '1px solid rgba(255,255,255,0.07)' }}>
       <PositionHud
         hud={hud}
         onOpenTransform={(target) => {
@@ -967,9 +979,39 @@ export default function Modeler() {
           setTransformDrawerOpen(true);
         }}
       />
-      </>)}
-
+      </div>
+      {/* Labels and prompts stack in this same column under the HUD, so they can never overlap it or each other. */}
       <MultiSelectLabel active={multiSelect} />
+      <ToolAnnouncement suppressed={multiSelect} toolActive={!!(draw?.active || cut || addVertex || selectionPattern || bevelOpen || radialArrayOpen || measureMode || angleMode || materialsOpen || sculptOpen || transformDrawerOpen)} />
+      <PaintToolFlash suppressed={multiSelect} />
+      {toolPrompt && (
+        <div
+          className="w-full text-center font-mono text-[12px]"
+          style={{
+            color: highlightColor,
+            opacity: toolPrompt.fading ? 0 : 1,
+            transition: 'opacity 500ms ease',
+            textShadow: '0 1px 3px rgba(0,0,0,0.6)',
+          }}
+        >
+          {toolPrompt.text}
+        </div>
+      )}
+      {renderBoostNotice && (
+        <div
+          className="rounded-full border px-4 py-2 font-mono text-[12px] whitespace-nowrap"
+          style={{
+            color: highlightColor,
+            borderColor: `${highlightColor}80`,
+            background: 'rgba(10,10,12,0.9)',
+            boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
+          }}
+        >
+          Render Boost active
+        </div>
+      )}
+      </div>
+      </>)}
 
       {modeToolsOpen && (
         <ModeToolGrid
@@ -1211,8 +1253,10 @@ export default function Modeler() {
         <BevelPanel
           isPro={isPro}
           onProLock={openUpgrade}
+          vertexMode={managerRef.current?._bevelSnapshot?.selection?.type === 'vertex'}
           onPreview={(options) => {
             updateBevelPreview(managerRef.current, options);
+            if (managerRef.current?.bevelNotice) showToolPrompt(managerRef.current.bevelNotice);
             if (!isPro && totalTriangles(managerRef.current) > FREE_TRIANGLE_LIMIT) {
               cancelBevelPreview(managerRef.current); setBevelOpen(false);
               openUpgrade(`Free scenes are limited to ${FREE_TRIANGLE_LIMIT.toLocaleString()} triangles.`);
@@ -1282,34 +1326,9 @@ export default function Modeler() {
       />
 
       {guideOpen && <GuideSheet onClose={() => setGuideOpen(false)} />}
+      {helpOpen && !(menuOpen || guideOpen || libraryOpen || transformDrawerOpen) && <HelpPanel onClose={() => setHelpOpen(false)} />}
 
-      {renderBoostNotice && (
-        <div
-          className="absolute top-36 left-1/2 -translate-x-1/2 z-50 pointer-events-none rounded-full border px-4 py-2 font-mono text-[12px] whitespace-nowrap"
-          style={{
-            color: highlightColor,
-            borderColor: `${highlightColor}80`,
-            background: 'rgba(10,10,12,0.9)',
-            boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
-          }}
-        >
-          Render Boost active
-        </div>
-      )}
 
-      {toolPrompt && (
-        <div
-          className="absolute top-28 left-1/2 -translate-x-1/2 z-40 pointer-events-none font-mono text-[12px] whitespace-nowrap"
-          style={{
-            color: highlightColor,
-            opacity: toolPrompt.fading ? 0 : 1,
-            transition: 'opacity 500ms ease',
-            textShadow: '0 1px 3px rgba(0,0,0,0.6)',
-          }}
-        >
-          {toolPrompt.text}
-        </div>
-      )}
 
       {(importing || addingReference) && (
         <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">

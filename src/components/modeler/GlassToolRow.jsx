@@ -35,7 +35,7 @@ export default function GlassToolRow({
               style={{
                 left: `${start * 100 / cells.length}%`,
                 width: `${(end - start) * 100 / cells.length}%`,
-                background: 'rgba(9,13,22,0.26)',
+                background: 'rgba(9,13,22,0.38)',
                 borderRadius: `${topLeft}px ${topRight}px ${bottomRight}px ${bottomLeft}px`,
               }}
             />

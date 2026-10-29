@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Globe, Scan } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
+import { helpIntercept } from '@/lib/helpMode';
 
 export default function ViewportModeButtons({ clay, transparent, onClay, onTransparent }) {
   const { uiColor, highlightColor } = useTheme();
@@ -26,23 +27,27 @@ export default function ViewportModeButtons({ clay, transparent, onClay, onTrans
       e.stopPropagation();
       const p = pointerRef.current;
       pointerRef.current = null;
-      if (p && p.target === target && p.id === e.pointerId && !p.moved) action();
+      if (p && p.target === target && p.id === e.pointerId && !p.moved) {
+        if (helpIntercept({ id: target })) return;
+        action();
+      }
     },
   });
-  const button = 'pointer-events-auto min-w-9 h-8 rounded-md flex items-center justify-end gap-1.5 active:scale-95 transition-transform touch-none';
+  const button = 'pointer-events-auto relative w-full h-8 rounded-md flex items-center justify-center active:scale-95 transition-transform touch-none';
   const style = (active) => ({
     color: active ? highlightColor : uiColor,
     textShadow: '0 1px 3px rgba(0,0,0,0.35)',
   });
 
   return (
-    <div className="relative z-10 flex flex-col items-end gap-2.5 mr-4">
+    <div className="relative z-10 flex w-full flex-col items-center">
       <button {...tapProps('clay', () => select('Clay', onClay))} aria-label="Toggle clay viewport" aria-pressed={clay} style={style(clay)} className={button}>
-        {notice === 'Clay' && <span className="text-sm whitespace-nowrap translate-y-[3px]">Clay</span>}
+        {notice === 'Clay' && <span className="absolute left-full ml-1 z-20 text-sm whitespace-nowrap translate-y-[3px]">Clay</span>}
         <Globe className="w-5 h-5 shrink-0" strokeWidth={2.0} />
       </button>
+      <div className="h-[10px] w-full" aria-hidden="true" />
       <button {...tapProps('transparent', () => select('Transparent', onTransparent))} aria-label="Toggle transparent viewport" aria-pressed={transparent} style={style(transparent)} className={button}>
-        {notice === 'Transparent' && <span className="text-sm whitespace-nowrap translate-y-[3px]">Transparent</span>}
+        {notice === 'Transparent' && <span className="absolute left-full ml-1 z-20 text-sm whitespace-nowrap translate-y-[3px]">Transparent</span>}
         <Scan className="w-5 h-5 shrink-0" strokeWidth={2.0} />
       </button>
     </div>

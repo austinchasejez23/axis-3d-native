@@ -34,7 +34,7 @@ function polygonNormal(mesh, face) {
   return n.lengthSq() > 1e-18 ? n.normalize() : null;
 }
 
-function isSimplePolygon(mesh, face, normal) {
+export function isSimplePolygon(mesh, face, normal) {
   const axis = Math.abs(normal.x) >= Math.abs(normal.y) && Math.abs(normal.x) >= Math.abs(normal.z) ? 'x'
     : Math.abs(normal.y) >= Math.abs(normal.z) ? 'y' : 'z';
   const project = (v) => axis === 'x' ? [v.y, v.z] : axis === 'y' ? [v.x, v.z] : [v.x, v.y];

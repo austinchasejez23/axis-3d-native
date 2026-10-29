@@ -1,15 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTheme } from '@/lib/theme';
-import { getToolDescription } from '@/lib/toolKnowledge';
-
 
 const SLIDE_MS = 350;
 
-export default function ToolAnnouncement({ toolActive = false, suppressed = false }) {
+// Tool-name label: slides in from the right edge, under the Undo button.
+export default function ToolAnnouncement({ suppressed = false }) {
   const { uiColor } = useTheme();
   const [selection, setSelection] = useState(null);
   const [visible, setVisible] = useState(false);
-  const [showDescription, setShowDescription] = useState(false);
   const timers = useRef([]);
   const clearTimers = () => timers.current.forEach(clearTimeout);
 
@@ -18,12 +16,9 @@ export default function ToolAnnouncement({ toolActive = false, suppressed = fals
       const label = event.detail?.label;
       if (!label) return;
       clearTimers();
-      // Most announcements are a short tool name and fit the default width
-      // fine. A longer, sentence-style hint can opt into a narrower box so
-      // it wraps into a tight, balanced block hugging the left edge instead
-      // of stretching a single line toward the middle of the screen.
-      setSelection({ label, widthRem: event.detail?.widthRem, mode: event.detail?.mode, small: !!event.detail?.small });
-      setShowDescription(false);
+      // A longer, sentence-style hint can opt into a narrower box so it wraps
+      // into a tight block hugging the right edge.
+      setSelection({ label, widthRem: event.detail?.widthRem, small: !!event.detail?.small });
       setVisible(false);
       timers.current = [
         setTimeout(() => setVisible(true), 20),
@@ -41,16 +36,11 @@ export default function ToolAnnouncement({ toolActive = false, suppressed = fals
         return current;
       });
     };
-    // The paint label shows just below this one; fold the description away so
-    // the two never overlap.
-    const collapse = () => setShowDescription(false);
     window.addEventListener('axis-tool-selected', announce);
     window.addEventListener('axis-tool-closed', close);
-    window.addEventListener('axis-paint-label', collapse);
     return () => {
       window.removeEventListener('axis-tool-selected', announce);
       window.removeEventListener('axis-tool-closed', close);
-      window.removeEventListener('axis-paint-label', collapse);
       clearTimers();
     };
   }, []);
@@ -58,29 +48,21 @@ export default function ToolAnnouncement({ toolActive = false, suppressed = fals
   if (!selection || suppressed) return null;
   const label = selection.label.replace(/\n/g, ' ');
   return (
+    <div className="w-full flex justify-center overflow-hidden pointer-events-none">
     <div
-      className="absolute top-[calc(max(env(safe-area-inset-top,0px),1.75rem)+7rem)] left-0 z-50 font-mono font-semibold"
+      className="font-mono font-semibold"
       style={{
         color: uiColor,
         textShadow: '0 1px 3px rgba(0,0,0,0.6)',
-        transform: visible ? 'translateX(0)' : 'translateX(-105%)',
+        transform: visible ? 'translateX(0)' : 'translateX(105%)',
         transition: `transform ${SLIDE_MS}ms ease`,
         maxWidth: `${selection.widthRem || 16}rem`,
       }}
     >
-      <button
-        type="button"
-        className={`flex items-center gap-1.5 px-2 py-1.5 text-left leading-tight pointer-events-auto touch-none ${selection.small ? 'text-[14px]' : 'text-[1.375rem]'}`}
-        aria-label={`Show ${label} description`}
-        onClick={() => setShowDescription(true)}
-      >
+      <div className={`px-2 py-1.5 text-center leading-tight ${selection.small ? 'text-[14px]' : 'text-[1.375rem]'}`}>
         <span style={{ textWrap: 'balance' }}>{label}</span>
-      </button>
-      {showDescription && (
-        <p className="px-2 pb-1 text-[12px] leading-snug font-medium">
-          {getToolDescription(label, selection.mode)}
-        </p>
-      )}
+      </div>
+    </div>
     </div>
   );
 }

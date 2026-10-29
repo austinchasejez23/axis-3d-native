@@ -8,7 +8,7 @@ export default function TriangleCounter({ metric = { type: 'object', count: 0, l
   const Icon = icons[metric.type] || Triangle;
   return (
     <div
-      className="absolute top-[calc(max(env(safe-area-inset-top,0px),1.75rem)+3.75rem)] left-[6px] w-16 z-30 flex items-center justify-center gap-1 pointer-events-none font-mono text-[10px] tabular-nums"
+      className="h-5 w-full flex items-center justify-center gap-1 pointer-events-none font-mono text-[10px] tabular-nums"
       style={{ color: uiColor, textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}
       aria-label={metric.label}
     >

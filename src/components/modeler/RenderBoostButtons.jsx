@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Gauge, Move3D, Magnet, Crosshair } from 'lucide-react';
 import ResistanceIcon from './ResistanceIcon';
 import { useTheme } from '@/lib/theme';
+import { helpIntercept } from '@/lib/helpMode';
 
 // A deliberate tap toggles a viewport option. Free Transform and Snapping
 // open their settings panels on double-tap; dragging across the stack never
@@ -25,7 +26,7 @@ export default function RenderBoostButtons({ renderBoost, freeTransform, snappin
     timerRef.current = setTimeout(() => setNotice(null), 1400);
     action();
   };
-  const button = 'pointer-events-auto min-w-9 h-8 rounded-md flex items-center justify-end gap-1.5 active:scale-95 transition-transform touch-none';
+  const button = 'pointer-events-auto relative w-full h-8 rounded-md flex items-center justify-center active:scale-95 transition-transform touch-none';
   const style = (active) => ({
     color: active ? highlightColor : uiColor,
     textShadow: '0 1px 3px rgba(0,0,0,0.35)',
@@ -48,6 +49,7 @@ export default function RenderBoostButtons({ renderBoost, freeTransform, snappin
       const p = pointerRef.current;
       pointerRef.current = null;
       if (!p || p.target !== target || p.id !== e.pointerId || p.moved) return;
+      if (helpIntercept({ id: target })) return;
       const now = performance.now();
       const dbl = doubleTapRef.current.target === target && now - doubleTapRef.current.at < 360;
       doubleTapRef.current = dbl ? { target: null, at: 0 } : { target, at: now };
@@ -70,11 +72,12 @@ export default function RenderBoostButtons({ renderBoost, freeTransform, snappin
   };
 
   return (
-    <div className="relative z-10 flex flex-col items-end gap-2.5 mr-4">
+    <div className="relative z-10 flex w-full flex-col items-center">
       {(group === 'all' || group === 'visual') && <button {...tapProps('boost', () => select('Render boost', onRenderBoost))} aria-label="Toggle navigation render boost" aria-pressed={renderBoost} style={style(renderBoost)} className={button}>
-        {notice === 'Render boost' && <span className="text-sm whitespace-nowrap translate-y-[3px]">Render boost</span>}
+        {notice === 'Render boost' && <span className="absolute left-full ml-1 z-20 text-sm whitespace-nowrap translate-y-[3px]">Render boost</span>}
         <Gauge className="w-5 h-5 shrink-0" strokeWidth={2} />
       </button>}
+      {group === 'all' && <div className="h-[10px] w-full" aria-hidden="true" />}
       {(group === 'all' || group === 'action') && <>
       <button
         {...tapProps('free', handleFreeTap, onOpenFreeTransformPanel)}
@@ -84,10 +87,11 @@ export default function RenderBoostButtons({ renderBoost, freeTransform, snappin
         style={style(freeTransform)}
         className={button}
       >
-        {notice === 'Free Transform' && <span className="text-sm whitespace-nowrap translate-y-[3px]">Free Transform</span>}
+        {notice === 'Free Transform' && <span className="absolute left-full ml-1 z-20 text-sm whitespace-nowrap translate-y-[3px]">Free Transform</span>}
         <Move3D className="w-5 h-5 shrink-0" strokeWidth={2} />
       </button>
-      <div className="relative">
+      <div className="h-[10px] w-full" aria-hidden="true" />
+      <div className="relative w-full">
         <button
           {...tapProps('snap', handleSnapTap, onOpenSnapPanel)}
           aria-label="Toggle snapping"
@@ -96,17 +100,19 @@ export default function RenderBoostButtons({ renderBoost, freeTransform, snappin
           style={style(snapping)}
           className={button}
         >
-          {notice === 'Snapping' && <span className="text-sm whitespace-nowrap translate-y-[3px]">Snapping</span>}
+          {notice === 'Snapping' && <span className="absolute left-full ml-1 z-20 text-sm whitespace-nowrap translate-y-[3px]">Snapping</span>}
           <Magnet className="w-5 h-5 shrink-0" strokeWidth={2} />
         </button>
       </div>
+      <div className="h-[10px] w-full" aria-hidden="true" />
       <button {...tapProps('precision', handleResistanceTap, onOpenPrecisionPanel)} aria-label="Toggle resistance" aria-pressed={precision} title="Double-tap for resistance settings" style={style(precision)} className={button}>
-        {notice === 'Resistance' && <span className="text-sm whitespace-nowrap translate-y-[3px]">Resistance</span>}
+        {notice === 'Resistance' && <span className="absolute left-full ml-1 z-20 text-sm whitespace-nowrap translate-y-[3px]">Resistance</span>}
         <ResistanceIcon className="w-5 h-5 shrink-0" />
       </button>
+      <div className="h-[10px] w-full" aria-hidden="true" />
       {/* Focus: one tap re-centers the camera on the current selection. */}
       <button {...tapProps('focus', () => select('Focus', onFocus))} aria-label="Focus on selection" style={style(false)} className={button}>
-        {notice === 'Focus' && <span className="text-sm whitespace-nowrap translate-y-[3px]">Focus</span>}
+        {notice === 'Focus' && <span className="absolute left-full ml-1 z-20 text-sm whitespace-nowrap translate-y-[3px]">Focus</span>}
         <Crosshair className="w-5 h-5 shrink-0" strokeWidth={2} />
       </button>
       </>}

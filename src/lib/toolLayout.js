@@ -59,17 +59,17 @@ export const DEFAULT_LAYOUTS = {
   ],
   face: [
     ...stack(),
-    [null, null, null, null, null, null],
+    ['dissolve', null, null, null, null, null],
     ['bridge', 'draw_face', 'detach', 'clone', 'extrude', 'delete'],
   ],
   edge: [
     ...stack(),
-    ['split', 'select_ring', 'draw_cut', 'bridge', null, null],
+    ['split', 'select_ring', 'draw_cut', 'bridge', 'dissolve', null],
     ['cut_loop', 'select_loop', 'create_face_border', 'extrude', 'bevel', 'delete'],
   ],
   vertex: [
     ...stack(),
-    [null, null, null, null, null, null],
+    ['bevel', 'dissolve', null, null, null, null],
     ['add_vertex', 'create_face', 'connect', 'target_merge', 'merge', 'delete'],
   ],
 };
@@ -82,6 +82,22 @@ const DEFAULT_HIDDEN = {
 const KEY = 'axis3d.toolLayouts';
 
 const allIds = (rows) => rows.flat().filter((c) => c && c !== VOID).map(String).sort();
+
+// Put a newly added tool into a saved arrangement: on its default spot when that
+// cell is still free, otherwise the last free cell, so nothing the user
+// arranged is moved.
+function placeMissing(rows, mode, id) {
+  if (!Array.isArray(rows) || allIds(rows).includes(id)) return;
+  const def = DEFAULT_LAYOUTS[mode];
+  for (let r = 0; r < def.length; r++) {
+    const c = def[r].indexOf(id);
+    if (c >= 0 && rows[r]?.[c] === null) { rows[r][c] = id; return; }
+  }
+  for (let r = rows.length - 1; r >= 0; r--) {
+    const c = rows[r].indexOf(null);
+    if (c >= 0) { rows[r][c] = id; return; }
+  }
+}
 
 // A stored arrangement is only used when it still holds exactly the same tools
 // and blocked slots as the default, in the same shape, so a future tool addition
@@ -150,10 +166,13 @@ export function loadToolLayout(mode) {
       const openRow = rows.find((row) => row.some((cell) => cell === null));
       if (openRow) openRow[openRow.indexOf(null)] = 'bridge';
     }
+    const previousShape = JSON.stringify(rows);
+    if (mode === 'face' || mode === 'edge' || mode === 'vertex') placeMissing(rows, mode, 'dissolve');
+    if (mode === 'vertex') placeMissing(rows, mode, 'bevel');
     if (matchesDefault(rows, mode)) {
       const hidden = Array.isArray(all[mode].hidden) ? all[mode].hidden.filter((id) => allIds(rows).includes(id)) : [];
       // Upgrade untouched defaults only; keep manually customized layouts.
-      if (PREVIOUS_LAYOUTS[mode] && JSON.stringify(rows) === JSON.stringify(PREVIOUS_LAYOUTS[mode])
+      if (PREVIOUS_LAYOUTS[mode] && previousShape === JSON.stringify(PREVIOUS_LAYOUTS[mode])
         && (hidden.length === 0 || JSON.stringify([...hidden].sort()) === JSON.stringify([...PREVIOUS_HIDDEN[mode]].sort()))) {
         return { rows: DEFAULT_LAYOUTS[mode], hidden: [...DEFAULT_HIDDEN[mode]] };
       }

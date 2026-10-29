@@ -69,9 +69,9 @@ export default function GeneralToolGrid({
       {heldTool && <ToolDragGhost icon={heldTool.icon} label={heldTool.label} pointer={arrange.pointer} />}
       <ToolGridActions
         mode="general"
-        showHide={arrange.selected.length >= 2}
-        hideLabel={arrange.allSelectedHidden ? 'Show' : 'Hide'}
-        onHide={arrange.toggleHideSelected}
+        showHide={arrange.selected.length >= 1}
+        onHide={arrange.hideSelected}
+        onShow={arrange.showSelected}
         showChevron={arrange.hidden.length > 0}
         expanded={arrange.expanded}
         onToggleExpanded={arrange.toggleExpanded}

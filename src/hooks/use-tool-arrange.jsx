@@ -12,8 +12,8 @@ const expandedByMode = new Map();
 //   • touch-and-hold a tool and RELEASE in place to select it — like a press-
 //     hold on geometry enters multi-select. While anything is selected, plain
 //     taps toggle other tools in and out of the selection instead of running.
-//   • with two or more selected, Hide (or Show, when the selection is already
-//     hidden) tucks them away; a chevron then expands/collapses the hidden set.
+//   • with one or more selected, Hide tucks them away and Show brings hidden
+//     ones back; a chevron then expands/collapses the hidden set.
 export function useToolArrange(mode) {
   const [layout, setLayout] = useState(() => loadToolLayout(mode));
   const [selected, setSelected] = useState([]);
@@ -193,12 +193,14 @@ export function useToolArrange(mode) {
 
   // Hide / Show the selection. Showing keeps the grid expanded so the tools
   // that just came back are visible right where they are.
-  const allSelectedHidden = selected.length > 0 && selected.every((id) => layout.hidden.includes(id));
-  const toggleHideSelected = () => {
-    const hidden = allSelectedHidden
-      ? layout.hidden.filter((id) => !selected.includes(id))
-      : [...new Set([...layout.hidden, ...selected])];
-    commit(layout.rows, hidden);
+  // Hide adds the selection to the hidden set (works with one tool, and with
+  // tools already hidden); Show takes the selection back out of it.
+  const hideSelected = () => {
+    commit(layout.rows, [...new Set([...layout.hidden, ...selected])]);
+    setSelected([]);
+  };
+  const showSelected = () => {
+    commit(layout.rows, layout.hidden.filter((id) => !selected.includes(id)));
     setSelected([]);
   };
 
@@ -208,8 +210,8 @@ export function useToolArrange(mode) {
     selected,
     toggleSelected,
     clearSelected: () => setSelected([]),
-    allSelectedHidden,
-    toggleHideSelected,
+    hideSelected,
+    showSelected,
     expanded,
     toggleExpanded: () => setExpanded((value) => {
       const next = !value;
