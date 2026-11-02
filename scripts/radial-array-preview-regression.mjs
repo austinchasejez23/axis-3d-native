@@ -205,8 +205,8 @@ try {
   const backdrop = fs.readFileSync('src/components/modeler/GlassToolRow.jsx', 'utf8');
   const modeGrid = fs.readFileSync('src/components/modeler/ModeToolGrid.jsx', 'utf8');
   const generalGrid = fs.readFileSync('src/components/modeler/GeneralToolGrid.jsx', 'utf8');
-  assert.doesNotMatch(buttons, /background: 'rgba\(9,13,22,0\.26\)'/, 'Tool buttons must remain transparent');
-  assert.match(backdrop, /background: 'rgba\(9,13,22,0\.26\)'/, 'Shared rows retain the translucent backdrop');
+  assert.doesNotMatch(buttons, /background: 'rgba\(9,13,22,0\.38\)'/, 'Tool buttons must remain transparent');
+  assert.match(backdrop, /background: 'rgba\(9,13,22,0\.38\)'/, 'Shared rows retain the translucent backdrop');
   assert.match(modeGrid, /arrange\.rows|const rows = arrange\.rows/);
   assert.match(generalGrid, /arrange\.rows\.map/);
   assert.match(modeGrid, /<GridToolButton/);

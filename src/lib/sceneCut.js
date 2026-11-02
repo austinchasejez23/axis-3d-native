@@ -13,14 +13,14 @@ import {
 export function applySceneCut(SceneManager) {
   const P = SceneManager.prototype;
 
-  P.enterCutMode = /** @this {import('./SceneManager.js').SceneManager} */ function (kind) {
+  P.enterCutMode = /** @this {import("./SceneManager").SceneManager} */ function (kind) {
     this.exitCutMode();
     this.clearSelection();
     this.cutMode = { kind, meshId: null, points: [], plan: null, snapCenter: false, snapPoint: false, pathMode: 'follow' };
     this.notifyCut();
   };
 
-  P.exitCutMode = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.exitCutMode = /** @this {import("./SceneManager").SceneManager} */ function () {
     const closingLabel = this.cutMode?.kind === 'loop' ? 'Cut loop' : this.cutMode?.kind === 'draw' ? 'Draw cut' : null;
     clearTimeout(this.cutMode?.rejectionTimer);
     this.cutMode = null;
@@ -29,7 +29,7 @@ export function applySceneCut(SceneManager) {
     if (closingLabel) window.dispatchEvent(new CustomEvent('axis-tool-closed', { detail: { label: closingLabel } }));
   };
 
-  P.notifyCut = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.notifyCut = /** @this {import("./SceneManager").SceneManager} */ function () {
     const c = this.cutMode;
     if (!c) { this.cb.onCutChange?.(null); return; }
     this.cb.onCutChange?.({
@@ -42,14 +42,14 @@ export function applySceneCut(SceneManager) {
     });
   };
 
-  P.setDrawCutSnap = /** @this {import('./SceneManager.js').SceneManager} */ function (enabled) {
+  P.setDrawCutSnap = /** @this {import("./SceneManager").SceneManager} */ function (enabled) {
     const c = this.cutMode;
     if (!c || c.kind !== 'draw') return;
     c.snapPoint = !!enabled;
     this.notifyCut();
   };
 
-  P.setCutCenterSnap = /** @this {import('./SceneManager.js').SceneManager} */ function (enabled) {
+  P.setCutCenterSnap = /** @this {import("./SceneManager").SceneManager} */ function (enabled) {
     const c = this.cutMode;
     if (!c || c.kind !== 'loop') return;
     c.snapCenter = !!enabled;
@@ -62,7 +62,7 @@ export function applySceneCut(SceneManager) {
     this.notifyCut();
   };
 
-  P.setCutPathMode = /** @this {import('./SceneManager.js').SceneManager} */ function (mode) {
+  P.setCutPathMode = /** @this {import("./SceneManager").SceneManager} */ function (mode) {
     const c = this.cutMode;
     if (!c || c.kind !== 'loop') return;
     c.pathMode = mode;
@@ -74,13 +74,15 @@ export function applySceneCut(SceneManager) {
     this.notifyCut();
   };
 
-  P.clearCutPreview = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.clearCutPreview = /** @this {import("./SceneManager").SceneManager} */ function () {
     if (!this.cutPreviewGroup) return;
     while (this.cutPreviewGroup.children.length) {
       const child = this.cutPreviewGroup.children[0];
       this.cutPreviewGroup.remove(child);
-      child.geometry?.dispose();
-      child.material?.dispose();
+      if (child instanceof THREE.Mesh || child instanceof THREE.Line || child instanceof THREE.Points) {
+        child.geometry?.dispose();
+        for (const material of (Array.isArray(child.material) ? child.material : [child.material])) material?.dispose();
+      }
     }
   };
 
@@ -90,7 +92,7 @@ export function applySceneCut(SceneManager) {
 
   // Position along the tapped edge, in screen space (0 = v1, 1 = v2), kept
   // `margin` away from either end.
-  P.edgeParamAtScreen = /** @this {import('./SceneManager.js').SceneManager} */ function (mesh, edge, ndcX, ndcY, margin = 0.05) {
+  P.edgeParamAtScreen = /** @this {import("./SceneManager").SceneManager} */ function (mesh, edge, ndcX, ndcY, margin = 0.05) {
     const wm = this.getWorldMatrix(mesh);
     const a = mesh.getVertex(edge.v1), b = mesh.getVertex(edge.v2);
     const sa = new THREE.Vector3(a.x, a.y, a.z).applyMatrix4(wm).project(this.camera);
@@ -102,7 +104,7 @@ export function applySceneCut(SceneManager) {
     return Math.max(margin, Math.min(1 - margin, t));
   };
 
-  P.handleCutTap = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
+  P.handleCutTap = /** @this {import("./SceneManager").SceneManager} */ function (clientX, clientY) {
     const c = this.cutMode;
     if (!c || c.invalidLast) return;
     // Tapping the first marker closes a Draw cut instead of placing a second
@@ -192,7 +194,7 @@ export function applySceneCut(SceneManager) {
 
   // Finger down on an edge in Cut loop mode: show the preview immediately and
   // keep it following the finger as it slides along the edge.
-  P.beginCutDrag = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
+  P.beginCutDrag = /** @this {import("./SceneManager").SceneManager} */ function (clientX, clientY) {
     const c = this.cutMode;
     if (!c || c.kind !== 'loop') return false;
     const { x, y } = this.screenToNDC(clientX, clientY);
@@ -207,7 +209,7 @@ export function applySceneCut(SceneManager) {
     return true;
   };
 
-  P.dragCutTo = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
+  P.dragCutTo = /** @this {import("./SceneManager").SceneManager} */ function (clientX, clientY) {
     const c = this.cutMode;
     if (!c || !c.dragEdge) return;
     const mesh = this.getMesh(c.meshId);
@@ -220,11 +222,11 @@ export function applySceneCut(SceneManager) {
     this.notifyCut();
   };
 
-  P.endCutDrag = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.endCutDrag = /** @this {import("./SceneManager").SceneManager} */ function () {
     if (this.cutMode) this.cutMode.dragEdge = null;
   };
 
-  P.removeLastCutPoint = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.removeLastCutPoint = /** @this {import("./SceneManager").SceneManager} */ function () {
     const c = this.cutMode;
     if (!c || c.points.length === 0) return;
     clearTimeout(c.rejectionTimer);
@@ -235,7 +237,7 @@ export function applySceneCut(SceneManager) {
     this.notifyCut();
   };
 
-  P.updateCutPreview = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.updateCutPreview = /** @this {import("./SceneManager").SceneManager} */ function () {
     this.clearCutPreview();
     const c = this.cutMode;
     if (!c || !c.meshId) return;
@@ -293,7 +295,7 @@ export function applySceneCut(SceneManager) {
     }
   };
 
-  P.commitCut = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.commitCut = /** @this {import("./SceneManager").SceneManager} */ function () {
     const c = this.cutMode;
     if (!c || !c.meshId || c.invalidLast) return false;
     const mesh = this.getMesh(c.meshId);

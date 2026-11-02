@@ -15,11 +15,11 @@ import * as THREE from 'three';
 export function applySceneMouse(SceneManager) {
   const P = SceneManager.prototype;
 
-  P.setupMouseEvents = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.setupMouseEvents = /** @this {import("./SceneManager").SceneManager} */ function () {
     this.renderer.domElement.addEventListener('wheel', (e) => this.onMouseWheel(e), { passive: false });
   };
 
-  P.isMouseOverSelection = /** @this {import('./SceneManager.js').SceneManager} */ function (x, y) {
+  P.isMouseOverSelection = /** @this {import("./SceneManager").SceneManager} */ function (x, y) {
     // Surface mode never transforms objects, on mouse or touch.
     if (this.surfaceMode) return false;
     if (!this.selection.meshId) return false;
@@ -27,7 +27,7 @@ export function applySceneMouse(SceneManager) {
   };
 
   // Undo for wheel bursts: one snapshot per burst, not per notch.
-  P._beginWheelStep = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P._beginWheelStep = /** @this {import("./SceneManager").SceneManager} */ function () {
     if (!this._wheelActive) {
       this._wheelActive = true;
       this.rotatePivot = this.getSelectionCenter();
@@ -43,7 +43,7 @@ export function applySceneMouse(SceneManager) {
     }, 500);
   };
 
-  P.onMouseDown = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
+  P.onMouseDown = /** @this {import("./SceneManager").SceneManager} */ function (e) {
     e.preventDefault();
     this.stopCameraMotion();
     this.renderer.domElement.setPointerCapture?.(e.pointerId);
@@ -59,13 +59,8 @@ export function applySceneMouse(SceneManager) {
       const ndcP = this.screenToNDC(e.clientX, e.clientY);
       const paintHits = this.raycastMeshes(ndcP.x, ndcP.y);
       if (paintHits.length > 0) {
-        // Same as touch: pressing the brush on an object selects it (object
-        // mode) so the stroke always lands.
-        const hitMeshId = this.findMeshIdByObject(paintHits[0].object);
-        if (hitMeshId && this.selection.type === 'object') {
-          const already = this.isGroupMode() ? this.selectedMeshIds.includes(hitMeshId) : this.selection.meshId === hitMeshId;
-          if (!already) this.setSelection({ meshId: hitMeshId, type: 'object', indices: [] });
-        }
+        // Same as touch: the brush paints the touched object directly; nothing
+        // is selected while it is active.
         this.mouse = { button: 0, startX: e.clientX, startY: e.clientY, lastX: e.clientX, lastY: e.clientY, moved: false, mode: 'paint' };
         this.cancelPaintPreview();
         // Nothing commits until Apply; the stroke joins the pending batch.
@@ -120,7 +115,7 @@ export function applySceneMouse(SceneManager) {
     };
   };
 
-  P.onMouseMove = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
+  P.onMouseMove = /** @this {import("./SceneManager").SceneManager} */ function (e) {
     const m = this.mouse;
     if (!m) return;
     if (this.updateSceneLightMouse?.(e)) return;
@@ -204,7 +199,7 @@ export function applySceneMouse(SceneManager) {
 
   // Right-drag axis scale: the surface follows the pointer, growing when the
   // drag moves away from the selection center and shrinking when it moves in.
-  P._beginMouseScale = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
+  P._beginMouseScale = /** @this {import("./SceneManager").SceneManager} */ function (e) {
     const m = this.mouse;
     m.mode = 'scale';
     this.activeAction = 'scale';
@@ -229,7 +224,7 @@ export function applySceneMouse(SceneManager) {
     m.lastRatio = 1;
   };
 
-  P._updateMouseScale = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
+  P._updateMouseScale = /** @this {import("./SceneManager").SceneManager} */ function (e) {
     const m = this.mouse;
     const center = this.getSelectionCenter();
     let delta = this.screenToWorldDrag(m.startX, m.startY, e.clientX, e.clientY, center);
@@ -246,7 +241,7 @@ export function applySceneMouse(SceneManager) {
     }
   };
 
-  P.onMouseUp = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
+  P.onMouseUp = /** @this {import("./SceneManager").SceneManager} */ function (e) {
     const m = this.mouse;
     if (this.finishSceneLightMouse?.()) { this.mouse = null; return; }
     this.mouse = null;
@@ -319,7 +314,7 @@ export function applySceneMouse(SceneManager) {
     this.updateHud();
   };
 
-  P.onMouseWheel = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
+  P.onMouseWheel = /** @this {import("./SceneManager").SceneManager} */ function (e) {
     if (this.lightingEdit) {
       e.preventDefault();
       this.zoom(e.deltaY > 0 ? 1.1 : 1 / 1.1);

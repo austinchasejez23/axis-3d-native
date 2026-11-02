@@ -114,20 +114,21 @@ function dissolveFaces(mesh, indices) {
   return { changed: true, merged };
 }
 
-function dissolveEdges(mesh, indices) {
-  const edges = mesh.getEdges();
+// `pairs` are the selected edges as [vertexId, vertexId], taken BEFORE the
+// triangulation diagonals were locked (locking can change the edge list, which
+// would make a plain edge index point at a different edge).
+function dissolveEdges(mesh, pairs) {
   const { groupOf, groups } = visualFaceGroups(mesh);
   const map = mesh._ensureEdgeFaceMap();
   const uf = unionFind();
   const ends = new Set();
-  for (const i of indices) {
-    const e = edges[i];
-    const entry = e && map.get(edgeKey(e.v1, e.v2));
+  for (const [v1, v2] of pairs) {
+    const entry = map.get(edgeKey(v1, v2));
     if (!entry || entry.faces.length !== 2) continue;
     const a = groupOf[entry.faces[0]], b = groupOf[entry.faces[1]];
     if (a === b) continue;
     uf.union(a, b);
-    ends.add(e.v1); ends.add(e.v2);
+    ends.add(v1); ends.add(v2);
   }
   const components = uf.components();
   if (!components.length) return { notice: 'Select an edge shared by two faces to dissolve' };
@@ -196,10 +197,13 @@ export function dissolveSelection(sm) {
     return false;
   }
   const snapshot = sm.captureSnapshot();
+  const selectedEdgePairs = sel.type === 'edge'
+    ? sel.indices.map((i) => mesh.getEdges()[i]).filter(Boolean).map((e) => [e.v1, e.v2])
+    : [];
   mesh.lockTriangulationDiagonals();
   let result;
   if (sel.type === 'face') result = dissolveFaces(mesh, sel.indices);
-  else if (sel.type === 'edge') result = dissolveEdges(mesh, sel.indices);
+  else if (sel.type === 'edge') result = dissolveEdges(mesh, selectedEdgePairs);
   else result = dissolveVertices(mesh, sel.indices.map((i) => mesh.vertices[i]?.id).filter((id) => id != null));
   if (!result.changed) {
     sm.toolNotice = result.notice || 'Nothing to dissolve';

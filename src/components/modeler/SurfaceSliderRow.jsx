@@ -4,7 +4,7 @@ import LoopingScroller from './LoopingScroller';
 // Endless sideways strip of inline sliders, each separated by a thin divider.
 // Swipe on the labels or the space above them; a slider's track adjusts the
 // slider. `goTo(i)` brings slider i to the middle of the strip.
-const SurfaceSliderRow = forwardRef(/** @param {{ children?: import('react').ReactNode, fit?: boolean, compact?: boolean, scrollPadTop?: boolean }} props */ function SurfaceSliderRow({ children, fit = false, compact = false, scrollPadTop = false }, outerRef) {
+const SurfaceSliderRow = forwardRef(/** @param {import('react').PropsWithChildren<{ fit?: boolean, compact?: boolean, scrollPadTop?: boolean }>} props */ function SurfaceSliderRow({ children, fit = false, compact = false, scrollPadTop = false }, outerRef) {
   const loopRef = useRef(null);
   useImperativeHandle(outerRef, () => ({ goTo: (i) => loopRef.current?.goTo(i) }), []);
   const spacing = compact

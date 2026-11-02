@@ -1,18 +1,21 @@
 import { createPortal } from 'react-dom';
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import SegmentsKeypad from './SegmentsKeypad';
 
-/**
- * @param {{
- *   open: boolean,
- *   onKey: (key: string) => void,
- *   onClose?: () => void,
- *   decimal?: boolean,
- *   signed?: boolean
- * }} props
- */
 export default function ModelingNumberPad({ open, onKey, onClose = undefined, decimal = false, signed = false }) {
   const padRef = useRef(null);
+  // The keypad's close callback was previously accepted by callers but never
+  // handled. Escape on a hardware keyboard now commits/closes the active field.
+  useEffect(() => {
+    if (!open || !onClose) return;
+    const onEscape = (event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.preventDefault();
+      onClose();
+    };
+    document.addEventListener('keydown', onEscape);
+    return () => document.removeEventListener('keydown', onEscape);
+  }, [open, onClose]);
   useLayoutEffect(() => {
     if (!open || !padRef.current) return;
     const update = () => document.documentElement.style.setProperty('--modeling-keypad-height', `${padRef.current.getBoundingClientRect().height}px`);
@@ -25,7 +28,6 @@ export default function ModelingNumberPad({ open, onKey, onClose = undefined, de
   return createPortal(
     <div ref={padRef}
       className="fixed bottom-0 left-0 right-0 z-[90] modeling-sheet"
-      onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose?.(); } }}
       onPointerDown={(event) => event.stopPropagation()}
       onPointerUp={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}

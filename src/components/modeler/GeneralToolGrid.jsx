@@ -16,7 +16,7 @@ export default function GeneralToolGrid({
   onClose,
   onMaterial, onSculpt, onAddReference, onExitMultiSelect, onConvert, anyHidden, onDisplaySelected,
   angleMode, onToggleAngle, measureMode, onToggleMeasure, onActivateTool,
-  freeTransform, onToggleFreeTransform, clearSelectionToken, isPro, onProLock,
+  freeTransform, onToggleFreeTransform, clearSelectionToken, isPro, onProLock, multiSelect = false, onTool = undefined, onToggleMultiSelect = undefined,
 }) {
   const { toolLabelsEnabled, highlightColor } = useTheme();
   const [convertOpen, setConvertOpen] = useState(false);

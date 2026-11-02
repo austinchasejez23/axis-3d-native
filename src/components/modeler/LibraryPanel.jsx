@@ -157,7 +157,7 @@ function ShapeWireframe({ type, stroke }) {
     : <div className="w-full h-full" aria-hidden="true" />;
 }
 
-export default function LibraryPanel({ open, onClose, onSelectShape, managerRef }) {
+export default function LibraryPanel({ open, onClose, onSelectShape, managerRef, segments = undefined, onSegmentsChange = undefined }) {
   const { uiColor, highlightColor, backgroundColor } = useTheme();
   const [view, setView] = useState('basic');
   const [items, setItems] = useState([]);
@@ -233,7 +233,7 @@ export default function LibraryPanel({ open, onClose, onSelectShape, managerRef 
             <ChevronLeft className="w-6 h-6" />
           </button>
         )}
-        <h2 className="text-base font-bold" style={{ color: uiColor }}>{view === 'custom' ? 'Custom library' : 'Basic shapes'}</h2>
+        <h2 className="text-base font-bold" style={{ color: uiColor }}>{view === 'custom' ? 'Custom library' : 'Basic ******'}</h2>
         <button onClick={() => (view === 'custom' ? setView('basic') : onClose())} className="px-3 h-9 rounded-lg border text-sm font-semibold active:scale-95" style={{ color: uiColor, borderColor: borderCol }}>
           Exit
         </button>

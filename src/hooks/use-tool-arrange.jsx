@@ -56,20 +56,12 @@ export function useToolArrange(mode) {
     }), { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity });
     if (x < bounds.left - DROP_EDGE_PX || x > bounds.right + DROP_EDGE_PX || y < bounds.top - DROP_EDGE_PX || y > bounds.bottom + DROP_EDGE_PX) return null;
 
-    // Keep the winning element and its distance separately, instead of
-    // inventing an extra property on the DOM hit record.
-    let nearest = null;
-    let nearestDistance = Infinity;
-    for (const current of slots) {
+    const nearest = slots.reduce(/** @param {{el: Element; rect: DOMRect; distance: number} | null} best */ (best, current) => {
       const cx = current.rect.left + current.rect.width / 2;
       const cy = current.rect.top + current.rect.height / 2;
       const distance = Math.hypot(x - cx, y - cy);
-      if (distance < nearestDistance) {
-        nearest = current;
-        nearestDistance = distance;
-      }
-    }
-    if (!nearest) return null;
+      return !best || distance < best.distance ? { ...current, distance } : best;
+    }, null);
     const [row, col] = nearest.el.getAttribute('data-tool-slot').split(':').map(Number);
     return { row, col };
   };

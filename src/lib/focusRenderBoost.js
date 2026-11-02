@@ -37,7 +37,6 @@ export function applyFocusRenderBoost(SceneManager) {
         obj.focusProxyGeometry = null;
         obj.focusDetailGeometry = null;
         obj.wireframe.visible = theme.wireframeEnabled !== false && !this.wireframesHidden;
-        if (mesh.importedWireframeOnly) obj.material.colorWrite = !obj.wireframe.visible;
         if (obj.wireframeStale) this._refreshWireframe(obj, mesh);
       }
     }

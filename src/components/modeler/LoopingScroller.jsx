@@ -20,17 +20,7 @@ const MIN_SPEED = 0.02;    // px/ms where momentum stops
 //   snapCenter  the view comes to rest centered on an item
 //   shadows     edge fades (shadowWidth / shadowAlpha) hinting the strip loops
 // The ref exposes step(-1 | 1) and goTo(i).
-const LoopingScroller = forwardRef(/** @param {{
-  children?: import('react').ReactNode,
-  swipe?: boolean,
-  snapCenter?: boolean,
-  shadows?: boolean,
-  shadowWidth?: number,
-  shadowAlpha?: number,
-  className?: string,
-  itemClass?: string,
-  innerClass?: string,
-}} props */ function LoopingScroller(
+const LoopingScroller = forwardRef(/** @param {import('react').PropsWithChildren<{ swipe?: boolean, snapCenter?: boolean, shadows?: boolean, shadowWidth?: number, shadowAlpha?: number, className?: string, itemClass?: string, innerClass?: string }>} props */ function LoopingScroller(
   { children, swipe = true, snapCenter = false, shadows = false, shadowWidth = 16, shadowAlpha = 0.6, className = '', itemClass = '', innerClass = '' },
   ref,
 ) {

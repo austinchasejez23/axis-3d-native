@@ -56,6 +56,9 @@ function ensurePaintLayer(sm, mesh) {
 // null = every face may be painted; an empty Set = this mesh is not a target.
 function paintTarget(sm, mesh) {
   const sel = sm.selection;
+  // With nothing selected (always the case for brush and spray) any touched
+  // surface is painted.
+  if (!sel.meshId && !sm.isGroupMode()) return { faces: null, edges: null };
   if (sel.type === 'object') {
     const selectedIds = sm.isGroupMode() ? sm.selectedMeshIds : [sel.meshId];
     return { faces: selectedIds.includes(mesh.id) ? null : new Set(), edges: null };

@@ -4,7 +4,7 @@ import { useTheme } from '@/lib/theme';
 const SLIDE_MS = 350;
 
 // Tool-name label: slides in from the right edge, under the Undo button.
-export default function ToolAnnouncement({ suppressed = false }) {
+export default function ToolAnnouncement({ suppressed = false, toolActive = false }) {
   const { uiColor } = useTheme();
   const [selection, setSelection] = useState(null);
   const [visible, setVisible] = useState(false);

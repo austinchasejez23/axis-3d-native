@@ -194,6 +194,9 @@ export function applySceneReflections(SceneManagerClass) {
       new THREE.MeshBasicMaterial({ color: 0x777b82, side: THREE.BackSide })
     );
     room.add(shell);
+    /** @param {number} color
+     *  @param {[number, number, number]} position
+     *  @param {[number, number, number]} rotation */
     const addPanel = (color, position, rotation) => {
       const panel = new THREE.Mesh(
         new THREE.PlaneGeometry(4, 2.5),
@@ -208,8 +211,10 @@ export function applySceneReflections(SceneManagerClass) {
     addPanel(0xffead6, [0, 3.5, 0], [Math.PI / 2, 0, 0]);
     this._studioPmrem = this._studioPmremGen.fromScene(room, 0.04);
     room.traverse((obj) => {
-      obj.geometry?.dispose();
-      obj.material?.dispose();
+      if (obj instanceof THREE.Mesh) {
+        obj.geometry?.dispose();
+        for (const material of (Array.isArray(obj.material) ? obj.material : [obj.material])) material?.dispose();
+      }
     });
     if (!this._envTexture) this.scene.environment = this._studioPmrem.texture;
 

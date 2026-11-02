@@ -60,7 +60,8 @@ export function applySceneSelection(SceneManager) {
     if (selectionChanged && sel.meshId && this.highlightsSuppressed) {
       this.revealSuppressedSelection();
     }
-    // Selection changes must not move or reframe the camera.
+    // A new selection becomes the camera orbit pivot without changing its angle.
+    if (selectionChanged && sel.meshId) this.panCameraToSelection();
     this.updateHighlights();
     this.updateStats();
   };
@@ -68,7 +69,7 @@ export function applySceneSelection(SceneManager) {
   // Newly created geometry arrives selected, in the mode that matches what was
   // created (objects -> Object, faces -> Face, edges -> Edge, vertices ->
   // Vertex). `objectIds` selects several new objects as one group.
-  P.selectCreated = function (mode, meshId, indices = [], objectIds = null) {
+  P.selectCreated = /** @this {import('./SceneManager.js').SceneManager} */ function (mode, meshId, indices = [], objectIds = null) {
     if (this.selectionMode !== mode) {
       this.setSelectionMode(mode);
       this.cb.onSelectionModeChange?.(mode);
@@ -82,7 +83,7 @@ export function applySceneSelection(SceneManager) {
   };
 
   // Indices (in mesh.getEdges() order) of the edges joining the given vertex pairs.
-  P.edgeIndicesForPairs = function (mesh, pairs) {
+  P.edgeIndicesForPairs = /** @this {import('./SceneManager.js').SceneManager} */ function (mesh, pairs) {
     const keys = new Set(pairs.map(([a, b]) => edgeKey(a, b)));
     const indices = [];
     mesh.getEdges().forEach((e, i) => { if (keys.has(edgeKey(e.v1, e.v2))) indices.push(i); });
@@ -154,6 +155,8 @@ export function applySceneSelection(SceneManager) {
       type: 'object',
       indices: [],
     };
+    this.revealSuppressedSelection();
+    if (this.selection.meshId) this.panCameraToSelection();
     this.updateHighlights();
     this.updateStats();
     if (this.selectionChanged(before)) this.pushUndoSnapshot(before);

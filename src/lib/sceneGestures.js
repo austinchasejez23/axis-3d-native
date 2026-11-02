@@ -26,7 +26,7 @@ function dragAxisFrames(sm, localAxes) {
   const probe = Math.max(0.001, sm.cameraDist * 0.05);
   const a = toScreen(center);
   const frames = {};
-  for (const [axis, dir] of [['x', new THREE.Vector3(1, 0, 0)], ['y', new THREE.Vector3(0, 1, 0)], ['z', new THREE.Vector3(0, 0, 1)]]) {
+  for (const [axis, dir] of /** @type {[string, THREE.Vector3][]} */ ([['x', new THREE.Vector3(1, 0, 0)], ['y', new THREE.Vector3(0, 1, 0)], ['z', new THREE.Vector3(0, 0, 1)]])) {
     const b = toScreen(center.clone().addScaledVector(dir.applyQuaternion(q), probe));
     const sx = b.x - a.x, sy = b.y - a.y;
     const len = Math.hypot(sx, sy);
@@ -64,7 +64,7 @@ function extentAlongAxis(sm, axis, localAxes) {
 export function applySceneGestures(SceneManager) {
   const P = SceneManager.prototype;
 
-  P.setupEvents = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.setupEvents = /** @this {import("./SceneManager").SceneManager} */ function () {
     const el = this.renderer.domElement;
     el.style.touchAction = 'none';
     el.addEventListener('pointerdown', (e) => this.onPointerDown(e));
@@ -85,7 +85,7 @@ export function applySceneGestures(SceneManager) {
 
   // Sculpt strokes are shared by touch and mouse. Begin returns true when the
   // press landed on an editable mesh; the FIRST mesh touched owns the stroke.
-  P.beginSculptStroke = /** @this {import('./SceneManager.js').SceneManager} */ function (x, y) {
+  P.beginSculptStroke = /** @this {import("./SceneManager").SceneManager} */ function (x, y) {
     const ndc = this.screenToNDC(x, y);
     const hits = this.raycastMeshes(ndc.x, ndc.y);
     if (hits.length === 0) return false;
@@ -114,7 +114,7 @@ export function applySceneGestures(SceneManager) {
     return true;
   };
 
-  P.moveSculptStroke = /** @this {import('./SceneManager.js').SceneManager} */ function (x, y) {
+  P.moveSculptStroke = /** @this {import("./SceneManager").SceneManager} */ function (x, y) {
     const stroke = this.sculptStroke;
     if (!stroke) return;
     const mesh = this.getMesh(stroke.meshId);
@@ -137,7 +137,7 @@ export function applySceneGestures(SceneManager) {
     if (this.selection.meshId === stroke.meshId) this.updateHighlights();
   };
 
-  P.onPointerDown = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
+  P.onPointerDown = /** @this {import("./SceneManager").SceneManager} */ function (e) {
     // Armed eyedropper: the first finger (or left click) is a color pick, not
     // a paint stroke, selection or camera move. It resolves on release.
     if (this.eyedropper && !this._eyedropDown && this.pointers.size === 0 && (e.pointerType !== 'mouse' || e.button === 0)) {
@@ -191,16 +191,8 @@ export function applySceneGestures(SceneManager) {
       const selectedEdgeHit = this.selection.type === 'edge' && this.selection.indices.length > 0
         && this.isPointNearSelection(e.clientX, e.clientY, theme.gestureSelectReach);
       if (paintHits.length > 0 || selectedEdgeHit) {
-        // Touching a mesh with the brush/spray always paints it — auto-select
-        // it first (object mode only) so a stroke never silently does nothing
-        // just because nothing was selected yet.
-        const hitMeshId = paintHits.length > 0
-          ? this.findMeshIdByObject(paintHits[0].object)
-          : this.selection.meshId;
-        if (hitMeshId && this.selection.type === 'object') {
-          const already = this.isGroupMode() ? this.selectedMeshIds.includes(hitMeshId) : this.selection.meshId === hitMeshId;
-          if (!already) this.setSelection({ meshId: hitMeshId, type: 'object', indices: [] });
-        }
+        // Touching a mesh with the brush/spray paints it directly; nothing
+        // is selected while these tools are active.
         this.gesture = 'paint';
         this.gestureData = { lastX: e.clientX, lastY: e.clientY };
         // An unapplied color preview never sticks: a stroke discards it first.
@@ -326,6 +318,7 @@ export function applySceneGestures(SceneManager) {
             if (id && !this.selectedMeshIds.includes(id)) {
               this.selectedMeshIds.push(id);
               this.selection = { meshId: id, type: 'object', indices: [] };
+              this.revealSuppressedSelection();
               this.updateHighlights();
               this.updateStats();
             }
@@ -368,6 +361,7 @@ export function applySceneGestures(SceneManager) {
                   this.selection = { meshId: id, type: 'object', indices: [] };
                 }
               }
+              this.revealSuppressedSelection();
               this.updateHighlights();
               this.updateStats();
             } else {
@@ -435,7 +429,7 @@ export function applySceneGestures(SceneManager) {
     }
   };
 
-  P.onPointerMove = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
+  P.onPointerMove = /** @this {import("./SceneManager").SceneManager} */ function (e) {
     if (e.pointerType === 'mouse') return this.onMouseMove(e);
     if (!this.pointers.has(e.pointerId)) return;
     if (this.cameraGesture && this._cameraTouchFrozen) return;
@@ -836,7 +830,7 @@ export function applySceneGestures(SceneManager) {
     }
   };
 
-  P.onPointerUp = /** @this {import('./SceneManager.js').SceneManager} */ function (e) {
+  P.onPointerUp = /** @this {import("./SceneManager").SceneManager} */ function (e) {
     if (this._eyedropDown && e.pointerId === this._eyedropDown.id) {
       const d = this._eyedropDown;
       this._eyedropDown = null;
@@ -1090,7 +1084,7 @@ export function applySceneGestures(SceneManager) {
 
   // Coalesce interleaved pointer events so pan and dolly use both fingers'
   // latest positions together once per frame.
-  P.scheduleCameraTwoFinger = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.scheduleCameraTwoFinger = /** @this {import("./SceneManager").SceneManager} */ function () {
     if (this._cameraTwoFingerFrame) return;
     this._cameraTwoFingerFrame = requestAnimationFrame(() => {
       this._cameraTwoFingerFrame = null;
@@ -1099,7 +1093,7 @@ export function applySceneGestures(SceneManager) {
   };
 
   // Two-finger midpoint pan plus distance-ratio dolly; twist does not orbit.
-  P.applyCameraTwoFinger = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.applyCameraTwoFinger = /** @this {import("./SceneManager").SceneManager} */ function () {
     if (this.gesture !== 'camera_two' || this.pointers.size !== 2 || this._cameraTouchFrozen) return;
     const g = this.gestureData;
     if (!g) return;
@@ -1114,7 +1108,7 @@ export function applySceneGestures(SceneManager) {
     g.lastDist = dist;
   };
 
-  P.updateMarquee = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.updateMarquee = /** @this {import("./SceneManager").SceneManager} */ function () {
     if (!this.gestureData) return;
     const rect = this.renderer.domElement.getBoundingClientRect();
     const x = this.gestureData.startX - rect.left;
@@ -1126,7 +1120,7 @@ export function applySceneGestures(SceneManager) {
 
   // A selection frame that was aborted or captured nothing must not leave
   // multi-select open when nothing is selected.
-  P.closeEmptyMultiSelect = function () {
+  P.closeEmptyMultiSelect = /** @this {import("./SceneManager").SceneManager} */ function () {
     if (!this.multiSelect) return;
     const sel = this.selection;
     const hasSelection = this.selectedMeshIds.length > 0
@@ -1134,7 +1128,7 @@ export function applySceneGestures(SceneManager) {
     if (!hasSelection) this.exitMultiSelect();
   };
 
-  P.applyMarquee = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.applyMarquee = /** @this {import("./SceneManager").SceneManager} */ function () {
     if (!this.gestureData) return;
     const rect = this.renderer.domElement.getBoundingClientRect();
     const sx = this.gestureData.startX, sy = this.gestureData.startY;

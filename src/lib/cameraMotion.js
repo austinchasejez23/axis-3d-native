@@ -20,8 +20,8 @@ const SPEED_FLOOR = 0.5;
 const TOUCH_ORBIT_RESISTANCE = 0.48;
 const TOUCH_PAN_RESISTANCE = 0.8;
 const TOUCH_ZOOM_RESISTANCE = 0.85;
-const TOUCH_FOLLOW_SECONDS = 0.05; // how far (in time) the view trails the finger
-const GLIDE_DECAY = 9;             // per second; the glide fades out in ~0.3 s
+const TOUCH_FOLLOW_SECONDS = 0.05; // lag of each of the two smoothing stages (the view trails the finger by about twice this)
+const GLIDE_DECAY = 6.5;            // per second; the glide fades out in ~0.3 s
 const SAMPLE_WINDOW_MS = 90;       // finger speed is measured over this window
 const RELEASE_STALE_MS = 80;       // a finger that stopped this long ago doesn't glide
 const TAP_MS = 240, TAP_PX = 22;   // the quick-tap test used on release
@@ -48,6 +48,25 @@ function zoomCamera(manager, zoom) {
   manager.cameraDist = MIN_DISTANCE;
 }
 
+// Unit direction from the orbit target out to the camera.
+function offsetDirection(manager) {
+  const ce = Math.cos(manager.cameraPhi), se = Math.sin(manager.cameraPhi);
+  return new THREE.Vector3(ce * Math.sin(manager.cameraTheta), se, ce * Math.cos(manager.cameraTheta));
+}
+
+// The point the camera orbits around: the selection's center, or the last
+// selection's when nothing is selected. Recomputed at the start of each orbit
+// (not every frame); null until something has been selected.
+function orbitPivot(manager) {
+  const now = performance.now();
+  const hasSelection = manager.isGroupMode?.() || !!manager.selection?.meshId;
+  if (hasSelection && (!manager._orbitPivot || now - (manager._orbitPivotTime ?? 0) > 400)) {
+    manager._orbitPivot = manager.getDisplayCenter();
+  }
+  if (hasSelection) manager._orbitPivotTime = now;
+  return manager._orbitPivot || null;
+}
+
 function applyMotion(manager, motion) {
   const height = Math.max(1, manager.renderer.domElement.getBoundingClientRect().height);
   const angle = 2 * Math.PI / height;
@@ -57,8 +76,18 @@ function applyMotion(manager, motion) {
     const up = new THREE.Vector3().setFromMatrixColumn(manager.camera.matrixWorld, 1);
     manager.cameraTarget.addScaledVector(right, -motion.panX * scale).addScaledVector(up, motion.panY * scale);
   }
-  manager.cameraTheta -= motion.orbitX * angle;
-  manager.cameraPhi += motion.orbitY * angle;
+  if (motion.orbitX || motion.orbitY) {
+    const pivot = orbitPivot(manager);
+    const before = offsetDirection(manager);
+    manager.cameraTheta -= motion.orbitX * angle;
+    manager.cameraPhi += motion.orbitY * angle;
+    if (pivot) {
+      // Turn the whole view rigidly around the pivot, so the selection stays
+      // where it is on screen while everything else swings around it.
+      const turn = new THREE.Quaternion().setFromUnitVectors(before, offsetDirection(manager));
+      manager.cameraTarget.sub(pivot).applyQuaternion(turn).add(pivot);
+    }
+  }
   if (motion.zoom) zoomCamera(manager, motion.zoom);
   pulseNavigationResolution(manager);
   manager.applyCamera();
@@ -85,6 +114,7 @@ function flushTapHold(manager) {
 export function stopCameraMotion(manager) {
   manager._cameraMotion = empty();
   manager._touchPending = empty();
+  manager._touchMid = empty();
   manager._tapHold = empty();
   manager._touchSamples = [];
   manager._cameraGlide = null;
@@ -193,14 +223,20 @@ export function updateCameraMotion(manager, now = performance.now()) {
   const step = empty();
   // A held tap that has outlived the tap test is a real drag: let it through.
   if (!isZero(manager._tapHold) && !tapCandidate(manager, now)) flushTapHold(manager);
-  // Touch movement eases in, while held and after release alike.
+  // Touch movement eases in, while held and after release alike. It passes
+  // through two smoothing stages in a row, so the view speeds up and slows
+  // down gradually instead of starting and stopping with a jolt.
   const pending = manager._touchPending;
-  if (!isZero(pending)) {
+  const mid = manager._touchMid || (manager._touchMid = empty());
+  if (!isZero(pending) || !isZero(mid)) {
     const alpha = 1 - Math.exp(-dt / TOUCH_FOLLOW_SECONDS);
     for (const k of KEYS) {
-      const take = Math.abs(pending[k]) < 1e-4 ? pending[k] : pending[k] * alpha;
-      step[k] += take;
-      pending[k] -= take;
+      const first = pending && Math.abs(pending[k]) >= 1e-4 ? pending[k] * alpha : (pending?.[k] || 0);
+      if (pending) pending[k] -= first;
+      mid[k] += first;
+      const second = Math.abs(mid[k]) < 1e-4 ? mid[k] : mid[k] * alpha;
+      mid[k] -= second;
+      step[k] += second;
     }
   }
   if (!(manager.pointers?.size > 0)) {

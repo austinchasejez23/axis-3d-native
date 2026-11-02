@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { saveProject, listProjects } from '@/lib/storage';
+import { createAutosaveWriteQueue } from '@/lib/autosaveWriteQueue';
 import { isAccountDeletionActive } from '@/lib/accountDeletionState';
 import { theme } from '@/lib/theme';
 
@@ -19,10 +20,29 @@ const INTERVAL_MS = 60000;
 export default function useAutoSave(managerRef, projectName, onSaved, { isPro = false, onProjectLimit = undefined } = {}) {
   const savedRef = useRef({ projectId: null, signature: null });
   const warnedRef = useRef(false);
+  const saveQueueRef = useRef(null);
 
   useEffect(() => {
     let pointerDown = false;
     let pending = false;
+    // Persist one scene at a time. A late earlier write must not overwrite a
+    // newer model, and failed writes must remain eligible for the next retry.
+    if (!saveQueueRef.current) {
+      saveQueueRef.current = createAutosaveWriteQueue(
+        (project) => saveProject(project),
+        ({ id, signature }) => {
+          if (savedRef.current.projectId === id) savedRef.current.signature = signature;
+          warnedRef.current = false;
+          onSaved?.(listProjects());
+        },
+        (error) => {
+          if (!warnedRef.current) {
+            warnedRef.current = true;
+            toast.error(error?.message || 'Could not auto-save this model. Retrying on the next save interval.');
+          }
+        },
+      );
+    }
 
     const sceneSignature = (mgr) => [
       mgr.projectName,
@@ -55,18 +75,11 @@ export default function useAutoSave(managerRef, projectName, onSaved, { isPro = 
       const data = mgr.serialize();
       const exists = listProjects().some((project) => project.id === data.id);
       if (!isPro && !exists && listProjects().length >= 5) { onProjectLimit?.(); return; }
-      savedRef.current.signature = signature;
-      saveProject({ ...data, thumbnail: mgr.captureThumbnail() })
-        .then(() => {
-          warnedRef.current = false;
-          onSaved?.(listProjects());
-        })
-        .catch((err) => {
-          if (!warnedRef.current) {
-            warnedRef.current = true;
-            toast.error(err?.message || 'Could not auto-save this model.');
-          }
-        });
+      saveQueueRef.current.schedule({
+        id: data.id,
+        signature,
+        project: { ...data, thumbnail: mgr.captureThumbnail() },
+      });
     };
 
     // Establish the initial baseline as soon as the viewport manager exists,

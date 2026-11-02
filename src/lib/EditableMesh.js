@@ -270,8 +270,10 @@ export class EditableMesh {
   // convincingly reconstruct one quad. Do not use the permissive editing
   // classifier here: it can delete genuine edges at tube joints.
   _isConfidentImportedDiagonal(v1, v2, f0, f1) {
-    // Reconstructed imports already hold their real quads: no seam to guess.
-    if (this.importedQuadsMerged) return false;
+    // Quad reconstruction may leave behind genuine pairs of triangles when
+    // their original grid could not be reconstructed confidently. The flag
+    // means reconstruction was attempted, not that every pair was recovered.
+    // Only consider the remaining triangle pairs; leave actual quads alone.
     if (this.faces[f0]?.length !== 3 || this.faces[f1]?.length !== 3) return false;
     const cId = this._edgeThirdVertex(this.faces[f0], v1, v2);
     const dId = this._edgeThirdVertex(this.faces[f1], v1, v2);
@@ -931,7 +933,6 @@ export class EditableMesh {
     m.emissive = data.emissive ?? 0;
     m.tintHue = data.tintHue ?? 0;
     m.tintAmount = data.tintAmount ?? 0;
-    // Color shift was removed; models saved with it load with their normal paint.
     m.textureMergeColor = data.textureMergeColor || false;
     m.vertexColors = { ...(data.vertexColors || {}) };
     m.faceColors = { ...(data.faceColors || {}) };
@@ -954,7 +955,10 @@ export class EditableMesh {
     if (!m.paintLayer?.painted) {
       const untouchedImport = m.importedWireframeOnly && !m.importedQuadsMerged &&
         m.faces.every(f => f.length === 3);
-      mergeHiddenDiagonals(m);
+      // Preserve exact stored render triangulations on already edited faces.
+      // Re-merging old hidden diagonals elsewhere in such a scene can change
+      // their diagonals and surface normals just by reopening the project.
+      if (Object.keys(m.faceRenderTriangles).length === 0) mergeHiddenDiagonals(m);
       if (untouchedImport) reconstructImportedQuads(m, { trustOrder: false });
     }
     return m;

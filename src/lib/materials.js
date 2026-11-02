@@ -71,7 +71,8 @@ export function createMaterial(mesh, viewportMode = {}) {
   // envMapIntensity here so reflection strength/blur are controllable; the
   // base color, metalness, and clear coat are preserved. Lambert can't sample
   // an env map, so upgrade it to a standard material when reflections are on.
-  const isPBR = mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial;
+  // Three's material subclasses provide reliable runtime type narrowing.
+  // MeshPhysicalMaterial also extends MeshStandardMaterial.
   const painted = mesh.hasPaint?.() || false;
   const surfaceColor = solidViewportColor(mesh, painted);
   if (mesh.reflectionEnabled) {
@@ -84,7 +85,7 @@ export function createMaterial(mesh, viewportMode = {}) {
       : (mesh.metalness != null ? 0.6 - mesh.metalness * 0.5 : 0.5);
     const reflRough = Math.max(0.04, Math.max(baseRough, mesh.reflectionRoughness ?? 0));
     const reflStrength = Math.max(0, Math.min(2, mesh.reflectionIntensity ?? 1));
-    if (mat.isMeshLambertMaterial) {
+    if (mat instanceof THREE.MeshLambertMaterial) {
       mat.dispose();
       mat = new THREE.MeshStandardMaterial({
         color: surfaceColor,
@@ -99,7 +100,7 @@ export function createMaterial(mesh, viewportMode = {}) {
       if (mesh.metalness != null) mat.metalness = mesh.metalness;
     }
     mat.needsUpdate = true;
-  } else if (isPBR) {
+  } else if (mat instanceof THREE.MeshStandardMaterial) {
     // Base PBR overrides from the Roughness / Metalness sliders (null = preset).
     // With no explicit Roughness set, metalness alone drives the surface from
     // dull (0) to polished metal (1) so the slider has a visible range.
@@ -123,18 +124,19 @@ export function createMaterial(mesh, viewportMode = {}) {
   }
   // Clear coat is an independent slider, so it layers on top of whatever the
   // preset produced (presets build Standard materials, which have no clearcoat).
-  if (mesh.clearCoatEnabled && !mat.isMeshPhysicalMaterial) {
+  if (mesh.clearCoatEnabled && !(mat instanceof THREE.MeshPhysicalMaterial)) {
     const ci = Math.max(0, Math.min(1, mesh.clearCoatIntensity ?? 0.5));
     const prev = mat;
+    const previousPBR = prev instanceof THREE.MeshStandardMaterial ? prev : null;
     mat = new THREE.MeshPhysicalMaterial({
       color: prev.color.clone(), vertexColors: prev.vertexColors,
-      metalness: prev.metalness ?? 0, roughness: prev.roughness ?? 0.5,
-      envMapIntensity: prev.envMapIntensity ?? 1,
+      metalness: previousPBR?.metalness ?? 0, roughness: previousPBR?.roughness ?? 0.5,
+      envMapIntensity: previousPBR?.envMapIntensity ?? 1,
       clearcoat: 1.0, clearcoatRoughness: Math.max(0.04, 0.35 - ci * 0.3),
       flatShading: !mesh.smoothShading, side: THREE.DoubleSide,
     });
     prev.dispose();
-  } else if (mesh.clearCoatEnabled && mat.isMeshPhysicalMaterial) {
+  } else if (mesh.clearCoatEnabled && mat instanceof THREE.MeshPhysicalMaterial) {
     const ci = Math.max(0, Math.min(1, mesh.clearCoatIntensity ?? 0.5));
     mat.clearcoat = 1.0;
     mat.clearcoatRoughness = Math.max(0.04, 0.35 - ci * 0.3);
@@ -142,7 +144,7 @@ export function createMaterial(mesh, viewportMode = {}) {
   // Explicit metal is bare reflective metal unless Clear coat itself is enabled.
   // The global Shine material otherwise leaves a dielectric coat over it, which
   // makes high metalness read as glossy plastic instead of metal.
-  if ((mesh.metalness ?? 0) > 0 && !mesh.clearCoatEnabled && mesh.material?.preset !== 'clearcoat' && mat.isMeshPhysicalMaterial) {
+  if ((mesh.metalness ?? 0) > 0 && !mesh.clearCoatEnabled && mesh.material?.preset !== 'clearcoat' && mat instanceof THREE.MeshPhysicalMaterial) {
     mat.clearcoat = 0;
   }
   // Common adjustments available on every material type.
@@ -165,7 +167,7 @@ export function createMaterial(mesh, viewportMode = {}) {
     mat.needsUpdate = true;
   }
   // Shading mode always follows the mesh's own normals (never forced smooth).
-  if ((mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial)) {
+  if (mat instanceof THREE.MeshStandardMaterial) {
     mat.flatShading = !mesh.smoothShading;
   }
   // Tint: blend the material color toward the chosen hue by the tint amount.

@@ -5,6 +5,7 @@ import { theme } from '@/lib/theme';
 const up = new THREE.Vector3(0, 1, 0);
 const viewPosition = new THREE.Vector3();
 const resolution = new THREE.Vector2();
+/** @type {[THREE.Vector3, number][]} */
 const axes = [
   [new THREE.Vector3(1, 0, 0), 0xef4444],
   [new THREE.Vector3(0, 1, 0), 0x22c55e],

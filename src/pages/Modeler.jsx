@@ -37,6 +37,7 @@ import PaintToolFlash from '@/components/modeler/PaintToolFlash';
 import MultiSelectLabel from '@/components/modeler/MultiSelectLabel';
 import GraphicsErrorBanner from '@/components/modeler/GraphicsErrorBanner';
 import TriangleCounter from '@/components/modeler/TriangleCounter';
+import ViewGizmo from '@/components/modeler/ViewGizmo';
 import SelectionPatternPanel from '@/components/modeler/SelectionPatternPanel';
 
 import { EditableMesh } from '@/lib/EditableMesh';
@@ -230,10 +231,23 @@ export default function Modeler() {
     else managerRef.current?.exitSculptMode();
   }, [sculptOpen, sculptTool, sculptSize, sculptIntensity, sculptAxes]);
 
-  // Surface mode preserves the selection while hiding its highlight. The
-  // wireframe remains controlled exclusively by the Display setting.
+  // Brush and spray paint directly onto the touched mesh without requiring
+  // a selection. Clear staged selections when entering these stroke tools.
   useEffect(() => {
-    managerRef.current?.setHighlightsHidden(materialsOpen && !(surfaceSection === 'paint' && multiSelect));
+    if (materialsOpen && surfaceSection === 'paint' && (paintTool === 'brush' || paintTool === 'spray')) {
+      managerRef.current?.exitMultiSelect();
+      managerRef.current?.clearSelection();
+      setSelectedMeshId(null);
+    }
+  }, [materialsOpen, surfaceSection, paintTool, selectedMeshId, multiSelect]);
+
+  useEffect(() => {
+    if (managerRef.current?.multiSelect) managerRef.current.exitMultiSelect();
+  }, [materialsOpen]);
+
+  // Appearance mode hides selection highlights without changing wireframe.
+  useEffect(() => {
+    managerRef.current?.setHighlightsHidden(materialsOpen);
     managerRef.current?.setWireframesHidden(false);
     // Objects are never moved/scaled/rotated while Surface mode is open.
     if (managerRef.current) {
@@ -387,7 +401,7 @@ export default function Modeler() {
   // canvas back-tap walks (menu, guide, drawer, library, panels, modes).
   const handleBackStep = useCallback((fromCanvas = false) => {
     if (menuOpen && menuBackRef.current?.()) return true;
-    if (helpOpen && fromCanvas !== true) { setHelpOpen(false); return true; }
+    if (helpOpen) { setHelpOpen(false); return true; }
     if (segmentsOpen) { setSegmentsOpen(false); return true; }
     if (toolsOpen) { setToolsOpen(false); return true; }
     if (modeToolsOpen) { setModeToolsOpen(false); return true; }
@@ -427,7 +441,7 @@ export default function Modeler() {
     setLibraryOpen(false);
     setMenuOpen(false);
     setGuideOpen(false);
-    setHelpOpen(false);
+    // Keep Help visible while opening tools; only Help or Back closes it.
     setLightingOpen(false);
     setSnapPanelOpen(false);
     setFreeTransformPanelOpen(false);
@@ -768,11 +782,11 @@ export default function Modeler() {
     if (!isPro) { openUpgrade('Model import requires AXIS 3D Pro.'); return; }
     setImporting(true);
     try {
-      // Paint the loading indicator before the heavy synchronous parse blocks
-      // the main thread on large model files.
+      // Worker parsing keeps large CAD imports off the touch/viewport thread.
+      // If Android cannot start a module worker the importer falls back safely.
       await new Promise((r) => setTimeout(r, 50));
-      const { importModelFile } = await import('@/lib/importers');
-      const meshes = await importModelFile(file);
+      const { importModelFileOffThread } = await import('@/lib/importWorkerClient');
+      const meshes = await importModelFileOffThread(file);
       if (!meshes || meshes.length === 0) { toast.error('No meshes found in file'); return; }
       managerRef.current?.pushUndo();
       for (const m of meshes) {
@@ -1011,6 +1025,7 @@ export default function Modeler() {
         </div>
       )}
       </div>
+      <ViewGizmo managerRef={managerRef} />
       </>)}
 
       {modeToolsOpen && (

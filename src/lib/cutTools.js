@@ -239,7 +239,7 @@ function fanAround(mesh, hub) {
 // stopping at its edge. A lone triangle (or an odd fan) ends the cut at its
 // far corner.
 export function buildCutLoopPlan(mesh, a0, b0, t, mode = 'follow') {
-  /** @type {Array<{ loop?: number[]; tri?: number[]; from: number[]; to?: number[]; fromT?: number; toT?: number; hub?: number; end?: number }>} */
+  /** @type {Array<{loop?: number[], tri?: number[], from: number[], to?: number[], hub?: number, end?: number, fromT?: number, toT?: number}>} */
   const segments = [];
   const quadSeen = new Set();
   const triSeen = new Set();

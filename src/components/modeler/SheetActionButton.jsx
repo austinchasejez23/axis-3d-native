@@ -3,7 +3,7 @@ import { useTheme } from '@/lib/theme';
 // Text button for the Material and Texture action rows, matching Paint's
 // Apply / Undo. `primary` draws it in the highlight color (Apply); `active`
 // marks a toggle that is on, in the highlight color like the texture toggles.
-export default function SheetActionButton({ label, onClick, disabled = false, primary = false, active = false, ariaLabel = undefined }) {
+export default function SheetActionButton({ label, onClick, disabled = false, primary = false, active = undefined, ariaLabel }) {
   const { uiColor, highlightColor } = useTheme();
   return (
     <button

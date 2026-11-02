@@ -1093,7 +1093,10 @@ export function bevelLoopEdges(sm, options = {}) {
       const ring = [...poly.slice(apex), ...poly.slice(0, apex)];
       const tris = [];
       for (let j = 1; j < ring.length - 1; j++) tris.push([ring[0], ring[j], ring[j + 1]]);
-      for (let j = 2; j < ring.length - 1; j++) mesh.hiddenEdges.push({ v1: ring[0], v2: ring[j], locked: true });
+      // These are rendering-only triangulation seams of a bent bevel end.
+      // Keep the triangles separate so their non-coplanar surfaces never
+      // collapse back into a single warped polygon during quad merging.
+      for (let j = 2; j < ring.length - 1; j++) mesh.hiddenEdges.push({ v1: ring[0], v2: ring[j], locked: true, preserveFaces: true });
       mesh.faces[fi] = tris[0];
       extraFaces.push(...tris.slice(1));
       arcUsedAt.add(i);

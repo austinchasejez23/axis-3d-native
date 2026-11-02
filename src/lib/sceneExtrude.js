@@ -9,12 +9,12 @@ export function applySceneExtrude(SceneManager) {
   // Interactive face extrude: duplicates the selected faces into a cap and side
   // walls at zero height, then the user drags to set the extrusion distance along
   // the face normal. Commits on pointer-up; reverts if no drag happened.
-  P.beginExtrudeDrag = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.beginExtrudeDrag = /** @this {import("./SceneManager").SceneManager} */ function () {
     const sel = this.selection;
     if (!sel.meshId || sel.type !== 'face' || sel.indices.length === 0) return;
     const mesh = this.getMesh(sel.meshId);
     if (!mesh) return;
-    const preSnapshot = this.captureSnapshot();
+    const preSnapshot = { meshes: this.meshes.map(m => m.clone()), selection: { ...this.selection, indices: [...this.selection.indices] } };
     const ek = edgeKey;
     const selSet = new Set(sel.indices);
     const edgeFaces = new Map();
@@ -160,13 +160,13 @@ export function applySceneExtrude(SceneManager) {
 
   // Edge extrude: builds connected quads at zero height and waits for a drag
   // that begins on (or immediately beside) the newly extruded edge chain.
-  P.beginEdgeExtrudeDrag = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.beginEdgeExtrudeDrag = /** @this {import("./SceneManager").SceneManager} */ function () {
     const sel = this.selection;
     if (!sel.meshId || sel.type !== 'edge' || sel.indices.length === 0) return;
     const mesh = this.getMesh(sel.meshId);
     if (!mesh) return;
     if (this.multiSelect) this.exitMultiSelect();
-    const preSnapshot = this.captureSnapshot();
+    const preSnapshot = { meshes: this.meshes.map(m => m.clone()), selection: { ...sel, indices: [...sel.indices] } };
     const edges = mesh.getEdges();
     const selected = sel.indices.map((i) => edges[i]).filter(Boolean);
     if (selected.length === 0) return;
@@ -282,7 +282,7 @@ export function applySceneExtrude(SceneManager) {
   // the extrude never moved. Screen-space projection has no such blind spot;
   // when the normal points almost straight at the camera its screen direction
   // is undefined, so vertical drag (up = outward) drives it instead.
-  P.extrudeOffsetFromDrag = /** @this {import('./SceneManager.js').SceneManager} */ function (startX, startY, curX, curY) {
+  P.extrudeOffsetFromDrag = /** @this {import("./SceneManager").SceneManager} */ function (startX, startY, curX, curY) {
     const ed = this.extrudeDrag;
     if (!ed) return 0;
     const rect = this.renderer.domElement.getBoundingClientRect();
@@ -307,7 +307,7 @@ export function applySceneExtrude(SceneManager) {
   };
 
   // Faces adjacent to an edge (by vertex pair).
-  P.adjacentFacesForEdge = /** @this {import('./SceneManager.js').SceneManager} */ function (mesh, v1, v2) {
+  P.adjacentFacesForEdge = /** @this {import("./SceneManager").SceneManager} */ function (mesh, v1, v2) {
     const res = [];
     for (let i = 0; i < mesh.faces.length; i++) {
       const f = mesh.faces[i];
@@ -316,7 +316,7 @@ export function applySceneExtrude(SceneManager) {
     return res;
   };
 
-  P.updateExtrudeHeight = /** @this {import('./SceneManager.js').SceneManager} */ function (offset) {
+  P.updateExtrudeHeight = /** @this {import("./SceneManager").SceneManager} */ function (offset) {
     if (!this.extrudeDrag) return;
     const mesh = this.getMesh(this.extrudeDrag.meshId);
     if (!mesh) return;
@@ -337,7 +337,7 @@ export function applySceneExtrude(SceneManager) {
   };
 
   // Free extrude: the new vertices follow the drag itself, in any direction.
-  P.updateExtrudeFree = /** @this {import('./SceneManager.js').SceneManager} */ function (worldDelta) {
+  P.updateExtrudeFree = /** @this {import("./SceneManager").SceneManager} */ function (worldDelta) {
     if (!this.extrudeDrag) return;
     const mesh = this.getMesh(this.extrudeDrag.meshId);
     if (!mesh) return;
@@ -361,7 +361,7 @@ export function applySceneExtrude(SceneManager) {
   // True once the extrusion has actually changed: dragged along its normal, or
   // moved / scaled / rotated by any other gesture (a two-finger scale of the new
   // cap is how you inset it). Only a completely untouched extrude is a no-op.
-  P.extrudeWasMoved = function () {
+  P.extrudeWasMoved = /** @this {import("./SceneManager").SceneManager} */ function () {
     const ed = this.extrudeDrag;
     if (!ed) return false;
     if (ed.hasDragged) return true;
@@ -374,7 +374,7 @@ export function applySceneExtrude(SceneManager) {
     });
   };
 
-  P.commitExtrudeDrag = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.commitExtrudeDrag = /** @this {import("./SceneManager").SceneManager} */ function () {
     if (!this.extrudeDrag) return;
     if (this.extrudeWasMoved()) {
       // Undo the MOVE only: step back to the extrude at zero height, still
