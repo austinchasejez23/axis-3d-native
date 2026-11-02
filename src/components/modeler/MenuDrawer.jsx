@@ -267,6 +267,7 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
               onChange={(v) => setColor(screen, v)}
               defaultColor={defaultFor(screen)}
               highlightColor={highlightColor}
+              panelStyle={panelStyle}
             />
           </div>
         );
@@ -304,7 +305,7 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
           {screen === 'viewport' && viewportCascade === 'grid' && (
             <div
               className="absolute z-10 rounded-lg border pointer-events-auto"
-              style={{ ...panelStyle, top: gridAnchor.top, left: 'calc(100% + 0.25rem)', width: gridAnchor.width }}
+              style={{ ...panelStyle, top: gridAnchor.top, left: 'calc(100% + 0.25rem)', width: 'max-content' }}
             >
               <GridCascade bare enabled={display.gridVisible} onToggle={display.onToggleGrid} panelStyle={panelStyle} />
             </div>

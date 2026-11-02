@@ -270,7 +270,10 @@ export class SceneManager {
     // always-visible shadows while the shadow toggle is on. Without this the
     // light sits on the camera's side and the shadow is hidden behind the
     // object from the default view.
-    if (this.dirLight) {
+    // While Default lighting's shadows are on, the shadow fitter owns the key
+    // light's position and target (they are fitted to the geometry). Moving the
+    // target with the camera pivot shifted and tilted the shadow, so it vanished.
+    if (this.dirLight && !(theme.defaultLightingEnabled && theme.shadowsEnabled)) {
       if (this.lightFollowCamera) {
         const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
         const up = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
@@ -335,6 +338,20 @@ export class SceneManager {
     if (box.isEmpty()) return false;
     tweenCameraTo(this, box.getCenter(new THREE.Vector3()), this.cameraDist);
     return true;
+  }
+
+  // The camera's orbit/pan pivot follows the selection's depth, and selecting
+  // never moves the camera: the pivot slides along the current view axis to the
+  // selection's distance, so the camera position and view stay exactly where
+  // they are. With nothing selected the pivot stays on the last selection.
+  panCameraToSelection() {
+    const center = this.getDisplayCenter();
+    if (!center) return;
+    const forward = this.camera.getWorldDirection(new THREE.Vector3());
+    const depth = center.clone().sub(this.camera.position).dot(forward);
+    if (!(depth > 0.05)) return;
+    this.cameraTarget.copy(this.camera.position).addScaledVector(forward, depth);
+    this.cameraDist = Math.min(depth, 800);
   }
 
   frameScene(padding = 3) {
@@ -599,7 +616,7 @@ export class SceneManager {
       mesh.position.add(new THREE.Vector3(x - center[0], y - center[1], z - center[2]));
       this.updateObjectTransform(mesh.id);
     } else {
-      const center = this.getSelectionCenter();
+      const center = this.getDisplayCenter();
       const delta = new THREE.Vector3(x, y, z).sub(center);
       this.translateSelection(delta);
     }
@@ -1118,8 +1135,10 @@ export class SceneManager {
     }
     const k = elapsed <= hold ? 1 : 1 - (elapsed - hold) / fade;
     for (const child of this.highlightGroup.children) {
+      // Highlights are drawable geometry; Object3D itself has no material.
+      if (!(child instanceof THREE.Mesh || child instanceof THREE.Line || child instanceof THREE.Points)) continue;
       const mat = child.material;
-      if (!mat) continue;
+      if (!mat || Array.isArray(mat)) continue;
       if (child.userData.revealBaseOpacity == null) {
         child.userData.revealBaseOpacity = mat.opacity ?? 1;
       }
@@ -1201,20 +1220,17 @@ export class SceneManager {
     while (this.highlightGroup.children.length > 0) {
       const child = this.highlightGroup.children[0];
       this.highlightGroup.remove(child);
-      if (child.geometry) child.geometry.dispose();
-      if (child.material) child.material.dispose();
+      if (child instanceof THREE.Mesh || child instanceof THREE.Line || child instanceof THREE.Points) {
+        child.geometry?.dispose();
+        for (const material of (Array.isArray(child.material) ? child.material : [child.material])) material?.dispose();
+      }
     }
 
-    // Surface mode hides object/face highlights so nothing obstructs the
-    // surface, but vertex and edge highlights stay visible so a paint target
-    // that has no visible fill of its own can still be seen.
+    // Surface mode hides every selection highlight once its fade is over, so
+    // nothing obstructs the surface. Vertex and edge highlights fade away too.
     if (this.highlightsSuppressed && !this._revealing) {
-      const t = this.selection.type;
-      const keep = !this.isGroupMode() && !!this.selection.meshId && (t === 'vertex' || t === 'edge');
-      if (!keep) {
-        this.cb.onSelectionChange?.(!!this.selection.meshId || this.isGroupMode());
-        return;
-      }
+      this.cb.onSelectionChange?.(!!this.selection.meshId || this.isGroupMode());
+      return;
     }
 
     const hl = theme.highlightInt;
@@ -1395,6 +1411,32 @@ export class SceneManager {
       this._interactionFeedbackRaf = null;
       this.updateHud();
     });
+  }
+
+  // Absolute center point shown in the position values: the middle of the
+  // selection's world-space extents (not the modeling origin or the rotated box).
+  // Works for every kind of selection: one object, a group of objects, or
+  // faces / edges / vertices.
+  getDisplayCenter() {
+    const box = new THREE.Box3();
+    const p = new THREE.Vector3();
+    const addVerts = (mesh, verts) => {
+      const wm = this.getWorldMatrix(mesh);
+      for (const v of verts) { p.set(v.x, v.y, v.z).applyMatrix4(wm); box.expandByPoint(p); }
+    };
+    if (this.isGroupMode()) {
+      for (const id of this.selectedMeshIds) {
+        const m = this.getMesh(id);
+        if (m) addVerts(m, this.objectPivotVertices(m));
+      }
+    } else {
+      const sel = this.selection;
+      const mesh = this.getMesh(sel.meshId);
+      if (!mesh) return this.getSelectionCenter();
+      if (sel.type === 'object') addVerts(mesh, this.objectPivotVertices(mesh));
+      else addVerts(mesh, this.getSelectedVertexIds().map((id) => mesh.getVertex(id)).filter(Boolean));
+    }
+    return box.isEmpty() ? this.getSelectionCenter() : box.getCenter(new THREE.Vector3());
   }
 
   getSelectionCenter() {
@@ -1580,7 +1622,7 @@ export class SceneManager {
       m.position.copy(center).add(offset);
       const q = new THREE.Quaternion().setFromEuler(m.rotation);
       let localAxis = axis, best = -1;
-      for (const [k, dir] of [['x', new THREE.Vector3(1, 0, 0)], ['y', new THREE.Vector3(0, 1, 0)], ['z', new THREE.Vector3(0, 0, 1)]]) {
+      for (const [k, dir] of /** @type {[string, THREE.Vector3][]} */ ([['x', new THREE.Vector3(1, 0, 0)], ['y', new THREE.Vector3(0, 1, 0)], ['z', new THREE.Vector3(0, 0, 1)]])) {
         const align = Math.abs(dir.applyQuaternion(q).dot(worldAxis));
         if (align > best) { best = align; localAxis = k; }
       }
@@ -2417,7 +2459,7 @@ export class SceneManager {
       : { sx: 0, sy: 0, sz: 0 };
     const size = { sx: q3(rawSize.sx), sy: q3(rawSize.sy), sz: q3(rawSize.sz) };
     if (this.isGroupMode()) {
-      const center = this.getGroupCenter();
+      const center = this.getDisplayCenter();
       this.cb.onHudChange?.({
         action,
         x: q3(center.x), y: q3(center.y), z: q3(center.z),
@@ -2425,14 +2467,17 @@ export class SceneManager {
         label: 'Pos. (in)', activeAxis: this.activeAxis
       });
     } else if (sel.type === 'object') {
+      // Position values are always the selection's center point, never the
+      // object's modeling origin.
+      const center = this.getDisplayCenter();
       this.cb.onHudChange?.({
         action,
-        x: q3(mesh.position.x), y: q3(mesh.position.y), z: q3(mesh.position.z),
+        x: q3(center.x), y: q3(center.y), z: q3(center.z),
         ...rot, ...size,
         label: 'Pos. (in)', activeAxis: this.activeAxis
       });
     } else {
-      const center = this.getSelectionCenter();
+      const center = this.getDisplayCenter();
       this.cb.onHudChange?.({
         action,
         x: q3(center.x), y: q3(center.y), z: q3(center.z),
@@ -2551,6 +2596,7 @@ export class SceneManager {
   captureThumbnail(size = 256) {
     const hlVisible = this.highlightGroup.visible;
     this.highlightGroup.visible = false;
+    /** @type {Array<[THREE.Group, boolean]>} */
     const arrows = [...(this.objectAxisArrows?.values() || [])].map((group) => [group, group.visible]);
     for (const [group] of arrows) group.visible = false;
     this.renderer.render(this.scene, this.camera);
@@ -2660,8 +2706,10 @@ export class SceneManager {
     while (this.highlightGroup.children.length) {
       const child = this.highlightGroup.children[0];
       this.highlightGroup.remove(child);
-      child.geometry?.dispose();
-      child.material?.dispose();
+      if (child instanceof THREE.Mesh || child instanceof THREE.Line || child instanceof THREE.Points) {
+        child.geometry?.dispose();
+        for (const material of (Array.isArray(child.material) ? child.material : [child.material])) material?.dispose();
+      }
     }
     this.scene.remove(this.highlightGroup);
     if (this.shadowGround) {

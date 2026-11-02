@@ -1,16 +1,22 @@
 import { createPortal } from 'react-dom';
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { Delete } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
 
 // The HUD's number pad has its own appearance; other modeling keypads stay unchanged.
-/**
- * @param {{ open: boolean, onKey: (key: string) => void,
- *   onClose?: () => void, decimal?: boolean, signed?: boolean }} props
- */
 export default function HudNumberPad({ open, onKey, onClose = undefined, decimal = false, signed = false }) {
   const padRef = useRef(null);
   const { uiColor } = useTheme();
+  useEffect(() => {
+    if (!open || !onClose) return;
+    const onEscape = (event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.preventDefault();
+      onClose();
+    };
+    document.addEventListener('keydown', onEscape);
+    return () => document.removeEventListener('keydown', onEscape);
+  }, [open, onClose]);
   useLayoutEffect(() => {
     if (!open || !padRef.current) return;
     const update = () => document.documentElement.style.setProperty('--modeling-keypad-height', `${padRef.current.getBoundingClientRect().height}px`);
@@ -27,7 +33,6 @@ export default function HudNumberPad({ open, onKey, onClose = undefined, decimal
   const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', ...lastRow];
   return createPortal(
     <div ref={padRef} className="fixed bottom-0 left-0 right-0 z-[90] modeling-sheet"
-      onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose?.(); } }}
       onPointerDown={(event) => event.stopPropagation()}
       onPointerMove={(event) => event.stopPropagation()}
       onPointerUp={(event) => event.stopPropagation()}>

@@ -9,20 +9,20 @@ const splitTrackedEdge = (items, edge, vertexId) => items.flatMap((item) => {
 export function applySceneAddVertex(SceneManager) {
   const P = SceneManager.prototype;
 
-  P.enterAddVertexMode = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.enterAddVertexMode = /** @this {import("./SceneManager").SceneManager} */ function () {
     if (this.addVertexMode) return;
     this.addVertexMode = { snapshot: this.captureSnapshot(), meshId: null, vertexIds: [], pointSnapshots: [], snapCenter: false };
     this.cb.onAddVertexChange?.({ count: 0, snapCenter: false });
   };
 
-  P.setAddVertexCenterSnap = /** @this {import('./SceneManager.js').SceneManager} */ function (enabled) {
+  P.setAddVertexCenterSnap = /** @this {import("./SceneManager").SceneManager} */ function (enabled) {
     const mode = this.addVertexMode;
     if (!mode) return;
     mode.snapCenter = !!enabled;
     this.cb.onAddVertexChange?.({ count: mode.vertexIds.length, snapCenter: mode.snapCenter });
   };
 
-  P.addVertexAt = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
+  P.addVertexAt = /** @this {import("./SceneManager").SceneManager} */ function (clientX, clientY) {
     const mode = this.addVertexMode;
     if (!mode) return false;
     const { x, y } = this.screenToNDC(clientX, clientY);
@@ -53,7 +53,7 @@ export function applySceneAddVertex(SceneManager) {
   // Treat an empty-canvas tap exactly like pressing Cancel: exit the tool
   // and restore the pre-tool mesh. Only the checkmark commits changes.
   // A tap on a face away from an edge does NOT cancel; it just adds nothing.
-  P.handleAddVertexTap = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
+  P.handleAddVertexTap = /** @this {import("./SceneManager").SceneManager} */ function (clientX, clientY) {
     if (!this.addVertexMode) return false;
     if (this.addVertexAt(clientX, clientY)) return true;
     const { x, y } = this.screenToNDC(clientX, clientY);
@@ -63,7 +63,7 @@ export function applySceneAddVertex(SceneManager) {
     return false;
   };
 
-  P.deleteLastAddVertex = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.deleteLastAddVertex = /** @this {import("./SceneManager").SceneManager} */ function () {
     const mode = this.addVertexMode;
     if (!mode?.pointSnapshots.length) return false;
     const snapshot = mode.pointSnapshots.pop();
@@ -74,7 +74,7 @@ export function applySceneAddVertex(SceneManager) {
     return true;
   };
 
-  P.confirmAddVertex = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.confirmAddVertex = /** @this {import("./SceneManager").SceneManager} */ function () {
     const mode = this.addVertexMode;
     if (!mode) return false;
     this.addVertexMode = null;
@@ -93,7 +93,7 @@ export function applySceneAddVertex(SceneManager) {
     return mode.vertexIds.length > 0;
   };
 
-  P.cancelAddVertex = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+  P.cancelAddVertex = /** @this {import("./SceneManager").SceneManager} */ function () {
     const mode = this.addVertexMode;
     if (!mode) return false;
     this.addVertexMode = null;

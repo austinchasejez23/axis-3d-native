@@ -27,7 +27,8 @@
     "src/components/**/*.js",
     "src/pages/**/*.jsx",
     "src/Layout.jsx",
-    "src/lib/SceneManager.extensions.d.ts"
+    "src/lib/SceneManager.extensions.d.ts",
+    "src/types/browser.d.ts"
   ],
   "exclude": [
     "node_modules",

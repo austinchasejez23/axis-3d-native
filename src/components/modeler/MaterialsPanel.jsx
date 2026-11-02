@@ -34,7 +34,7 @@ export default function MaterialsPanel({
   paintSize, onPaintSize, paintSmoothness, onPaintSmoothness, paintOpacity, onPaintOpacity,
   onOpenChange, onPickerOpenChange,
   section, onSectionChange,
-  selectionMode, onSelectionMode,
+  selectionMode, onSelectionMode, open = true, pickerOpen = false, lastVertexTool = undefined,
 }) {
   const { highlightColor } = useTheme();
   const [clearCoat, setClearCoat] = useState(0);
@@ -182,7 +182,8 @@ export default function MaterialsPanel({
   // never lands any other way, and the sheet stays open.
   const applyPaint = () => {
     const manager = managerRef.current;
-    if (!manager?.selection.meshId) return;
+    // Brush and spray strokes apply with nothing selected.
+    if (!manager || (!manager.selection.meshId && !manager.hasPendingPaint?.())) return;
     recordApplied(() => manager.commitPendingPaint?.());
     if (paintTool === 'fill') recordApplied(() => onFill?.());
     lastApplyRef.current = { key: selectionKey(), color: activeColor };
@@ -208,7 +209,7 @@ export default function MaterialsPanel({
 
   const liveManager = managerRef.current;
   const lastApplied = appliedRef.current[appliedRef.current.length - 1];
-  const canApply = !!meshId;
+  const canApply = !!meshId || !!liveManager?.hasPendingPaint?.();
   const canUndo = !!liveManager && (
     !!liveManager.hasPaintPreview?.()
     || !!liveManager.hasPendingPaint?.()
@@ -286,14 +287,8 @@ export default function MaterialsPanel({
     && !liveManager.hasPendingPaint?.()
     && !liveManager.hasPaintPreview?.();
   const setActiveColor = (c) => {
+    // Picking a color never touches the object; paint lands only on Apply.
     onPaintColor(c);
-    // Fill previews live: every color source (wheel, value slider and saved
-    // swatches) shows on the current selection, but only Apply (or the
-    // checkmark) commits it, as one undoable edit rather than an undo entry
-    // for every tiny movement around the picker.
-    if (paintTool === 'fill' && managerRef.current?.selection.meshId) {
-      managerRef.current.previewPaintFill(c, paintOpacity / 100);
-    }
   };
 
   // Eyedropper: armed from the paint tool row; the next tap on the model takes

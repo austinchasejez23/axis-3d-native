@@ -27,7 +27,7 @@ try {
 
   const wholeRow = render([true, true, true, true, true, true]);
   assert.equal(backgroundRuns(wholeRow), 1, 'Six adjacent tools must share ONE strip');
-  assert.match(wholeRow, /left:0%;width:100%;background:rgba\(9,13,22,0\.26\)/);
+  assert.match(wholeRow, /left:0%;width:100%;background:rgba\(9,13,22,0\.38\)/);
 
   const mixed = render([true, false, true, true, false, false]);
   assert.equal(backgroundRuns(mixed), 2, 'Only separate occupied runs get separate backgrounds');
@@ -52,7 +52,7 @@ try {
     'Vertically joined surfaces must have square shared edges, not individual rounded tiles');
 
   const toolBtn = fs.readFileSync('src/components/modeler/GridToolButton.jsx', 'utf8');
-  assert.doesNotMatch(toolBtn, /background: 'rgba\(9,13,22,0\.26\)'/);
+  assert.doesNotMatch(toolBtn, /background: 'rgba\(9,13,22,0\.38\)'/);
   assert.doesNotMatch(toolBtn, /boxShadow:/);
   const mode = fs.readFileSync('src/components/modeler/ModeToolGrid.jsx', 'utf8');
   const general = fs.readFileSync('src/components/modeler/GeneralToolGrid.jsx', 'utf8');
@@ -64,11 +64,10 @@ try {
       `${name} must hide background when tools are hidden`);
   }
   const top = fs.readFileSync('src/components/modeler/TopBar.jsx', 'utf8');
-  assert.match(top, /right-0\.5 w-12 rounded-xl/, 'Five-button background alignment regression');
-  // Both centers measured from screen right: outer 6px + margin-right 16px
-  // + half 20px icon, compared with outer 6px + right 2px + half 48px strip.
-  assert.equal(6 + 16 + 10, 6 + 2 + 24,
-    'Right-side icon and background centers must align');
+  assert.match(top, /absolute left-\[6px\] w-12 rounded-xl py-1/,
+    'The seven side controls must share a panel aligned with the Menu');
+  assert.match(top, /The seven controls: one background, dividers between buttons/,
+    'The side controls must retain their shared backdrop');
 
   console.log('PASS: one shared background for continuous tool rows; follows tool moves, hidden/empty cells, vertical stacks; no individual tiles; five-button strip centered on icons');
 } finally {

@@ -33,6 +33,7 @@ try {
     edgeParamAtScreen() { this.edgeParamCalls++; return 0.18; }
     rebuildThreeMesh() {}
     setSelection(selection) { this.currentSelection = selection; }
+    selectCreated(mode, meshId, indices) { this.setSelection({ meshId, type: mode, indices }); }
     pushUndoSnapshot(snapshot) { this.history.push(snapshot); }
   }
   applySceneAddVertex(FakeSceneManager);
@@ -78,6 +79,8 @@ try {
   assert.equal(manager.edgeParamCalls, 1, 'Tap-controlled placement callback was not used');
   assert.deepEqual(manager.updates.at(-1), { count: 2, snapCenter: false });
   assert.equal(manager.confirmAddVertex(), true);
+  assert.equal(manager.currentSelection?.type, 'vertex', 'Committed vertices must remain selected');
+  assert.equal(manager.currentSelection?.indices.length, 2);
   assert.equal(manager.addVertexMode, null);
   assert.equal(manager.history.length, 1, 'Session was not saved to undo history');
   assert.equal(manager.updates.at(-1), null);

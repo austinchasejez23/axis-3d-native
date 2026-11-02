@@ -1,4 +1,5 @@
-import { Menu, Undo2, Redo2, Info } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Menu, Undo2, Redo2, Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
 import ViewportModeButtons from '@/components/modeler/ViewportModeButtons';
 import RenderBoostButtons from '@/components/modeler/RenderBoostButtons';
@@ -8,6 +9,22 @@ const TOP = 'calc(max(env(safe-area-inset-top, 0px), 1.75rem) + 0.25rem)';
 
 export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transparentViewport, renderBoost, freeTransform, snapping, onToggleClayViewport, onToggleTransparentViewport, onToggleRenderBoost, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel, onFocus, precision, onTogglePrecision, onOpenPrecisionPanel, onHelp, helpOpen, counter }) {
   const { uiColor } = useTheme();
+  const [sideControlsExpanded, setSideControlsExpanded] = useState(true);
+  const sideControlsRef = useRef(null);
+  useEffect(() => {
+    // Prevent off-screen buttons from being reached with keyboard focus.
+    if (sideControlsRef.current) sideControlsRef.current.inert = !sideControlsExpanded;
+  }, [sideControlsExpanded]);
+  // The arrow changes direction only after the controls finish sliding.
+  const [sideChevronFacesRight, setSideChevronFacesRight] = useState(false);
+  const toggleSideControls = () => {
+    const nextExpanded = !sideControlsExpanded;
+    setSideControlsExpanded(nextExpanded);
+    // Reduced-motion users have no transitionend event to update the arrow.
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      setSideChevronFacesRight(!nextExpanded);
+    }
+  };
   const txtShadow = '0 1px 3px rgba(0,0,0,0.35)';
   const btn = 'pointer-events-auto w-full flex items-center justify-center active:scale-95 transition-transform touch-none';
   return (
@@ -41,10 +58,35 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
         </div>
       </div>
 
-      {/* The seven controls: one background, dividers between buttons, and a
-          one-icon gap below the menu / triangle counter group. */}
-      <div className="absolute left-[6px] w-12 rounded-xl py-1 flex flex-col items-center pointer-events-auto"
-        style={{ ...PANEL, top: 'calc(max(env(safe-area-inset-top, 0px), 1.75rem) + 5.6rem)' }}>
+      {/* Fixed handle: stays in place while the seven controls slide left
+          fully out of view. It occupies the original top control position. */}
+      <div className="absolute left-[6px] w-12 rounded-xl pointer-events-auto" style={{ ...PANEL, top: 'calc(max(env(safe-area-inset-top, 0px), 1.75rem) + 5.6rem)' }}>
+        <button
+          type="button"
+          onClick={toggleSideControls}
+          aria-label={sideControlsExpanded ? 'Hide side controls' : 'Show side controls'}
+          aria-expanded={sideControlsExpanded}
+          aria-controls="axis-side-controls"
+          className={`${btn} h-10`}
+          style={{ color: uiColor, textShadow: txtShadow }}
+        >
+          {sideChevronFacesRight ? <ChevronRight className="w-7 h-7" strokeWidth={2.5} /> : <ChevronLeft className="w-7 h-7" strokeWidth={2.5} />}
+        </button>
+      </div>
+
+      {/* The seven controls: one background, dividers between buttons, moved
+          down one button space. All seven move together; only the handle stays. */}
+      <div
+        id="axis-side-controls"
+        ref={sideControlsRef}
+        aria-hidden={!sideControlsExpanded}
+        onTransitionEnd={(event) => {
+          if (event.target === event.currentTarget && event.propertyName === 'transform') {
+            setSideChevronFacesRight(!sideControlsExpanded);
+          }
+        }}
+        className="absolute left-[6px] w-12 rounded-xl py-1 flex flex-col items-center pointer-events-auto transition-transform duration-300 ease-in-out motion-reduce:transition-none"
+        style={{ ...PANEL, top: 'calc(max(env(safe-area-inset-top, 0px), 1.75rem) + 8.6rem)', transform: sideControlsExpanded ? 'translateX(0)' : 'translateX(calc(-100% - 12px))', pointerEvents: sideControlsExpanded ? 'auto' : 'none' }}>
         <ViewportModeButtons clay={clayViewport} transparent={transparentViewport}
           onClay={onToggleClayViewport} onTransparent={onToggleTransparentViewport} />
         <div className="h-[10px] w-full" aria-hidden="true" />

@@ -33,7 +33,8 @@ try {
     getMesh(id) { return id === this.mesh.id ? this.mesh : null; }
     edgeParamAtScreen() { return 0.3; }
     rebuildThreeMesh() {}
-    setSelection() {}
+    setSelection(selection) { this.currentSelection = selection; }
+    selectCreated(mode, meshId, indices) { this.setSelection({ meshId, type: mode, indices }); }
     pushUndoSnapshot(s) { this.undo.push(s); }
   }
 
@@ -65,6 +66,8 @@ try {
   m.enterAddVertexMode();
   assert.equal(m.handleAddVertexTap(80, 80), true);
   assert.equal(m.confirmAddVertex(), true, 'Checkmark must apply');
+  assert.equal(m.currentSelection?.type, 'vertex', 'Applied vertex must remain selected');
+  assert.equal(m.currentSelection?.indices.length, 1);
   assert.equal(m.mesh.vertices.length, originalVertices + 1, 'Checkmark must preserve added vertex');
   assert.equal(m.undo.length, 1, 'Checkmark must push undo history');
 
@@ -76,11 +79,13 @@ try {
   const counter = fs.readFileSync('src/components/modeler/TriangleCounter.jsx','utf8');
   const bar = fs.readFileSync('src/components/modeler/BottomToolbar.jsx','utf8');
   const top = fs.readFileSync('src/components/modeler/TopBar.jsx','utf8');
-  assert.match(counter, /left-\[6px\] w-16.*justify-center/, 'Counter must center with 64px Menu button');
+  assert.match(counter, /h-5 w-full flex items-center justify-center/, 'Counter must be centered inside its assigned top-bar slot');
+  assert.equal((top.match(/absolute left-\[6px\] w-12 rounded-xl pointer-events-auto/g) || []).length, 3,
+    'Menu, triangle counter, and fixed side chevron must occupy matching 48px slots');
   assert.match(bar, /left-0 right-0.*safe-bottom pt-1/, 'Bottom bar should retain full viewport width');
-  assert.match(bar, /rgba\(9,13,22,0\.26\)/, 'Bottom toolbar should have faint transparent background');
-  assert.match(top, /One subtle backdrop for all \w+ right-side controls/, 'Right-side button common backdrop missing');
-  assert.match(top, /pointer-events-none absolute -top-1 -bottom-1/, 'Backdrop must not intercept touches');
+  assert.match(bar, /rgba\(9,13,22,0\.38\)/, 'Bottom toolbar should have faint transparent background');
+  assert.match(top, /The seven controls: one background, dividers between buttons/, 'Seven side controls must share one panel');
+  assert.match(top, /absolute left-\[6px\] w-12 rounded-xl py-1/, 'Side control panel must align to the Menu');
 
   console.log('PASS: empty canvas exits Add Vertex and rolls back all unconfirmed vertices; face taps keep tool open; checkmark commits; both gesture paths use cancel-on-empty; HUD backgrounds and alignment');
 } finally {

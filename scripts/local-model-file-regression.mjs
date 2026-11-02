@@ -102,10 +102,15 @@ assert.equal(sphere.roughness, null);
 assert.equal(sphere.metalness, null);
 assert.deepEqual(sphere.faceColors, {});
 assert.deepEqual(sphere.vertexColors, {});
+const triangleSource = EditableMesh.fromGeometry(new THREE.SphereGeometry(2, 20, 14), 'triangle-source');
+const rawTriangleEdges = triangleSource._ensureEdgeFaceMap().size;
 const editableEdgeCount = sphere.getEdges().length;
 const displayEdgeCount = sphere.toEdgesGeometry().attributes.position.count / 2;
-assert.ok(displayEdgeCount > 0 && displayEdgeCount < editableEdgeCount,
-  `The imported wireframe must hide smooth triangle seams without removing editable topology (${displayEdgeCount}/${editableEdgeCount})`);
+assert.ok(sphere.faces.some(face => face.length === 4), 'Sphere grid should reconstruct editable quads');
+assert.equal(sphere.getTriangleCount(), triangleSource.getTriangleCount(),
+  'Quad reconstruction must not discard any surface triangles');
+assert.ok(displayEdgeCount > 0 && displayEdgeCount < rawTriangleEdges && displayEdgeCount <= editableEdgeCount,
+  `The imported wireframe must not show tessellation diagonals (${displayEdgeCount}/${rawTriangleEdges})`);
 assert.equal(sphere.getEdges().length, editableEdgeCount,
   'Showing only feature edges must not remove editable triangle edges');
 const olderSavedImport = sphere.serialize();

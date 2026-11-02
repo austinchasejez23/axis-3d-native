@@ -5,7 +5,8 @@
 // result is a ball-shaped corner: each face boundary is an arc and the patch
 // is a section of the sphere through those arcs.
 //
-//   width    — how far along each edge the bevel reaches from the vertex
+//   radius   — how far along each edge the bevel reaches from the vertex
+//              (with Sweep: the radius of the rounded corner on each face)
 //   segments — how many pieces each arc (and so the patch) is cut into
 import * as THREE from 'three';
 import { newVid, posKey, weldCoincidentVertices } from './meshTopology';
@@ -135,7 +136,7 @@ export function buildCornerPatch(ringPos, n, s) {
 const fail = (reason) => ({ ok: false, reason });
 
 // Bevel one vertex. Returns { ok } or { ok: false, reason }.
-function bevelOne(mesh, vid, radius, s) {
+function bevelOne(mesh, vid, radius, s, sweep = false) {
   const vertex = mesh.getVertex(vid);
   const touching = vertex && mesh._ensureVertexFaceMap().get(vid);
   if (!touching?.length) return fail('Select a vertex that belongs to a face');
@@ -187,18 +188,32 @@ function bevelOne(mesh, vid, radius, s) {
     lengths.push(len);
     dirs.push(to.divideScalar(len));
   }
-  // Same reach along every edge, and never past the middle of the shortest
-  // one, so neighbouring bevels can't overlap.
-  const w = Math.min(radius, 0.5 * Math.min(...lengths));
+  // How far the bevel reaches along each edge. Normally the entered value, the
+  // same on every edge. With Sweep the entered value is the radius of the
+  // rounded corner on each face, so the reach along an edge is that radius over
+  // the tangent of half the face's corner angle (averaged over the two faces
+  // that share the edge). Either way it never passes the middle of an edge, so
+  // neighbouring bevels can't overlap.
+  const reach = dirs.map(() => radius);
+  if (sweep) {
+    const setback = dirs.map((d, i) => {
+      const angle = Math.acos(THREE.MathUtils.clamp(d.dot(dirs[(i + 1) % n]), -0.999999, 0.999999));
+      return radius / Math.tan(Math.max(angle, 1e-3) / 2);
+    });
+    for (let i = 0; i < n; i++) reach[i] = 0.5 * (setback[i] + setback[mod(i - 1, n)]);
+  }
+  const fit = Math.min(1, ...reach.map((r, i) => (0.5 * lengths[i]) / r));
+  const w = reach.map((r) => r * fit);
 
   // Arc on each face from its start edge to its end edge.
   const ringPos = [];
   for (let i = 0; i < n; i++) {
     const di = dirs[i], dn = dirs[(i + 1) % n];
-    const C = V.clone().addScaledVector(di, w).addScaledVector(dn, w);
+    const wi = w[i], wn = w[(i + 1) % n];
+    const C = V.clone().addScaledVector(di, wi).addScaledVector(dn, wn);
     for (let k = 0; k < s; k++) {
       const t = (Math.PI / 2) * (k / s);
-      ringPos.push(C.clone().addScaledVector(dn, -w * Math.cos(t)).addScaledVector(di, -w * Math.sin(t)));
+      ringPos.push(C.clone().addScaledVector(dn, -wn * Math.cos(t)).addScaledVector(di, -wi * Math.sin(t)));
     }
   }
   const patch = buildCornerPatch(ringPos, n, s);
@@ -242,9 +257,10 @@ export function bevelVertices(sm, options = {}) {
   }
   mesh.lockTriangulationDiagonals();
 
+  const sweep = !!options.sweep;
   let changed = 0, reason = null;
   for (const vid of ids) {
-    const result = bevelOne(mesh, vid, radius, segments);
+    const result = bevelOne(mesh, vid, radius, segments, sweep);
     if (result.ok) changed++; else reason = result.reason;
   }
   if (!changed) {

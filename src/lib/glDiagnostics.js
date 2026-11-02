@@ -11,19 +11,14 @@ export function collectGlDiagnostics(error) {
   let gl = null;
   let contextError = null;
   // A failed context creation fires this event with the driver's own reason.
-  canvas.addEventListener('webglcontextcreationerror', (e) => {
-    const contextEvent = /** @type {WebGLContextEvent} */ (e);
-    contextError = contextEvent.statusMessage || 'unknown';
-  });
+  canvas.addEventListener('webglcontextcreationerror', (e) => { contextError = 'statusMessage' in e ? String(e.statusMessage) : 'unknown'; });
 
   for (const type of ['webgl2', 'webgl', 'experimental-webgl']) {
     try {
-      const context = canvas.getContext(type, { failIfMajorPerformanceCaveat: false });
-      // getContext can return 2D or bitmap renderers, but WebGL diagnostics
-      // are only valid for contexts with the WebGL extension API.
-      if (context && 'getExtension' in context) {
-        gl = /** @type {WebGLRenderingContext | WebGL2RenderingContext} */ (context);
-      }
+      const result = canvas.getContext(type, { failIfMajorPerformanceCaveat: false });
+      // The string overload also allows 2D contexts in its return type.
+      // Only actual WebGL contexts expose these methods.
+      if (result && 'getExtension' in result && 'getParameter' in result) gl = result;
     } catch (e) {
       contextError = contextError || e.message;
     }

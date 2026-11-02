@@ -1,19 +1,29 @@
-import { PaintBucket, Paintbrush, SprayCan, Pipette } from 'lucide-react';
-import { useTheme } from '@/lib/theme';
+import { PaintBucket, Paintbrush, SprayCan, Pipette, Plus, Ban } from 'lucide-react';
+import { useTheme, theme } from '@/lib/theme';
 import LoopingScroller from './LoopingScroller';
 
 const GREY = 'rgba(150,150,150,0.55)';
 
-// Fill · Brush · Spray · Eyedropper as one endless, swipeable row of
-// icon-only buttons on a single backing strip. The eyedropper stays
-// highlighted until a color is taken.
-export default function PaintToolButtons({ paintTool, strokesBlocked, onPaintTool, onPress, eyedropper, onEyedropper }) {
-  const { highlightColor } = useTheme();
+// Fill · Brush · Spray · Eyedropper · Save color · Remove paint as one endless,
+// swipeable row of icon-only buttons on a single backing strip. The eyedropper
+// stays highlighted until a color is taken.
+const DEFAULT_SAVED = ['#ffffff', '#2b2b2b', '#e02424', '#2563eb', '#22a55b', '#f0b429', '#f2711c', '#8b2ee0', '#f472b6'];
+
+export default function PaintToolButtons({ color, paintTool, strokesBlocked, onPaintTool, onPress, eyedropper, onEyedropper, onRemovePaint }) {
+  const { highlightColor, savedColors } = useTheme();
+  const saveColor = () => {
+    if (!color) return;
+    const base = savedColors.length ? savedColors : DEFAULT_SAVED;
+    const next = [color, ...base.filter((c) => c.toLowerCase() !== color.toLowerCase())].slice(0, 24);
+    theme.set({ savedColors: next });
+  };
   const items = [
     { id: 'fill', label: 'Fill', icon: PaintBucket, active: paintTool === 'fill', onClick: () => onPaintTool('fill') },
     { id: 'brush', label: 'Brush', icon: Paintbrush, active: paintTool === 'brush', disabled: strokesBlocked, onClick: () => onPaintTool('brush') },
     { id: 'spray', label: 'Spray', icon: SprayCan, active: paintTool === 'spray', disabled: strokesBlocked, onClick: () => onPaintTool('spray') },
     { id: 'eyedropper', label: 'Eyedropper', flash: 'Eyedropper', icon: Pipette, active: !!eyedropper, onClick: () => onEyedropper?.() },
+    { id: 'save', label: 'Save color', icon: Plus, onClick: saveColor },
+    { id: 'remove', label: 'Remove paint', icon: Ban, onClick: () => onRemovePaint?.() },
   ];
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)' }}>

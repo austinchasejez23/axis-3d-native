@@ -12,9 +12,9 @@ export interface SceneSelection {
 export interface SceneSnapshot {
   meshes: import('./EditableMesh.js').EditableMesh[];
   selection: SceneSelection;
-  selectedMeshIds: number[];
-  multiSelect: boolean;
-  selectionMode: string;
+  selectedMeshIds?: number[];
+  multiSelect?: boolean;
+  selectionMode?: string;
   lights?: unknown[];
   selectedLightId?: string | null;
   [key: string]: unknown;
@@ -64,6 +64,13 @@ declare module './SceneManager.js' {
     /** Movement multiplier while Precision is on (1 = normal). */
     precisionFactor?: number;
     _postMultiActionSelection?: boolean;
+    toolNotice?: string | null;
+    bevelNotice?: string | null;
+    _bevelSnapshot?: SceneSnapshot | null;
+    closeEmptyMultiSelect(): void;
+    extrudeWasMoved(): boolean;
+    selectCreated(mode: string, meshId: number, indices?: number[], objectIds?: number[] | null): void;
+    edgeIndicesForPairs(mesh: import('./EditableMesh.js').EditableMesh, pairs: [number, number][]): number[];
     // Optional state populated by attached modules or UI callbacks.
     // Preview and input state populated lazily by individual modeling tools.
     cutPreviewGroup?: import('three').Group | null;

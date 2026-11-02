@@ -202,7 +202,9 @@ export function mergeHiddenDiagonals(mesh, { classify = false } = {}) {
     return true;
   };
   for (const h of mesh.hiddenEdges || []) {
-    if (h.user) continue;
+    // A hidden bevel-cap triangulation seam still divides two genuinely
+    // different planes. Do not turn those separate triangles into a warped face.
+    if (h.user || h.preserveFaces) continue;
     const key = edgeKey(h.v1, h.v2);
     if (explicit.has(key)) continue;
     take(key, edgeMap.get(key));

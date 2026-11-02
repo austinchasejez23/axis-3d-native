@@ -19,9 +19,9 @@ export function NumericEditor({ value, unit, min, onCommit }) {
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-        className="w-20 h-8 rounded-md border border-white/20 bg-white/10 px-2 text-right text-white text-[13px] font-mono outline-none"
+        className={`w-20 h-8 text-[13px] rounded-md border border-white/20 bg-white/10 px-2 text-right text-white font-mono outline-none`}
       />
-      <span className="w-6 text-white/50 text-[13px] font-mono">{unit}</span>
+      <span className="w-6 text-[13px] text-white/50 font-mono">{unit}</span>
     </div>
   );
 }

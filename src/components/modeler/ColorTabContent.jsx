@@ -1,4 +1,3 @@
-import { useRef } from 'react';
 import { useTheme } from '@/lib/theme';
 import RoundColorPicker from './RoundColorPicker';
 import VerticalValueSlider from './VerticalValueSlider';
@@ -10,8 +9,8 @@ import SurfaceSliderRow from './SurfaceSliderRow';
 const WHEEL = 118;
 
 // Paint tab. Top row: the color wheel and its vertical brightness slider, and
-// beside them Apply and Undo, the paint tool icons, then the saved colors (led
-// by Remove paint). Below the wheel, full width, the same swipeable slider
+// beside them Apply and Undo, the tool icons (ending in Save color and Remove
+// paint), then the saved colors. Below the wheel, full width, the same swipeable slider
 // strip the Material tab uses.
 export default function ColorTabContent({
   color, onChange, strokeActive, showSliders,
@@ -20,7 +19,6 @@ export default function ColorTabContent({
   onApply, onUndo, canApply, canUndo, applied, eyedropper, onEyedropper,
 }) {
   const { uiColor, highlightColor } = useTheme();
-  const sliderRef = useRef(null);
   // Name the pressed button on screen (under the tool label).
   const onPress = (id, label) => {
     window.dispatchEvent(new CustomEvent('axis-paint-label', { detail: { label } }));
@@ -61,6 +59,8 @@ export default function ColorTabContent({
             </button>
           </div>
           <PaintToolButtons
+            color={color}
+            onRemovePaint={onRemovePaint}
             paintTool={paintTool}
             strokesBlocked={strokesBlocked}
             onPaintTool={onPaintTool}
@@ -68,11 +68,11 @@ export default function ColorTabContent({
             eyedropper={eyedropper}
             onEyedropper={onEyedropper}
           />
-          <ColorSwatchGrid color={color} onChange={onChange} onRemovePaint={onRemovePaint} />
+          <ColorSwatchGrid color={color} onChange={onChange} />
         </div>
       </div>
       {showSliders && (
-        <SurfaceSliderRow ref={sliderRef} scrollPadTop>
+        <SurfaceSliderRow scrollPadTop>
           <InlineSlider label="Size" value={size} min={4} max={100} onChange={onSize} onActiveChange={onSizeActive} disabled={!strokeActive} />
           <InlineSlider label="Opacity" value={opacity} min={1} max={100} onChange={onOpacity} />
           <InlineSlider label="Hardness" value={smoothness} min={0} max={100} onChange={onSmoothness} disabled={!strokeActive} />

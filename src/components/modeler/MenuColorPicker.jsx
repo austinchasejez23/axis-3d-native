@@ -1,6 +1,6 @@
 import RoundColorPicker from './RoundColorPicker';
 
-export default function MenuColorPicker({ value, onChange, defaultColor, highlightColor }) {
+export default function MenuColorPicker({ value, onChange, defaultColor, highlightColor, panelStyle = undefined }) {
   return (
     <div className="w-[182px]">
       <RoundColorPicker color={value} onChange={onChange} size={182} />

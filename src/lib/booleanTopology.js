@@ -80,7 +80,11 @@ export function closedTopologyProblem(mesh) {
 // Consolidate ONLY faces produced or modified by a Boolean operation.
 // Keep original mesh edges, face colors and all untouched faces intact.
 // Merge real coplanar geometry rather than hiding unwanted triangle edges.
-export function compactContactFaces(faces, colors, changed, world, preserveEdge, idAt, oldHiddenSeam = (_edgeKey) => false, isCutterFanEdge = (_firstId, _secondId) => false) {
+/**
+ * @param {(key: string) => boolean} [oldHiddenSeam]
+ * @param {(from: number, to: number) => boolean} [isCutterFanEdge]
+ */
+export function compactContactFaces(faces, colors, changed, world, preserveEdge, idAt, oldHiddenSeam = () => false, isCutterFanEdge = () => false) {
   const edgeKey = (a, b) => a < b ? a + ',' + b : b + ',' + a;
   const bridgeEdges = new Set();
   const normalOf = (points) => {
