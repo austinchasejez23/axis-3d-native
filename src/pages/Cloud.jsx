@@ -7,6 +7,7 @@ import { FREE_PROJECT_LIMIT } from '@/lib/proAccess';
 import { getCloudSession, signInWithEmail, signUpWithEmail, signOutOfCloud } from '@/lib/supabaseTest';
 import { listCloudBackups, backupLocalProject, restoreCloudBackup, deleteCloudBackup } from '@/lib/cloudSync';
 import { useProAccess } from '@/lib/ProAccessContext';
+import { SUBSCRIPTIONS_ENABLED } from '@/lib/proPurchases';
 
 export default function CloudBackups() {
   const location = useLocation();
@@ -97,7 +98,6 @@ export default function CloudBackups() {
       <div className="mx-auto max-w-xl space-y-5">
         <div className="flex items-center justify-between">
           <Link to="/library" className={buttonClass}><ArrowLeft className="h-4 w-4" /> Library</Link>
-          <span className="rounded bg-white/10 px-2 py-1 text-xs text-white/70">TEST BACKEND</span>
         </div>
         <div className="flex items-center gap-3">
           <Cloud className="h-7 w-7 text-white/75" />
@@ -107,7 +107,7 @@ export default function CloudBackups() {
           Axis works offline without signing in. Backups happen only when you tap Backup. Restoring always creates a new local model; it never overwrites an existing one.
         </p>
 
-        <section className="space-y-2 rounded-lg border border-white/15 bg-white/5 p-3 text-sm">
+        {SUBSCRIPTIONS_ENABLED && <section className="space-y-2 rounded-lg border border-white/15 bg-white/5 p-3 text-sm">
           <h2 className="font-semibold">AXIS Pro</h2>
           <p className="text-white/65">
             {isPro
@@ -118,14 +118,14 @@ export default function CloudBackups() {
           <button type="button" className="min-h-10 rounded-lg border border-amber-400/50 px-3 font-medium text-amber-300" onClick={() => openUpgrade(isPro ? 'Manage or restore your Pro purchase.' : 'Unlock every AXIS Pro tool.')}>
             {isPro ? 'Restore purchases' : 'Get Pro'}
           </button>
-        </section>
+        </section>}
 
         {error && <p role="alert" className="rounded-lg border border-red-400/40 bg-red-900/30 p-3 text-sm text-red-100">{error}</p>}
         {message && <p role="status" className="rounded-lg border border-white/20 p-3 text-sm">{message}</p>}
 
         {!session ? (
           <form className="space-y-3 rounded-xl border border-white/15 bg-zinc-900 p-4" onSubmit={submitCredentials}>
-            <h2 className="font-semibold">{mode === 'register' ? 'Create test account' : 'Sign in to Axis cloud'}</h2>
+            <h2 className="font-semibold">{mode === 'register' ? 'Create account' : 'Sign in to Axis cloud'}</h2>
             <label className="block text-sm">Email
               <input className="mt-1 h-11 w-full rounded-lg border border-white/20 bg-black px-3 text-white" type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} />
             </label>
@@ -136,7 +136,7 @@ export default function CloudBackups() {
               </span>
             </label>
             <button className={buttonClass + ' w-full bg-white/10'} disabled={busy} type="submit">{busy ? 'Please wait...' : mode === 'register' ? 'Create account' : 'Sign in'}</button>
-            <button type="button" className="text-sm text-white/70 underline" onClick={() => { setMode(mode === 'register' ? 'sign-in' : 'register'); setError(''); }}>{mode === 'register' ? 'Already have an account? Sign in' : 'Create a test account instead'}</button>
+            <button type="button" className="text-sm text-white/70 underline" onClick={() => { setMode(mode === 'register' ? 'sign-in' : 'register'); setError(''); }}>{mode === 'register' ? 'Already have an account? Sign in' : 'Create an account instead'}</button>
             <div className="mt-2"><Link to="/forgot-password" className="text-sm text-white/70 underline">Forgot password?</Link></div>
           </form>
         ) : (

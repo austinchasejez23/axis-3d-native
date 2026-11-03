@@ -40,8 +40,8 @@ export default function PasswordRecovery() {
   return <main className="min-h-screen bg-zinc-950 px-4 pb-12 pt-[calc(env(safe-area-inset-top,0px)+1.5rem)] text-white">
     <div className="mx-auto max-w-lg space-y-5">
       <Link className="inline-block rounded-lg border border-white/20 px-4 py-2 text-sm" to="/cloud">Back to Cloud</Link>
-      <h1 className="text-xl font-semibold">Reset test account password</h1>
-      <p className="text-sm text-white/70">Use the password-reset link in your email. No email template or SMTP setup is required. Your production Axis account is not affected.</p>
+      <h1 className="text-xl font-semibold">Reset password</h1>
+      <p className="text-sm text-white/70">Use the password-reset link in your email.</p>
       {error && <p role="alert" className="rounded-lg border border-red-400/40 p-3 text-sm text-red-100">{error}</p>}
       {message && <p role="status" className="rounded-lg border border-white/20 p-3 text-sm">{message}</p>}
       <form className="space-y-3" onSubmit={sendEmail}>

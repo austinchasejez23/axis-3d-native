@@ -145,7 +145,7 @@ export function parseRecoveryEmailLink(link) {
   try { parsed = new globalThis.URL(link.trim()); }
   catch { throw new Error('Paste the complete reset link from the email.'); }
   if (parsed.protocol !== 'https:' || parsed.origin !== URL || parsed.pathname !== '/auth/v1/verify') {
-    throw new Error('This is not an Axis 3D Test password-reset link.');
+    throw new Error('This is not an AXIS 3D password-reset link.');
   }
   if (parsed.searchParams.getAll('type').length !== 1 || parsed.searchParams.get('type') !== 'recovery') {
     throw new Error('This link is not for password recovery.');

@@ -40,7 +40,7 @@ export async function serializeBackup(project) {
   const digest = await sha256Hex(projectJSON);
   const serialized = JSON.stringify({ schemaVersion: 2, project: canonical, checksumSha256: digest });
   if (encoder.encode(serialized).byteLength > BACKUP_MAX_BYTES) {
-    throw new Error('This model exceeds the 50 MB test-backup limit.');
+    throw new Error('This model exceeds the 50 MB backup limit.');
   }
   return serialized;
 }

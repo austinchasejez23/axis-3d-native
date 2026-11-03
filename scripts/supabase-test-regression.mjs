@@ -67,7 +67,7 @@ for (const link of [
 }
 await assert.rejects(
   cloud.resetPasswordWithEmailLink(fakeUser.email, 'https://evil.invalid/?token=' + tokenHash, 'secure-new-password'),
-  /not an Axis 3D Test/,
+  /not an AXIS 3D password-reset link/,
 );
 assert.equal(calls.length, beforeBadLinks, 'Invalid links cannot trigger any network activity');
 
