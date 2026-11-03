@@ -3,8 +3,9 @@ import MovableToolChevron from '@/components/modeler/MovableToolChevron';
 import { useTheme } from '@/lib/theme';
 
 // Right-aligned strip above the tool grid: Hide and Show both appear as soon as
-// one or more tools are selected; the chevron appears once anything is hidden
-// and expands (up) or collapses (down) the hidden tools.
+// one or more tools are selected. The chevron appears once anything is hidden
+// and expands (up) or collapses (down) the hidden tools; it sits on the left,
+// under the seven side controls, until it is moved.
 export default function ToolGridActions({ mode, showHide, onHide, onShow, showChevron, expanded, onToggleExpanded }) {
   const { uiColor, toolLabelsEnabled } = useTheme();
   if (!showHide && !showChevron) return null;

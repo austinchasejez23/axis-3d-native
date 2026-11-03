@@ -4,7 +4,7 @@ import {
   ArrowLeftRight, Box, Hexagon, Spline, Circle, Move3D, ImagePlus,
 } from 'lucide-react';
 import { ProtractorIcon, MeasureIcon } from '@/lib/toolIcons';
-import { VOID } from '@/lib/toolLayout';
+import { VOID, isStackRow } from '@/lib/toolLayout';
 import { useTheme } from '@/lib/theme';
 import { useToolArrange } from '@/hooks/use-tool-arrange';
 import GridToolButton from './GridToolButton';
@@ -82,7 +82,7 @@ export default function GeneralToolGrid({
           backdropCells={backdropRows[r]}
           previousCells={backdropRows[r - 1]}
           nextCells={backdropRows[r + 1]}
-          className={row.slice(1).every((cell) => cell === VOID) ? (toolLabelsEnabled ? 'min-h-14' : 'min-h-11') : ''}
+          className={isStackRow(row) ? (toolLabelsEnabled ? 'min-h-14' : 'min-h-11') : ''}
           cells={row.map((cell, c) => {
             if (cell === VOID) return null;
             const hiddenAway = cell !== null && arrange.hidden.includes(cell) && !arrange.expanded && !dragging;

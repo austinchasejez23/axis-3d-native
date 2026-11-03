@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Grid3x3 } from 'lucide-react';
 import { TOOLS } from '@/lib/tools';
-import { VOID } from '@/lib/toolLayout';
+import { VOID, isStackRow } from '@/lib/toolLayout';
 import { useTheme } from '@/lib/theme';
 import GridToolButton from './GridToolButton';
 import GlassToolRow from './GlassToolRow';
@@ -97,7 +97,7 @@ export default function ModeToolGrid({ selectionMode, onTool, onSegments, onLock
           backdropCells={backdropRows[r]}
           previousCells={backdropRows[r - 1]}
           nextCells={backdropRows[r + 1]}
-          className={row.slice(1).every((cell) => cell === VOID) ? (toolLabelsEnabled ? 'min-h-14' : 'min-h-11') : ''}
+          className={isStackRow(row) ? (toolLabelsEnabled ? 'min-h-14' : 'min-h-11') : ''}
           cells={row.map((cell, c) => {
             if (cell === VOID) return null;
             if (BOOLEAN_TOOLS.has(cell) && !booleanOpen) return null;

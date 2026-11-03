@@ -14,25 +14,26 @@ import { mergeHiddenDiagonals } from './quadMerge';
 // declines instead of hanging.
 const MAX_TRIANGLES = 30000;
 
+// Returns true when the objects were combined, false when nothing changed.
 function booleanSelection(manager, operation) {
   const ids = manager.selectedMeshIds.length >= 2 ? [...manager.selectedMeshIds] : [];
   if (ids.length < 2) {
     toast(`${operation[0].toUpperCase()}${operation.slice(1)} needs two objects. Select the object to keep first, then another object.`);
-    return;
+    return false;
   }
 
   const base = manager.getMesh(ids[0]);
   const operands = ids.slice(1).map((id) => manager.getMesh(id)).filter(Boolean);
-  if (!base || operands.length === 0) return;
+  if (!base || operands.length === 0) return false;
   if (base.locked || operands.some((mesh) => mesh.locked)) {
     toast('Unlock the selected objects first.');
-    return;
+    return false;
   }
 
   const triangles = [base, ...operands].reduce((total, mesh) => total + mesh.getTriangleCount(), 0);
   if (triangles > MAX_TRIANGLES) {
     toast('These objects are too dense. Reduce their segments and try again.');
-    return;
+    return false;
   }
 
   const snapshot = manager.captureSnapshot();
@@ -53,7 +54,7 @@ function booleanSelection(manager, operation) {
     }
     if (!done) {
       toast(`${operation[0].toUpperCase()}${operation.slice(1)} could not run: ${why}.`);
-      return;
+      return false;
     }
     // Reject bad connectivity BEFORE committing or removing any operand.
     // A hidden wireframe edge is never a substitute for a shared mesh edge.
@@ -61,7 +62,7 @@ function booleanSelection(manager, operation) {
       const issue = closedTopologyProblem(work);
       if (issue) {
         toast(`Boolean did not produce a connected solid: ${issue}. Original objects were kept.`);
-        return;
+        return false;
       }
     }
     if (work.faces.length === 0) break;
@@ -71,7 +72,7 @@ function booleanSelection(manager, operation) {
     toast(operation === 'subtract'
       ? 'Nothing left after the subtraction — the cutter covers the whole object.'
       : 'The selected objects do not share any volume.');
-    return;
+    return false;
   }
 
   manager.pushUndoSnapshot(snapshot);
@@ -95,6 +96,7 @@ function booleanSelection(manager, operation) {
   manager.rebuildThreeMesh(base.id);
   manager.setSelection({ meshId: base.id, type: 'object', indices: [] });
   manager.updateStats();
+  return true;
 }
 
 export const subtractSelection = (manager) => booleanSelection(manager, 'subtract');

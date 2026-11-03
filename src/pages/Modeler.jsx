@@ -19,6 +19,8 @@ import LightingPanel from '@/components/modeler/LightingPanel';
 import SculptPanel from '@/components/modeler/SculptPanel';
 import SculptRingOverlay from '@/components/modeler/SculptRingOverlay';
 import BevelPanel from '@/components/modeler/BevelPanel';
+import BooleanPanel, { booleanPrompt } from '@/components/modeler/BooleanPanel';
+import { subtractSelection, unionSelection, intersectSelection } from '@/lib/booleanTools';
 import RadialArrayPanel from '@/components/modeler/RadialArrayPanel';
 import FreeTransformPanel from '@/components/modeler/FreeTransformPanel';
 import SnapPanel from '@/components/modeler/SnapPanel';
@@ -56,6 +58,9 @@ import useBackDismiss from '@/hooks/use-back-dismiss';
 import useAutoSave from '@/hooks/use-autosave';
 import { isRadialPrimitive } from '@/lib/primitives';
 import useKeyboardViewport from '@/hooks/use-keyboard-viewport';
+
+// Boolean tools that open their own panel.
+const BOOLEAN_OPERATION_IDS = new Set(['subtract', 'union', 'intersect']);
 
 export default function Modeler() {
   const navigate = useNavigate();
@@ -115,6 +120,10 @@ export default function Modeler() {
   const [sculptAxes, setSculptAxes] = useState([]);
   const [sculptTuning, setSculptTuning] = useState(false);
   const [bevelOpen, setBevelOpen] = useState(false);
+  // Open Boolean panel ({ operation }) and the scene before its first Apply.
+  const [booleanPanel, setBooleanPanel] = useState(null);
+  const booleanStartRef = useRef(null);
+  const booleanApplyingRef = useRef(false);
   const [radialArrayOpen, setRadialArrayOpen] = useState(false);
   const [snapPanelOpen, setSnapPanelOpen] = useState(false);
   const [precision, setPrecision] = useState(false);
@@ -348,6 +357,30 @@ export default function Modeler() {
     return true;
   }, [bevelOpen]);
 
+  // Boolean panels: Done keeps every applied result; Cancel puts the scene
+  // back to how it was before the first Apply made in the panel.
+  const closeOpenBoolean = useCallback(() => {
+    if (!booleanPanel) return false;
+    booleanStartRef.current = null;
+    setBooleanPanel(null);
+    managerRef.current?.exitMultiSelect();
+    return true;
+  }, [booleanPanel]);
+
+  const cancelOpenBoolean = useCallback(() => {
+    if (!booleanPanel) return false;
+    const manager = managerRef.current;
+    const start = booleanStartRef.current;
+    if (manager && start) {
+      manager.restoreSnapshot(start.snapshot);
+      // The applied steps are undone here, so they leave the undo history too.
+      manager.undoStack.length = Math.min(manager.undoStack.length, start.undoDepth);
+      manager.redoStack = [];
+      setSelectedMeshId(manager.selection.meshId || null);
+    }
+    return closeOpenBoolean();
+  }, [booleanPanel, closeOpenBoolean]);
+
   const cancelOpenRadialArray = useCallback(() => {
     if (!radialArrayOpen) return false;
     managerRef.current?.cancelRadialArray();
@@ -407,11 +440,14 @@ export default function Modeler() {
     if (segmentsOpen) { setSegmentsOpen(false); return true; }
     if (toolsOpen) { setToolsOpen(false); return true; }
     if (modeToolsOpen) { setModeToolsOpen(false); return true; }
+    // A Boolean panel closes only through its own buttons or the device back
+    // button (which cancels); tapping empty canvas keeps the picked objects.
+    if (booleanPanel) { if (fromCanvas !== true) cancelOpenBoolean(); return true; }
     return handleCanvasBack(fromCanvas === true);
-  }, [menuOpen, helpOpen, segmentsOpen, toolsOpen, modeToolsOpen, handleCanvasBack]);
+  }, [menuOpen, helpOpen, segmentsOpen, toolsOpen, modeToolsOpen, booleanPanel, cancelOpenBoolean, handleCanvasBack]);
 
   const anyPanelOpen = menuOpen || libraryOpen || materialsOpen || sculptOpen || transformDrawerOpen || guideOpen || lightingOpen || helpOpen
-    || toolsOpen || modeToolsOpen || segmentsOpen || radialArrayOpen || snapPanelOpen || freeTransformPanelOpen || !!selectionPattern || !!addVertex;
+    || toolsOpen || modeToolsOpen || segmentsOpen || radialArrayOpen || snapPanelOpen || freeTransformPanelOpen || !!selectionPattern || !!addVertex || !!booleanPanel;
   useBackDismiss(anyPanelOpen, handleBackStep);
 
   const handleUndo = useCallback(() => {
@@ -458,8 +494,9 @@ export default function Modeler() {
     if (keep !== 'select_loop' && keep !== 'select_ring') setSelectionPattern(null);
     if (keep !== 'bevel') cancelOpenBevel();
     if (keep !== 'radial_array') cancelOpenRadialArray();
+    if (!BOOLEAN_OPERATION_IDS.has(keep)) closeOpenBoolean();
     if (keep !== 'measure') stopMeasure();
-  }, [cancelOpenAddVertex, cancelOpenBevel, cancelOpenRadialArray, stopMeasure, closeMaterials, closeSculpt]);
+  }, [cancelOpenAddVertex, cancelOpenBevel, cancelOpenRadialArray, closeOpenBoolean, stopMeasure, closeMaterials, closeSculpt]);
 
   // Material and Texture edit whole objects: entering them switches to Object
   // mode, converting the current selection to its object so nothing is lost.
@@ -575,6 +612,18 @@ export default function Modeler() {
       return;
     }
     dismissActiveTool(toolId);
+    if (BOOLEAN_OPERATION_IDS.has(toolId)) {
+      // Boolean opens its panel straight away; the two objects are picked
+      // afterwards (multi-select stays on), in the order the prompt asks for.
+      closeMaterials(); closeSculpt();
+      if (manager && manager.selectionMode !== 'object') enterObjectMode();
+      manager?.enterMultiSelect();
+      setModeToolsOpen(false);
+      setToolsOpen(false);
+      setBooleanPanel({ operation: toolId });
+      showToolPrompt(booleanPrompt(toolId, manager?.selectedMeshIds?.length || 0));
+      return;
+    }
     const requirementNotice = getToolRequirementNotice(manager, toolId);
     if (requirementNotice) {
       showToolPrompt(requirementNotice);
@@ -654,7 +703,32 @@ export default function Modeler() {
     // auto-closes (applies to all modes).
     setModeToolsOpen(false);
     setToolsOpen(false);
-  }, [dismissActiveTool, closeMaterials, closeSculpt, showToolPrompt, isPro, openUpgrade, selectionMode]);
+  }, [dismissActiveTool, closeMaterials, closeSculpt, enterObjectMode, showToolPrompt, isPro, openUpgrade, selectionMode]);
+
+  // Apply in a Boolean panel: needs two picked objects; the first one is kept
+  // (Subtract cuts the later ones away from it). The panel stays open.
+  const applyBoolean = useCallback(() => {
+    const manager = managerRef.current;
+    const operation = booleanPanel?.operation;
+    if (!manager || !operation) return;
+    const count = manager.selectedMeshIds?.length || 0;
+    if (count < 2) { showToolPrompt(booleanPrompt(operation, count)); return; }
+    const before = manager.captureSnapshot();
+    const undoDepth = manager.undoStack.length;
+    const run = operation === 'subtract' ? subtractSelection : operation === 'union' ? unionSelection : intersectSelection;
+    booleanApplyingRef.current = true;
+    let applied = false;
+    try { applied = run(manager); } finally { booleanApplyingRef.current = false; }
+    if (!applied) return;
+    if (!booleanStartRef.current) booleanStartRef.current = { snapshot: before, undoDepth };
+    setSelectedMeshId(manager.selection.meshId || null);
+    manager.enterMultiSelect();
+  }, [booleanPanel, showToolPrompt]);
+
+  // Taps pick objects while a Boolean panel is open.
+  useEffect(() => {
+    if (booleanPanel && !multiSelect) managerRef.current?.enterMultiSelect();
+  }, [booleanPanel, multiSelect]);
 
   const handleOpenSegments = useCallback(() => {
     setSnapPanelOpen(false);
@@ -881,6 +955,10 @@ export default function Modeler() {
         onSelectionChange={() => {
           setFreeTransformPanelOpen(false);
           setSelectedMeshId(managerRef.current?.selection.meshId || null);
+          // Boolean panel: prompt for the next object to pick.
+          if (booleanPanel && !booleanApplyingRef.current) {
+            showToolPrompt(booleanPrompt(booleanPanel.operation, managerRef.current?.selectedMeshIds?.length || 0));
+          }
           window.dispatchEvent(new CustomEvent('axis-selection-change'));
         }}
         onBeforeSelectionTap={(selection) => {
@@ -999,7 +1077,7 @@ export default function Modeler() {
       </div>
       {/* Labels and prompts stack in this same column under the HUD, so they can never overlap it or each other. */}
       <MultiSelectLabel active={multiSelect} />
-      <ToolAnnouncement suppressed={multiSelect} toolActive={!!(draw?.active || cut || addVertex || selectionPattern || bevelOpen || radialArrayOpen || measureMode || angleMode || materialsOpen || sculptOpen || transformDrawerOpen)} />
+      <ToolAnnouncement suppressed={multiSelect} toolActive={!!(draw?.active || cut || addVertex || selectionPattern || bevelOpen || booleanPanel || radialArrayOpen || measureMode || angleMode || materialsOpen || sculptOpen || transformDrawerOpen)} />
       <PaintToolFlash suppressed={multiSelect} />
       {toolPrompt && (
         <div
@@ -1290,6 +1368,15 @@ export default function Modeler() {
           }}
           onApply={(options) => { updateBevelPreview(managerRef.current, options); commitBevelPreview(managerRef.current); setBevelOpen(false); }}
           onCancel={() => { cancelBevelPreview(managerRef.current); setBevelOpen(false); }}
+        />
+      )}
+
+      {booleanPanel && (
+        <BooleanPanel
+          operation={booleanPanel.operation}
+          onApply={applyBoolean}
+          onDone={closeOpenBoolean}
+          onCancel={cancelOpenBoolean}
         />
       )}
 

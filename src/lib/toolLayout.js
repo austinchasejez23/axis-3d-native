@@ -2,25 +2,50 @@
 // bottom bar (Tools | Vertex | Edge | Face | Object | Library).
 //   'void' — nothing can go there (the bottom bar button shows through).
 //   null   — a free empty slot a tool can be dragged into.
-// The rows above each grid are a vertical left-side stack: only the first
-// column is free there, so tools can be stacked up the left edge of the screen.
+// The rows above each grid are vertical stacks up the screen edges: the last
+// column is free in every row (seven slots up the right edge), and the first
+// column only in the lowest four rows (four slots up the left edge, kept clear
+// of the side controls). Everything in between is blocked.
 // Alongside the rows, a per-mode list of HIDDEN tool ids is kept: hidden tools
 // keep their slot but only show while the grid is expanded with the chevron.
 export const VOID = 'void';
 
-const LEFT_STACK = () => [null, VOID, VOID, VOID, VOID, VOID];
-const STACK_ROWS = 5;
-const stack = () => Array.from({ length: STACK_ROWS }, LEFT_STACK);
+const STACK_ROWS = 7;
+const LEFT_SLOTS = 4;
+const stackRow = (r) => [r >= STACK_ROWS - LEFT_SLOTS ? null : VOID, VOID, VOID, VOID, VOID, null];
+const stack = () => Array.from({ length: STACK_ROWS }, (_, r) => stackRow(r));
+// A stack row: only its edge cells can ever hold a tool.
+export const isStackRow = (row) => row.slice(1, 5).every((cell) => cell === VOID);
+
+// Before the right-edge stack there were five rows with a left-edge slot only.
+const OLD_STACK_ROWS = 5;
+const OLD_LEFT_STACK = () => [null, VOID, VOID, VOID, VOID, VOID];
+const oldStack = () => Array.from({ length: OLD_STACK_ROWS }, OLD_LEFT_STACK);
+
+// Re-seat what was stacked in an old five-row left stack, keeping the order
+// and nearest the grid first: into the left slots, then up the right edge.
+function widenStack(rows) {
+  if (!Array.isArray(rows) || rows.length < OLD_STACK_ROWS) return rows;
+  const old = rows.slice(0, OLD_STACK_ROWS);
+  if (!old.every((row) => Array.isArray(row) && row.length === 6 && row.slice(1).every((cell) => cell === VOID))) return rows;
+  const next = stack();
+  const slots = [];
+  for (let r = STACK_ROWS - 1; r >= 0; r--) if (next[r][0] === null) slots.push([r, 0]);
+  for (let r = STACK_ROWS - 1; r >= 0; r--) slots.push([r, 5]);
+  old.map((row) => row[0]).filter((cell) => cell && cell !== VOID).reverse()
+    .forEach((id, i) => { const [r, c] = slots[i]; next[r][c] = id; });
+  return [...next, ...rows.slice(OLD_STACK_ROWS).map((row) => [...row])];
+}
 
 const LEGACY_OBJECT_LAYOUT = [
-  ...stack(),
+  ...oldStack(),
   ['merge', 'mirror', 'soft_normals', 'combine', 'segments', 'lock'],
   ['separate', 'divide', 'smooth', 'clone', null, 'delete'],
 ];
 
 const PREVIOUS_LAYOUTS = {
   general: [
-    ...stack().slice(0, 3),
+    ...oldStack().slice(0, 3),
     ['reference', VOID, VOID, VOID, VOID, VOID],
     ['materials', VOID, VOID, VOID, VOID, VOID],
     ['sculpt', null, null, null, null, null],
@@ -28,15 +53,15 @@ const PREVIOUS_LAYOUTS = {
   ],
   object: [
     ['radial_array', VOID, VOID, VOID, VOID, VOID],
-    ...stack().slice(1),
+    ...oldStack().slice(1),
     ['boolean', 'lock', 'smooth', 'divide', 'merge', 'soft_normals'],
     ['combine', 'separate', 'mirror', 'clone', 'segments', 'delete']],
-  face: [...stack(),
+  face: [...oldStack(),
     ['bridge', 'detach', 'draw_face', 'clone', 'extrude', 'delete']],
-  edge: [...stack(),
+  edge: [...oldStack(),
     ['split', 'cut_loop', 'draw_cut', 'bridge', null, null],
     ['select_ring', 'select_loop', 'create_face_border', 'extrude', 'bevel', 'delete']],
-  vertex: [...stack(),
+  vertex: [...oldStack(),
     ['create_face', 'add_vertex', 'connect', 'target_merge', 'merge', 'delete']],
 };
 const PREVIOUS_HIDDEN = {
@@ -52,8 +77,8 @@ export const DEFAULT_LAYOUTS = {
     ['sculpt', 'free_transform', 'convert', 'display', 'measure', 'protractor'],
   ],
   object: [
-    ...stack().slice(0, 4),
-    ['boolean', VOID, VOID, VOID, VOID, VOID],
+    ...stack().slice(0, STACK_ROWS - 1),
+    ['boolean', VOID, VOID, VOID, VOID, null],
     ['radial_array', 'lock', 'smooth', 'divide', 'merge', 'soft_normals'],
     ['combine', 'separate', 'mirror', 'clone', 'segments', 'delete'],
   ],
@@ -119,14 +144,16 @@ export function loadToolLayout(mode) {
     const all = JSON.parse(localStorage.getItem(KEY) || '{}');
     const stored = all[mode]?.rows?.map((row) => [...row]);
     // Add the missing upper bottom row without resetting anyone's arrangement.
-    if (['general', 'face', 'vertex'].includes(mode) && stored?.length === STACK_ROWS + 1) {
-      stored.splice(STACK_ROWS, 0, [null, null, null, null, null, null]);
+    if (['general', 'face', 'vertex'].includes(mode) && stored?.length === OLD_STACK_ROWS + 1) {
+      stored.splice(OLD_STACK_ROWS, 0, [null, null, null, null, null, null]);
     }
+    // Old left-only stacks become the left + right stacks, tools kept.
+    const widened = widenStack(stored);
     // Preserve existing arrangements while converting bottom-row cells that
     // used to be blocked into the free destinations they now represent.
     let legacyFreeTransformPlaced = false;
-    const rows = Array.isArray(stored)
-      ? stored.map((row, r) => row.map((cell, c) => {
+    const rows = Array.isArray(widened)
+      ? widened.map((row, r) => row.map((cell, c) => {
           if (cell === 'radius') return null;
           if (mode === 'general' && (cell === 'free_move' || cell === 'free_scale')) {
             if (!legacyFreeTransformPlaced) {
@@ -137,9 +164,9 @@ export function loadToolLayout(mode) {
           }
           return DEFAULT_LAYOUTS[mode]?.[r]?.[c] === null && cell === VOID ? null : cell;
         }))
-      : stored;
+      : widened;
     if (mode === 'general' && Array.isArray(rows) && !allIds(rows).includes('reference')) {
-      const openRow = rows.find((row) => row[0] === null && row.slice(1).every((cell) => cell === VOID));
+      const openRow = rows.find((row) => row[0] === null && isStackRow(row));
       if (openRow) openRow[0] = 'reference';
     }
     if (mode === 'general' && Array.isArray(rows) && !allIds(rows).includes('free_transform')) {
@@ -172,11 +199,11 @@ export function loadToolLayout(mode) {
     if (matchesDefault(rows, mode)) {
       const hidden = Array.isArray(all[mode].hidden) ? all[mode].hidden.filter((id) => allIds(rows).includes(id)) : [];
       // Upgrade untouched defaults only; keep manually customized layouts.
-      if (PREVIOUS_LAYOUTS[mode] && previousShape === JSON.stringify(PREVIOUS_LAYOUTS[mode])
+      if (PREVIOUS_LAYOUTS[mode] && previousShape === JSON.stringify(widenStack(PREVIOUS_LAYOUTS[mode]))
         && (hidden.length === 0 || JSON.stringify([...hidden].sort()) === JSON.stringify([...PREVIOUS_HIDDEN[mode]].sort()))) {
         return { rows: DEFAULT_LAYOUTS[mode], hidden: [...DEFAULT_HIDDEN[mode]] };
       }
-      if (mode === 'object' && hidden.length === 0 && JSON.stringify(rows) === JSON.stringify(LEGACY_OBJECT_LAYOUT)) {
+      if (mode === 'object' && hidden.length === 0 && JSON.stringify(rows) === JSON.stringify(widenStack(LEGACY_OBJECT_LAYOUT))) {
         return { rows: DEFAULT_LAYOUTS.object, hidden: [...DEFAULT_HIDDEN.object] };
       }
       return { rows, hidden };
