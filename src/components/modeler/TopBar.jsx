@@ -1,14 +1,35 @@
 import { useEffect, useRef, useState } from 'react';
 import { Menu, Undo2, Redo2, Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
+import { helpHintActive, stopHelpHint } from '@/lib/helpHint';
 import ViewportModeButtons from '@/components/modeler/ViewportModeButtons';
 import RenderBoostButtons from '@/components/modeler/RenderBoostButtons';
 
 const PANEL = { background: 'rgba(9,13,22,0.38)', border: '1px solid rgba(255,255,255,0.07)' };
 const TOP = 'calc(env(safe-area-inset-top, 0px) + 0.25rem)';
+// Help sits under the axis gizmo, which sits under Undo.
+const HELP_TOP = 'calc(env(safe-area-inset-top, 0px) + 170px)';
+const FLASH_FIRST_MS = 4000;
+const FLASH_MS = 5000;
+const FLASH_EVERY_MS = 45000;
 
 export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transparentViewport, renderBoost, freeTransform, snapping, onToggleClayViewport, onToggleTransparentViewport, onToggleRenderBoost, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel, onFocus, precision, onTogglePrecision, onOpenPrecisionPanel, onHelp, helpOpen, counter }) {
-  const { uiColor } = useTheme();
+  const { uiColor, highlightColor } = useTheme();
+  // New users: the information button now and then flashes three times.
+  const [helpFlash, setHelpFlash] = useState(false);
+  useEffect(() => {
+    if (helpOpen) stopHelpHint();
+    if (!helpHintActive()) return undefined;
+    let timer;
+    const schedule = (delay) => {
+      timer = setTimeout(() => {
+        setHelpFlash(true);
+        timer = setTimeout(() => { setHelpFlash(false); schedule(FLASH_EVERY_MS); }, FLASH_MS);
+      }, delay);
+    };
+    schedule(FLASH_FIRST_MS);
+    return () => { clearTimeout(timer); setHelpFlash(false); };
+  }, [helpOpen]);
   const [sideControlsExpanded, setSideControlsExpanded] = useState(true);
   const sideControlsRef = useRef(null);
   useEffect(() => {
@@ -41,26 +62,25 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
         </div>
       )}
 
-      {/* Redo and Undo share one background; Help has its own. */}
-      <div className="absolute right-[6px] w-14 flex flex-col gap-1" style={{ top: TOP }}>
-        <div className="rounded-xl pointer-events-auto flex flex-col items-center" style={PANEL}>
-          <button onClick={onRedo} aria-label="Redo" style={{ color: uiColor, textShadow: txtShadow }} className={`${btn} h-12`}>
-            <Redo2 className="w-11 h-11" strokeWidth={2.3} />
-          </button>
-          <button onClick={onUndo} aria-label="Undo" style={{ color: uiColor, textShadow: txtShadow }} className={`${btn} h-12`}>
-            <Undo2 className="w-11 h-11" strokeWidth={2.3} />
-          </button>
-        </div>
-        <div className="rounded-xl pointer-events-auto flex flex-col items-center" style={PANEL}>
-          <button onClick={onHelp} aria-label="Help" aria-pressed={!!helpOpen} style={{ color: uiColor, textShadow: txtShadow }} className={`${btn} h-9`}>
-            <Info className="w-5 h-5" strokeWidth={2} />
-          </button>
-        </div>
+      {/* Redo and Undo share one background; Help has its own, below the
+          axis gizmo. */}
+      <div className="absolute right-[6px] w-14 rounded-xl pointer-events-auto flex flex-col items-center" style={{ ...PANEL, top: TOP }}>
+        <button onClick={onRedo} aria-label="Redo" style={{ color: uiColor, textShadow: txtShadow }} className={`${btn} h-12`}>
+          <Redo2 className="w-11 h-11" strokeWidth={2.3} />
+        </button>
+        <button onClick={onUndo} aria-label="Undo" style={{ color: uiColor, textShadow: txtShadow }} className={`${btn} h-12`}>
+          <Undo2 className="w-11 h-11" strokeWidth={2.3} />
+        </button>
+      </div>
+      <div className={`absolute right-[6px] w-14 rounded-xl pointer-events-auto flex flex-col items-center ${helpFlash ? 'axis-help-flash' : ''}`} style={{ ...PANEL, top: HELP_TOP, '--axis-help-flash': highlightColor }}>
+        <button onClick={onHelp} aria-label="Help" aria-pressed={!!helpOpen} style={{ color: uiColor, textShadow: txtShadow }} className={`${btn} h-9`}>
+          <Info className="w-5 h-5" strokeWidth={2} />
+        </button>
       </div>
 
       {/* Fixed handle: stays in place while the seven controls slide left
           fully out of view. It occupies the original top control position. */}
-      <div className="absolute left-[6px] w-12 rounded-xl pointer-events-auto" style={{ ...PANEL, top: 'calc(env(safe-area-inset-top, 0px) + 5.6rem)' }}>
+      <div className="absolute left-[2px] w-12 rounded-xl pointer-events-auto" style={{ ...PANEL, top: 'calc(env(safe-area-inset-top, 0px) + 5.6rem)' }}>
         <button
           type="button"
           onClick={toggleSideControls}
@@ -85,7 +105,7 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
             setSideChevronFacesRight(!sideControlsExpanded);
           }
         }}
-        className="absolute left-[6px] w-12 rounded-xl py-1 flex flex-col items-center pointer-events-auto transition-transform duration-300 ease-in-out motion-reduce:transition-none"
+        className="absolute left-[2px] w-12 rounded-xl py-1 flex flex-col items-center pointer-events-auto transition-transform duration-300 ease-in-out motion-reduce:transition-none"
         style={{ ...PANEL, top: 'calc(env(safe-area-inset-top, 0px) + 8.6rem)', transform: sideControlsExpanded ? 'translateX(0)' : 'translateX(calc(-100% - 12px))', pointerEvents: sideControlsExpanded ? 'auto' : 'none' }}>
         <ViewportModeButtons clay={clayViewport} transparent={transparentViewport}
           onClay={onToggleClayViewport} onTransparent={onToggleTransparentViewport} />

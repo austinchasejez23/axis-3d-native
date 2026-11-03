@@ -6,7 +6,11 @@ import { formatValue3 } from '@/lib/units';
 
 const formatValue = formatValue3;
 
-export default function TransformValueRow({ label, value, onChange, color, highlightColor, step = 0.1, autoFocus = false, keypadOpen = false, onKeypadOpen }) {
+export default function TransformValueRow({ label, value, onChange: change, color, highlightColor, step = 0.1, autoFocus = false, keypadOpen = false, onKeypadOpen }) {
+  // The last value this field sent, so its own echo is told apart from the
+  // object being moved some other way while the field is open.
+  const sent = useRef(null);
+  const onChange = (number) => { sent.current = formatValue(number); change(number); };
   const adjust = (direction) => {
     const next = Math.round((value + direction * step) * 1e12) / 1e12;
     setDraft(formatValue(next));
@@ -17,12 +21,22 @@ export default function TransformValueRow({ label, value, onChange, color, highl
   // survive until the next digit arrives — re-rendering the parsed number on
   // every keystroke used to swallow the decimal point.
   const [draft, setDraft] = useState(formatValue(value));
-  useEffect(() => { if (!keypadOpen) setDraft(formatValue(value)); }, [value, keypadOpen]);
   const replaceNext = useRef(true);
+  useEffect(() => {
+    const shown = formatValue(value);
+    if (!keypadOpen) { setDraft(shown); return; }
+    // Moved while this field is open: show the true value; the next digit
+    // typed starts a new number.
+    if (shown !== sent.current) {
+      sent.current = shown;
+      replaceNext.current = true;
+      setDraft(shown);
+    }
+  }, [value, keypadOpen]);
   // +/− pressed before typing flips the shown value; the first digit after it
   // then starts a new number that keeps that sign.
   const signNext = useRef('');
-  const openPad = () => { replaceNext.current = true; signNext.current = ''; onKeypadOpen?.(true); };
+  const openPad = () => { replaceNext.current = true; signNext.current = ''; sent.current = formatValue(value); onKeypadOpen?.(true); };
   const pressKey = (key) => setDraft((current) => {
     if (key === '+/−') {
       const flipped = current.startsWith('-') ? current.slice(1) : `-${current}`;

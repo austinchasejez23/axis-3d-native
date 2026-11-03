@@ -64,8 +64,8 @@ try {
       `${name} must hide background when tools are hidden`);
   }
   const top = fs.readFileSync('src/components/modeler/TopBar.jsx', 'utf8');
-  assert.match(top, /absolute left-\[6px\] w-12 rounded-xl py-1/,
-    'The seven side controls must share a panel aligned with the Menu');
+  assert.match(top, /absolute left-\[2px\] w-12 rounded-xl py-1/,
+    'The seven side controls must share one panel, a few px left of the Menu');
   assert.match(top, /The seven controls: one background, dividers between buttons/,
     'The side controls must retain their shared backdrop');
 

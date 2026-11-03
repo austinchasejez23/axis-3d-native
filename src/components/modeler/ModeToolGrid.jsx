@@ -65,6 +65,7 @@ export default function ModeToolGrid({ selectionMode, onTool, onSegments, onLock
 
   return (
     <div
+      data-tool-grid
       className="absolute bottom-0 left-0 right-0 z-40 px-1 pb-[calc(0.75rem+var(--axis-safe-bottom,env(safe-area-inset-bottom,0px)))] pointer-events-none"
       onClickCapture={arrange.onClickCapture}
     >
@@ -98,13 +99,14 @@ export default function ModeToolGrid({ selectionMode, onTool, onSegments, onLock
           previousCells={backdropRows[r - 1]}
           nextCells={backdropRows[r + 1]}
           className={isStackRow(row) ? (toolLabelsEnabled ? 'min-h-14' : 'min-h-11') : ''}
+          bar={!isStackRow(row)}
           cells={row.map((cell, c) => {
             if (cell === VOID) return null;
             if (BOOLEAN_TOOLS.has(cell) && !booleanOpen) return null;
             const expandedId = booleanOpen && !dragging ? expandedBoolean.get(`${r}:${c}`) : null;
             if (expandedId) {
               const tool = byId[expandedId];
-              return <div className="rounded-lg pointer-events-auto"><GridToolButton fullWidth mode={selectionMode} icon={tool.icon} label={tool.label} locked={!isPro} onClick={() => runTool(expandedId)} /></div>;
+              return <div data-tool-cell={`${r}:${c}`} className="rounded-lg pointer-events-auto"><GridToolButton fullWidth mode={selectionMode} icon={tool.icon} label={tool.label} locked={!isPro} onClick={() => runTool(expandedId)} /></div>;
             }
             const hiddenAway = cell !== null && arrange.hidden.includes(cell) && !arrange.expanded && !dragging;
             if (cell === null || hiddenAway) {
@@ -129,6 +131,7 @@ export default function ModeToolGrid({ selectionMode, onTool, onSegments, onLock
             return (
               <div
                 data-tool-slot={`${r}:${c}`}
+                data-tool-cell={`${r}:${c}`}
                 onPointerDown={arrange.onPointerDown(r, c)}
                 onContextMenu={(e) => e.preventDefault()}
                 className={`rounded-lg pointer-events-auto transition-transform ${isHeld(r, c) ? 'scale-110 opacity-70' : isOver(r, c) ? 'scale-95 opacity-80' : ''}`}

@@ -32,8 +32,10 @@ export default function ContextTip({ context }) {
     <div className="flex min-h-[1.75rem] items-center justify-center px-2 py-0.5 pointer-events-none text-center">
       <div
         className="mx-auto font-mono leading-tight whitespace-normal line-clamp-2"
+        // Two short lines.
         style={{
-          fontSize: '12px',
+          fontSize: '10px',
+          maxWidth: '10.5rem',
           color: uiColor,
           opacity: shown ? 0.9 : 0,
           transition: `opacity ${FADE_MS}ms ease`,
@@ -43,7 +45,7 @@ export default function ContextTip({ context }) {
         {tip.split('{icon}').map((part, i, parts) => (
           <span key={i}>
             {part}
-            {i < parts.length - 1 && <Info className="inline-block align-text-bottom" style={{ width: 14, height: 14 }} strokeWidth={2} />}
+            {i < parts.length - 1 && <Info className="inline-block align-text-bottom" style={{ width: 12, height: 12 }} strokeWidth={2} />}
           </span>
         ))}
       </div>

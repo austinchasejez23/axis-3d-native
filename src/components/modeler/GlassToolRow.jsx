@@ -11,6 +11,7 @@ export default function GlassToolRow({
   previousCells = [],
   nextCells = [],
   className = '',
+  bar = false,
 }) {
   const runs = [];
   for (let col = 0; col < cells.length;) {
@@ -21,7 +22,7 @@ export default function GlassToolRow({
   }
 
   return (
-    <div className={`relative flex items-end ${className}`}>
+    <div data-tool-bar={bar || undefined} className={`relative flex items-end ${className}`}>
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
         {runs.map(({ start, end }) => {
           const topLeft = previousCells[start] ? 0 : 8;

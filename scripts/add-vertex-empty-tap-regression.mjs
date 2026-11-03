@@ -80,12 +80,14 @@ try {
   const bar = fs.readFileSync('src/components/modeler/BottomToolbar.jsx','utf8');
   const top = fs.readFileSync('src/components/modeler/TopBar.jsx','utf8');
   assert.match(counter, /h-5 w-full flex items-center justify-center/, 'Counter must be centered inside its assigned top-bar slot');
-  assert.equal((top.match(/absolute left-\[6px\] w-12 rounded-xl pointer-events-auto/g) || []).length, 3,
-    'Menu, triangle counter, and fixed side chevron must occupy matching 48px slots');
+  assert.equal((top.match(/absolute left-\[6px\] w-12 rounded-xl pointer-events-auto/g) || []).length, 2,
+    'Menu and triangle counter must occupy matching 48px slots');
+  assert.equal((top.match(/absolute left-\[2px\] w-12 rounded-xl pointer-events-auto/g) || []).length, 1,
+    'The fixed side chevron sits a few px left of the Menu, with the seven controls');
   assert.match(bar, /left-0 right-0.*safe-bottom pt-1/, 'Bottom bar should retain full viewport width');
   assert.match(bar, /rgba\(9,13,22,0\.38\)/, 'Bottom toolbar should have faint transparent background');
   assert.match(top, /The seven controls: one background, dividers between buttons/, 'Seven side controls must share one panel');
-  assert.match(top, /absolute left-\[6px\] w-12 rounded-xl py-1/, 'Side control panel must align to the Menu');
+  assert.match(top, /absolute left-\[2px\] w-12 rounded-xl py-1/, 'Side control panel sits a few px left of the Menu');
 
   console.log('PASS: empty canvas exits Add Vertex and rolls back all unconfirmed vertices; face taps keep tool open; checkmark commits; both gesture paths use cancel-on-empty; HUD backgrounds and alignment');
 } finally {

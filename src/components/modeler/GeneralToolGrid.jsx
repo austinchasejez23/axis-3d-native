@@ -60,7 +60,7 @@ export default function GeneralToolGrid({
   )));
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 z-40 px-1 pb-[calc(0.75rem+var(--axis-safe-bottom,env(safe-area-inset-bottom,0px)))] pointer-events-none" onClickCapture={arrange.onClickCapture}>
+    <div data-tool-grid className="absolute bottom-0 left-0 right-0 z-40 px-1 pb-[calc(0.75rem+var(--axis-safe-bottom,env(safe-area-inset-bottom,0px)))] pointer-events-none" onClickCapture={arrange.onClickCapture}>
       <input ref={referenceInputRef} type="file" accept="image/*" aria-label="Choose reference image" className="hidden" onChange={(event) => {
         const file = event.target.files?.[0];
         if (file) { onAddReference?.(file); onClose?.(); }
@@ -83,6 +83,7 @@ export default function GeneralToolGrid({
           previousCells={backdropRows[r - 1]}
           nextCells={backdropRows[r + 1]}
           className={isStackRow(row) ? (toolLabelsEnabled ? 'min-h-14' : 'min-h-11') : ''}
+          bar={!isStackRow(row)}
           cells={row.map((cell, c) => {
             if (cell === VOID) return null;
             const hiddenAway = cell !== null && arrange.hidden.includes(cell) && !arrange.expanded && !dragging;
@@ -102,6 +103,7 @@ export default function GeneralToolGrid({
               <div
                 key={cell}
                 data-tool-slot={`${r}:${c}`}
+                data-tool-cell={`${r}:${c}`}
                 onPointerDown={arrange.onPointerDown(r, c)}
                 onContextMenu={(e) => e.preventDefault()}
                 className={`relative rounded-lg pointer-events-auto transition-transform ${isHeld(r, c) ? 'scale-110 opacity-70' : isOver(r, c) ? 'scale-95 opacity-80' : ''}`}

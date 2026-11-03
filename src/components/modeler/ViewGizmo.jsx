@@ -115,7 +115,8 @@ export default function ViewGizmo({ managerRef }) {
       viewBox={`0 0 ${S} ${S}`}
       className="absolute right-[1px] z-30 pointer-events-none"
       style={{
-        top: 'calc(env(safe-area-inset-top, 0px) + 9.25rem)',
+        // Directly under Undo, above the information button.
+        top: 'calc(env(safe-area-inset-top, 0px) + 108px)',
         filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))',
       }}
       role="img"

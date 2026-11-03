@@ -44,7 +44,7 @@ export default function HelpPanel({ onClose }) {
 
   return (
     <div
-      className="absolute left-[3.75rem] right-[3.5rem] top-[calc(env(safe-area-inset-top,0px)+9.5rem)] z-50 pointer-events-auto"
+      className="absolute left-[3.75rem] right-[4rem] top-[calc(env(safe-area-inset-top,0px)+9.5rem)] z-50 pointer-events-auto"
       onPointerDown={(event) => event.stopPropagation()}
     >
       <div className="modeling-panel modeling-sheet flex max-h-[46vh] flex-col rounded-2xl px-2 py-2" role="dialog" aria-label="Help">
