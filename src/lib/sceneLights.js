@@ -14,9 +14,12 @@ const plain = (light) => ({
   color: light.color, colorIntensity: light.colorIntensity,
 });
 
+// A new light shines from above and to the left of the starting view, aimed
+// at the origin, so it lights the faces you see and its shadow falls to the
+// side where it can be seen instead of straight behind the object.
 function defaults(type = 'spot') {
   return {
-    id: freshId(), type, position: [1.2, 2, 0.8], rotation: [-0.65, 0.55, 0],
+    id: freshId(), type, position: [-1.455, 2.184, 1.455], rotation: [-0.9828, -0.5066, 0],
     intensity: 1.5, radius: type === 'spot' ? 35 : 1,
     range: 15, shadows: false, shadowIntensity: 0.65,
     color: '#ffffff', colorIntensity: 1,
@@ -93,8 +96,14 @@ export function applySceneLights(SceneManager) {
     const channelMean = (color.r + color.g + color.b) / 3;
     if (channelMean > 1e-6) color.multiplyScalar(1 / channelMean);
     object.color.copy(color);
-    // Only the Intensity slider changes light power.
-    object.intensity = clamp(record.intensity ?? 1.5, 0, 5) * (record.type === 'directional' ? 3 : 75);
+    // Only the Intensity slider changes light power. The slider works in
+    // exposure steps: 0 is off, the default 1.5 lights a nearby object at a
+    // mid level (spot and point lights used to be near pure white already),
+    // and each step up roughly doubles the light, so the whole slider range
+    // visibly changes the scene instead of flattening out at the top.
+    const level = clamp(record.intensity ?? 1.5, 0, 5);
+    const gain = (2 ** level - 1) / (2 ** 1.5 - 1);
+    object.intensity = gain * (record.type === 'directional' ? 3.4 : 22);
     object.castShadow = custom && !!record.shadows;
     object.shadow.intensity = clamp(record.shadowIntensity, 0, 1);
     object.shadow.radius = record.type === 'point' ? clamp(record.radius * 2, 0, 10) : 3;

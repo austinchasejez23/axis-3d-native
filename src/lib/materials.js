@@ -3,6 +3,7 @@ import { theme } from './theme';
 import { applyPaintLayerShader } from './paintLayer';
 import { isClosedSurface } from './renderBoost';
 import objectShadowMaterial from '@/lib/objectShadowMaterial';
+import { updateShadowFloor } from '@/lib/shadowFloor';
 
 // Legacy projects stored the old near-white default. Render that untouched
 // default as neutral modeling clay, while preserving every chosen/painted color.
@@ -267,8 +268,10 @@ export function applyShadows(sm) {
     sm.dirLight.shadow.intensity = intensity;
   }
   if (sm.shadowGround) {
-    sm.shadowGround.visible = on;
-    sm.shadowGround.material.opacity = on ? intensity : 0;
+    // The lit floor appears with shadows (and with the grid); the lights'
+    // own shadow strength decides how dark the shadows on it are.
+    sm.shadowGround.visible = on && (sm.grid?.visible ?? true);
+    updateShadowFloor(sm.shadowGround, theme.backgroundColor);
   }
   for (const [id, obj] of sm.threeObjects) {
     const geometryOnly = !!sm.getMesh(id)?.importedWireframeOnly;

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { EditableMesh } from './EditableMesh';
 import { createPrimitive, createPrimitiveSegments } from './primitives';
 import { generateProjectId } from './storage';
+import { makeShadowFloor } from './shadowFloor';
 import { dissolveSelection } from './dissolveTools';
 import { toggleSmoothShading, separateMesh as separateMeshTool, createFaceFromVertices, targetMergeVertices, connectVertices, detachFaces, cloneFaces, splitEdge, bevelEdge, selectLoop, selectRing, createFaceFromBorder } from './meshTools';
 import { theme } from './theme';
@@ -137,16 +138,9 @@ export class SceneManager {
     this.grid = null;
     this.updateGrid();
 
-    // Invisible ground plane (ShadowMaterial) at grid level that catches shadows.
-    const shadowGroundGeo = new THREE.PlaneGeometry(40, 40);
-    const shadowGroundMat = new THREE.ShadowMaterial({ opacity: 0.5 });
-    // Never write depth: the invisible ground plane must not occlude wireframe
-    // lines or highlights that sit at / below grid level.
-    shadowGroundMat.depthWrite = false;
-    this.shadowGround = new THREE.Mesh(shadowGroundGeo, shadowGroundMat);
-    this.shadowGround.rotation.x = -Math.PI / 2;
-    this.shadowGround.position.y = 0;
-    this.shadowGround.receiveShadow = true;
+    // Lit floor at grid level that catches shadows while shadows are on.
+    this.shadowGround = makeShadowFloor();
+    this.shadowGround.visible = false;
     this.scene.add(this.shadowGround);
 
     this.meshes = [];
@@ -2321,8 +2315,9 @@ export class SceneManager {
 
   toggleGrid() {
     this.grid.visible = !this.grid.visible;
-    // The shadow-catching ground plane is part of the grid: hide it too.
-    if (this.shadowGround) this.shadowGround.visible = this.grid.visible;
+    // The shadow-catching floor is part of the grid: hide it too. It only
+    // shows while shadows are on.
+    if (this.shadowGround) this.shadowGround.visible = this.grid.visible && this._shadowState().on;
   }
 
   combineMeshes() {
