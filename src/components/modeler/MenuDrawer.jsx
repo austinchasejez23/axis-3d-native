@@ -279,7 +279,7 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
   return (
     <div className="absolute inset-0 z-40" onPointerDown={closeAll}>
       <div
-        className="absolute top-[calc(max(env(safe-area-inset-top,0px),1.75rem)+2.75rem)] left-2 pointer-events-none max-h-[calc(100vh-6.75rem)]"
+        className="absolute top-[calc(env(safe-area-inset-top,0px)+2.75rem)] left-2 pointer-events-none max-h-[calc(100vh-6.75rem)]"
         onPointerDown={(e) => e.stopPropagation()}
       >
         {/* Every screen renders in this one panel, anchored in the same spot,

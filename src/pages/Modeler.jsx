@@ -231,8 +231,10 @@ export default function Modeler() {
     else managerRef.current?.exitSculptMode();
   }, [sculptOpen, sculptTool, sculptSize, sculptIntensity, sculptAxes]);
 
-  // Brush and spray paint directly onto the touched mesh without requiring
-  // a selection. Clear staged selections when entering these stroke tools.
+  // Surface mode preserves the selection while hiding its highlight. The
+  // wireframe remains controlled exclusively by the Display setting.
+  // Brush and spray work with nothing selected: whatever is selected when they
+  // are chosen is deselected, and nothing can be selected while they are active.
   useEffect(() => {
     if (materialsOpen && surfaceSection === 'paint' && (paintTool === 'brush' || paintTool === 'spray')) {
       managerRef.current?.exitMultiSelect();
@@ -241,11 +243,11 @@ export default function Modeler() {
     }
   }, [materialsOpen, surfaceSection, paintTool, selectedMeshId, multiSelect]);
 
+  // Multi-select never stays active across Materials opening or closing.
   useEffect(() => {
     if (managerRef.current?.multiSelect) managerRef.current.exitMultiSelect();
   }, [materialsOpen]);
 
-  // Appearance mode hides selection highlights without changing wireframe.
   useEffect(() => {
     managerRef.current?.setHighlightsHidden(materialsOpen);
     managerRef.current?.setWireframesHidden(false);
@@ -441,7 +443,8 @@ export default function Modeler() {
     setLibraryOpen(false);
     setMenuOpen(false);
     setGuideOpen(false);
-    // Keep Help visible while opening tools; only Help or Back closes it.
+    // The Help panel stays open while tools or modes are selected; only its own
+    // close button, the Help button, or Back close it.
     setLightingOpen(false);
     setSnapPanelOpen(false);
     setFreeTransformPanelOpen(false);
@@ -782,8 +785,8 @@ export default function Modeler() {
     if (!isPro) { openUpgrade('Model import requires AXIS 3D Pro.'); return; }
     setImporting(true);
     try {
-      // Worker parsing keeps large CAD imports off the touch/viewport thread.
-      // If Android cannot start a module worker the importer falls back safely.
+      // Parse and reconstruct imported topology off the UI thread. Older
+      // Android shells without module workers retain the direct fallback.
       await new Promise((r) => setTimeout(r, 50));
       const { importModelFileOffThread } = await import('@/lib/importWorkerClient');
       const meshes = await importModelFileOffThread(file);
@@ -958,7 +961,7 @@ export default function Modeler() {
       {/* The HUD and its tips only exist while the canvas is actually visible —
           menus, guides, the library and drawers hide them. */}
       {!(menuOpen || guideOpen || libraryOpen || transformDrawerOpen) && (<>
-      <div className="absolute left-[3.75rem] right-[4.25rem] top-[calc(max(env(safe-area-inset-top,0px),1.75rem)+0.25rem)] z-[60] flex flex-col items-center gap-1 pointer-events-none">
+      <div className="absolute left-[3.75rem] right-[4.25rem] top-[calc(env(safe-area-inset-top,0px)+0.25rem)] z-[60] flex flex-col items-center gap-1 pointer-events-none">
       <div className="w-fit max-w-full overflow-hidden rounded-xl" style={{ background: 'rgba(9,13,22,0.26)', border: '1px solid rgba(255,255,255,0.07)' }}>
       <ContextTip
         context={
@@ -1099,6 +1102,7 @@ export default function Modeler() {
       <GeneralToolGrid
         clearSelectionToken={toolSelectionClearTick}
         onClose={() => setToolsOpen(false)}
+        onTool={handleTool}
         onAddReference={handleAddReference}
 
         onMaterial={() => {
@@ -1116,9 +1120,14 @@ export default function Modeler() {
           closePaint();
           setToolsOpen(false);
           sculptSessionSnapshotRef.current = managerRef.current?.captureSnapshot() || null;
+          // Nothing stays selected while sculpting.
+          managerRef.current?.clearSelection();
+          setSelectedMeshId(null);
           setSculptOpen(true);
           setSculptPanelOpen(true);
         }}
+        multiSelect={multiSelect}
+        onToggleMultiSelect={handleToggleMultiSelect}
         onExitMultiSelect={() => managerRef.current?.exitMultiSelect()}
         onConvert={(type) => {
           const manager = managerRef.current;
@@ -1156,6 +1165,8 @@ export default function Modeler() {
         open={libraryOpen}
         onClose={() => setLibraryOpen(false)}
         onSelectShape={handleSelectShape}
+        segments={segments}
+        onSegmentsChange={(v) => { toolMemory.primitiveSegments = v; setSegments(v); }}
         managerRef={managerRef}
       />
 
@@ -1197,6 +1208,7 @@ export default function Modeler() {
           managerRef={managerRef}
           onClose={closeMaterials}
           onBack={() => { closeMaterials(); setToolsOpen(true); }}
+          open={surfaceSub}
           onOpenChange={setSurfaceSub}
           section={surfaceSection}
           onSectionChange={(section) => {
@@ -1206,8 +1218,10 @@ export default function Modeler() {
           }}
           selectionMode={selectionMode}
           onSelectionMode={enterObjectMode}
+          pickerOpen={pickerOpen}
           onPickerOpenChange={setPickerOpen}
           paintTool={paintTool}
+          lastVertexTool={lastVertexPaintTool}
           paintColor={paintColor}
           paintSize={paintSize}
           onPaintSize={setPaintSize}
@@ -1221,10 +1235,8 @@ export default function Modeler() {
             setPaintTool(tool);
           }}
           onPaintColor={(color) => {
+            // Choosing a color never changes the object; paint lands only on Apply.
             setPaintColor(color);
-            // Choosing a color never requires geometry. Preview Fill only when
-            // there is an active selection to receive that preview.
-            if (paintTool === 'fill' && selectedMeshId) managerRef.current?.previewPaintFill(color, paintOpacity / 100);
           }}
           onFill={(color = paintColor) => {
             if (paintTool === 'brush' || paintTool === 'spray') return;
@@ -1268,7 +1280,6 @@ export default function Modeler() {
         <BevelPanel
           isPro={isPro}
           onProLock={openUpgrade}
-          vertexMode={managerRef.current?._bevelSnapshot?.selection?.type === 'vertex'}
           onPreview={(options) => {
             updateBevelPreview(managerRef.current, options);
             if (managerRef.current?.bevelNotice) showToolPrompt(managerRef.current.bevelNotice);

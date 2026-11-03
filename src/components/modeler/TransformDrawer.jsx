@@ -118,7 +118,7 @@ export default function TransformDrawer({ meshId, managerRef, onClose, onApplied
 
   return (
     <div aria-label="Transform controls"
-      className="modeling-panel absolute left-0 top-[max(env(safe-area-inset-top,0px),1.75rem)] z-50 w-[34vw] max-w-[132px] overflow-y-auto border-r p-1.5 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] pointer-events-auto"
+      className="modeling-panel absolute left-0 top-[env(safe-area-inset-top,0px)] z-50 w-[34vw] max-w-[132px] overflow-y-auto border-r p-1.5 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] pointer-events-auto"
       style={panelStyle}
     >
         <div className="flex items-center justify-between mb-2">

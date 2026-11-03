@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Info } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
 import { pickTip } from '@/lib/contextTips';
 
@@ -25,7 +26,7 @@ export default function ContextTip({ context }) {
     return () => timers.forEach(clearTimeout);
   }, [turn, context]);
 
-  const tip = pickTip(context, turn);
+  const tip = pickTip();
 
   return (
     <div className="flex min-h-[1.75rem] items-center justify-center px-2 py-0.5 pointer-events-none text-center">
@@ -39,7 +40,12 @@ export default function ContextTip({ context }) {
           textShadow: '0 1px 3px rgba(0,0,0,0.6)',
         }}
       >
-        {tip}
+        {tip.split('{icon}').map((part, i, parts) => (
+          <span key={i}>
+            {part}
+            {i < parts.length - 1 && <Info className="inline-block align-text-bottom" style={{ width: 14, height: 14 }} strokeWidth={2} />}
+          </span>
+        ))}
       </div>
     </div>
   );

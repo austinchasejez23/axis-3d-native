@@ -115,7 +115,7 @@ export default function ViewGizmo({ managerRef }) {
       viewBox={`0 0 ${S} ${S}`}
       className="absolute right-[1px] z-30 pointer-events-none"
       style={{
-        top: 'calc(max(env(safe-area-inset-top, 0px), 1.75rem) + 9.25rem)',
+        top: 'calc(env(safe-area-inset-top, 0px) + 9.25rem)',
         filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))',
       }}
       role="img"

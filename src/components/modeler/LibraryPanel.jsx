@@ -223,7 +223,7 @@ export default function LibraryPanel({ open, onClose, onSelectShape, managerRef,
 
   return (
     <div className="absolute inset-0 z-50 flex flex-col" style={{ background: backgroundColor }}>
-      <div className="flex items-center justify-between px-3 pb-3 pt-[calc(max(env(safe-area-inset-top,0px),1.75rem)+0.75rem)] border-b" style={{ borderColor: borderCol }}>
+      <div className="flex items-center justify-between px-3 pb-3 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] border-b" style={{ borderColor: borderCol }}>
         {view === 'custom' ? (
           <button onClick={() => setView('basic')} className="w-9 h-9 flex items-center justify-center active:scale-95" style={{ color: uiColor }}>
             <ChevronLeft className="w-6 h-6" />
@@ -233,7 +233,7 @@ export default function LibraryPanel({ open, onClose, onSelectShape, managerRef,
             <ChevronLeft className="w-6 h-6" />
           </button>
         )}
-        <h2 className="text-base font-bold" style={{ color: uiColor }}>{view === 'custom' ? 'Custom library' : 'Basic ******'}</h2>
+        <h2 className="text-base font-bold" style={{ color: uiColor }}>{view === 'custom' ? 'Custom library' : 'Basic shapes'}</h2>
         <button onClick={() => (view === 'custom' ? setView('basic') : onClose())} className="px-3 h-9 rounded-lg border text-sm font-semibold active:scale-95" style={{ color: uiColor, borderColor: borderCol }}>
           Exit
         </button>

@@ -177,7 +177,7 @@
   /* Some Android React-Native wrappers report a zero CSS safe-area even
      though the WebView is drawn under the status bar. Keep a small physical
      fallback so top modeler controls remain tappable there. */
-  .safe-top { padding-top: max(env(safe-area-inset-top, 0px), 1.75rem); }
+  .safe-top { padding-top: env(safe-area-inset-top, 0px); }
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
   /* Modeler workspaceHeight already excludes Android's system navigation area.
      Use the Modeler's normalized inset so every bottom-docked surface shares

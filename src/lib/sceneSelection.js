@@ -60,7 +60,8 @@ export function applySceneSelection(SceneManager) {
     if (selectionChanged && sel.meshId && this.highlightsSuppressed) {
       this.revealSuppressedSelection();
     }
-    // A new selection becomes the camera orbit pivot without changing its angle.
+    // The camera orbits, pans and zooms around the selection: its pivot glides
+    // to the selection's center, keeping the zoom and viewing angle.
     if (selectionChanged && sel.meshId) this.panCameraToSelection();
     this.updateHighlights();
     this.updateStats();
@@ -432,6 +433,7 @@ export function applySceneSelection(SceneManager) {
       if (!id || this.selectedMeshIds.includes(id)) return false;
       this.selectedMeshIds.push(id);
       this.selection = { meshId: this.selectedMeshIds[0], type: 'object', indices: [] };
+      this.revealSuppressedSelection();
       this.updateHighlights();
       this.updateStats();
       return true;
@@ -453,6 +455,7 @@ export function applySceneSelection(SceneManager) {
     const sel = this.selection;
     if (sel.meshId !== hit.meshId) {
       this.selection = { meshId: hit.meshId, type: mode, indices: mode === 'face' ? (hit.group || [hit.index]) : [hit.index] };
+      this.revealSuppressedSelection();
       this.updateHighlights();
       this.updateStats();
       return true;
@@ -468,6 +471,7 @@ export function applySceneSelection(SceneManager) {
       if (sel.indices.includes(idx)) return false;
       sel.indices.push(idx);
     }
+    this.revealSuppressedSelection();
     this.updateHighlights();
     this.updateStats();
     return true;
@@ -655,6 +659,7 @@ export function applySceneSelection(SceneManager) {
       if (matched.length > 0) {
         this.selectedMeshIds = matched;
         this.selection = { meshId: matched[0], type: 'object', indices: [] };
+        this.revealSuppressedSelection();
         this.updateHighlights();
         this.updateStats();
       }

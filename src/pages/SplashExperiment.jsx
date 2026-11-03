@@ -123,7 +123,7 @@ export default function SplashExperiment() {
     frame=requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(frame);observer.disconnect();
-      scene.traverse(o => { if (o.isMesh && o.geometry !== box) o.geometry.dispose(); });
+      scene.traverse(o => { if (o instanceof THREE.Mesh && o.geometry !== box) o.geometry.dispose(); });
       box.dispose();metal.dispose();blue.dispose();renderer.dispose();
       if (renderer.domElement.parentNode === host) host.removeChild(renderer.domElement);
     };

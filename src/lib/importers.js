@@ -23,7 +23,7 @@ export async function importModelFile(file) {
   } else if (ext === 'fbx') {
     const buf = await file.arrayBuffer();
     await new Promise((r) => setTimeout(r, 0));
-    root = new FBXLoader().parse(buf);
+    root = new FBXLoader().parse(buf, '');
   } else if (ext === 'stl') {
     const buf = await file.arrayBuffer();
     await new Promise((r) => setTimeout(r, 0));

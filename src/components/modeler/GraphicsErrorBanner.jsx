@@ -7,7 +7,7 @@ export default function GraphicsErrorBanner({ message, onClose }) {
   const { highlightColor } = useTheme();
   if (!message) return null;
   return (
-    <div className="absolute top-[calc(max(env(safe-area-inset-top,0px),1.75rem)+4.5rem)] left-3 right-14 z-[60]">
+    <div className="absolute top-[calc(env(safe-area-inset-top,0px)+4.5rem)] left-3 right-14 z-[60]">
       <div
         className="flex items-start gap-2 px-3 py-2.5 rounded-xl border"
         style={{ borderColor: `${highlightColor}66`, background: 'rgba(10,10,12,0.92)' }}

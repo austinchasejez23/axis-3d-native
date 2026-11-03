@@ -1,6 +1,6 @@
 import {
   Globe, Scan, Gauge, Move3D, Magnet, Crosshair, ImagePlus, Palette, Hand, ArrowLeftRight, EyeOff, Grid3x3,
-  PaintBucket, Paintbrush, SprayCan, Blend, Droplet, Droplets, Pipette, Check, Undo2, Ban, Plus, SlidersHorizontal,
+  PaintBucket, Paintbrush, SprayCan, Blend, Pipette, Check, Undo2, Ban, Plus, SlidersHorizontal,
   Sun, Spline, RotateCcw, Image, FlipHorizontal2, Box,
 } from 'lucide-react';
 import { ProtractorIcon, MeasureIcon } from '@/lib/toolIcons';
@@ -38,18 +38,15 @@ export const HELP_MATERIALS = [
     title: 'Paint',
     entries: [
       { key: 'paint:wheel', label: 'Color wheel', icon: Palette, desc: 'Picks the paint color. The slider beside it sets brightness.' },
-      { key: 'paint:fill', label: 'Fill', icon: PaintBucket, desc: 'Fills the selection with the color. Shows a preview until you Apply.' },
+      { key: 'paint:fill', label: 'Fill', icon: PaintBucket, desc: 'Fills the selection with the color when you Apply.' },
       { key: 'paint:brush', label: 'Brush', icon: Paintbrush, desc: 'Paints by dragging across the surface.' },
       { key: 'paint:spray', label: 'Spray', icon: SprayCan, desc: 'Sprays soft paint as you drag across the surface.' },
-      { key: 'paint:multi', label: 'Multi', icon: Blend, desc: 'Blends two colors across the surface. Turns on Primary and Shift color.' },
-      { key: 'paint:primary', label: 'Primary color', icon: Droplet, desc: 'With Multi on, the wheel edits the base color.' },
-      { key: 'paint:shift', label: 'Shift color', icon: Droplets, desc: 'With Multi on, the wheel edits the secondary color.' },
       { key: 'paint:eyedropper', label: 'Eyedropper', icon: Pipette, desc: 'Tap the model to take a color from it.' },
       { key: 'paint:apply', label: 'Apply', icon: Check, desc: 'Applies the paint to the selection.' },
       { key: 'paint:undo', label: 'Undo', icon: Undo2, desc: 'Undoes the last paint stroke or preview.' },
       { key: 'paint:remove', label: 'Remove paint', icon: Ban, desc: 'Removes all paint from the object.' },
       { key: 'paint:save', label: 'Save color', icon: Plus, desc: 'Adds the current color to the saved colors. Tap a saved color to use it.' },
-      { key: 'paint:sliders', label: 'Size, Opacity, Hardness, Shift', icon: SlidersHorizontal, desc: 'Size, Opacity and Hardness shape brush and spray strokes. Shift sets how far Multi blends toward the secondary color.' },
+      { key: 'paint:sliders', label: 'Size, Opacity, Hardness', icon: SlidersHorizontal, desc: 'Size, Opacity and Hardness shape brush and spray strokes.' },
     ],
   },
   {
@@ -115,6 +112,7 @@ const desc = {
     clone: 'Duplicates the selected faces.',
     bridge: 'Connects two selected faces with new geometry.',
     extrude: 'Pulls the selected faces outward to create new geometry.',
+    dissolve: 'Merges two or more selected faces that touch along an edge into one face.',
     delete: 'Deletes the selected faces.',
   },
   edge: {
@@ -127,6 +125,7 @@ const desc = {
     select_ring: `Selects a ring of connected edges. ${SP}: skip and offset.`,
     select_loop: `Selects a continuous loop of edges. ${SP}: skip and offset.`,
     cut_loop: `Adds an edge loop around the object. ${SP}: cut, center, straight and follow.`,
+    dissolve: 'Removes the selected edges and merges the faces on either side of each into one face.',
     delete: 'Deletes the selected edges.',
   },
   vertex: {
@@ -135,6 +134,7 @@ const desc = {
     connect: 'Connects the selected vertices with edges.',
     target_merge: 'Moves a vertex onto a target vertex and merges them.',
     merge: 'Merges the selected vertices at a single point.',
+    dissolve: 'Removes the selected vertices and merges the faces around each into one face.',
     delete: 'Deletes the selected vertices.',
   },
 };

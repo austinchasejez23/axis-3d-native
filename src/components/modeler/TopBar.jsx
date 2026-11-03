@@ -5,7 +5,7 @@ import ViewportModeButtons from '@/components/modeler/ViewportModeButtons';
 import RenderBoostButtons from '@/components/modeler/RenderBoostButtons';
 
 const PANEL = { background: 'rgba(9,13,22,0.38)', border: '1px solid rgba(255,255,255,0.07)' };
-const TOP = 'calc(max(env(safe-area-inset-top, 0px), 1.75rem) + 0.25rem)';
+const TOP = 'calc(env(safe-area-inset-top, 0px) + 0.25rem)';
 
 export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transparentViewport, renderBoost, freeTransform, snapping, onToggleClayViewport, onToggleTransparentViewport, onToggleRenderBoost, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel, onFocus, precision, onTogglePrecision, onOpenPrecisionPanel, onHelp, helpOpen, counter }) {
   const { uiColor } = useTheme();
@@ -36,7 +36,7 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
         </button>
       </div>
       {counter && (
-        <div className="absolute left-[6px] w-12 rounded-xl pointer-events-auto" style={{ top: 'calc(max(env(safe-area-inset-top, 0px), 1.75rem) + 3.5rem)' }}>
+        <div className="absolute left-[6px] w-12 rounded-xl pointer-events-auto" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)' }}>
           {counter}
         </div>
       )}
@@ -60,7 +60,7 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
 
       {/* Fixed handle: stays in place while the seven controls slide left
           fully out of view. It occupies the original top control position. */}
-      <div className="absolute left-[6px] w-12 rounded-xl pointer-events-auto" style={{ ...PANEL, top: 'calc(max(env(safe-area-inset-top, 0px), 1.75rem) + 5.6rem)' }}>
+      <div className="absolute left-[6px] w-12 rounded-xl pointer-events-auto" style={{ ...PANEL, top: 'calc(env(safe-area-inset-top, 0px) + 5.6rem)' }}>
         <button
           type="button"
           onClick={toggleSideControls}
@@ -86,7 +86,7 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
           }
         }}
         className="absolute left-[6px] w-12 rounded-xl py-1 flex flex-col items-center pointer-events-auto transition-transform duration-300 ease-in-out motion-reduce:transition-none"
-        style={{ ...PANEL, top: 'calc(max(env(safe-area-inset-top, 0px), 1.75rem) + 8.6rem)', transform: sideControlsExpanded ? 'translateX(0)' : 'translateX(calc(-100% - 12px))', pointerEvents: sideControlsExpanded ? 'auto' : 'none' }}>
+        style={{ ...PANEL, top: 'calc(env(safe-area-inset-top, 0px) + 8.6rem)', transform: sideControlsExpanded ? 'translateX(0)' : 'translateX(calc(-100% - 12px))', pointerEvents: sideControlsExpanded ? 'auto' : 'none' }}>
         <ViewportModeButtons clay={clayViewport} transparent={transparentViewport}
           onClay={onToggleClayViewport} onTransparent={onToggleTransparentViewport} />
         <div className="h-[10px] w-full" aria-hidden="true" />
