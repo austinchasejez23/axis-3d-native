@@ -81,17 +81,6 @@ public class AxisPlayBillingPlugin extends Plugin {
         return text == null || text.isEmpty() ? fallback : text;
     }
 
-    @PluginMethod
-    public void checkConnection(PluginCall call) {
-        connected(call, () -> {
-            JSObject response = new JSObject();
-            response.put("connected", true);
-            response.put("responseCode", BillingClient.BillingResponseCode.OK);
-            response.put("message", "Connected to Google Play.");
-            call.resolve(response);
-        });
-    }
-
     /** Lists the Pro plans with Google's localized prices. */
     @PluginMethod
     public void getProducts(PluginCall call) {

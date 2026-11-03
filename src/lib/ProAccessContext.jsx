@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import UpgradeSheet from '@/components/pro/UpgradeSheet';
 import { getCloudSession } from '@/lib/supabaseTest';
-import { readEntitlement, restorePurchases } from '@/lib/proPurchases';
+import { SUBSCRIPTIONS_ENABLED, readEntitlement, restorePurchases } from '@/lib/proPurchases';
 
 // Pro comes only from the account's entitlement, which the Supabase purchase
 // check writes after Google confirms a payment. The last confirmed answer is
@@ -15,6 +15,8 @@ function stillValid(access) {
 }
 
 function readCache(userId) {
+  // Subscriptions are off: Pro saved on this phone earlier is not used.
+  if (!SUBSCRIPTIONS_ENABLED) return null;
   try {
     const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
     return cached?.userId === userId && stillValid(cached) ? cached : null;

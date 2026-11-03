@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Crown, Loader2, X } from 'lucide-react';
 import { getCloudSession } from '@/lib/supabaseTest';
-import { buyPlan, canBuyInApp, loadPlans, restorePurchases } from '@/lib/proPurchases';
+import { SUBSCRIPTIONS_ENABLED, buyPlan, canBuyInApp, loadPlans, restorePurchases } from '@/lib/proPurchases';
 
 export default function UpgradeSheet({ open, reason, onClose, isPro = false, onAccess }) {
   const navigate = useNavigate();
@@ -56,7 +56,9 @@ export default function UpgradeSheet({ open, reason, onClose, isPro = false, onA
           <button type="button" onClick={onClose} aria-label="Close upgrade" className="p-1 text-white/70"><X className="h-5 w-5" /></button>
         </div>
 
-        {!canBuyInApp() ? (
+        {!SUBSCRIPTIONS_ENABLED ? (
+          <p className="text-sm text-white/75">AXIS 3D Pro is not available yet.</p>
+        ) : !canBuyInApp() ? (
           <p className="text-sm text-white/75">Pro can be bought in the AXIS Android app from Google Play.</p>
         ) : !signedIn ? (
           <>

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-// Purchases are on, but Pro may only ever come from the server, after Google
-// confirms a payment. The phone never grants Pro or acknowledges an order.
+// Subscriptions are built but switched off. When on, Pro may only ever come
+// from the server, after Google confirms a payment. The phone never grants Pro
+// or acknowledges an order.
 const read = p => readFileSync(p, 'utf8');
 const activity = read('android/app/src/main/java/com/base6a5340f43f8fd031c5921680/app/MainActivity.java');
 const plugin = read('android/app/src/main/java/com/base6a5340f43f8fd031c5921680/app/AxisPlayBillingPlugin.java');
@@ -24,6 +25,11 @@ assert.match(plugin, /"axis_pro_lifetime"/);
 assert.doesNotMatch(plugin, /\.acknowledgePurchase\s*\(/, 'Only the server acknowledges, after verifying');
 assert.doesNotMatch(plugin, /\.consumeAsync\s*\(/, 'Pro purchases are never consumed');
 
+assert.match(purchases, /export const SUBSCRIPTIONS_ENABLED = false;/, 'Subscriptions stay disabled');
+assert.match(purchases, /canBuyInApp = \(\) => SUBSCRIPTIONS_ENABLED &&/, 'No plans or purchases while disabled');
+assert.match(purchases, /if \(!SUBSCRIPTIONS_ENABLED \|\| !session\) return NONE;/, 'No stored Pro while disabled');
+assert.match(purchases, /if \(!SUBSCRIPTIONS_ENABLED\) return NONE;/, 'No restores while disabled');
+assert.match(access, /if \(!SUBSCRIPTIONS_ENABLED\) return null;/, 'No cached Pro while disabled');
 assert.doesNotMatch(purchases, /SERVICE_ROLE|service_role/i, 'No admin credentials in the app');
 assert.match(purchases, /\/functions\/v1\/axis-play-purchase/);
 assert.match(purchases, /axis_pro_entitlements/);
@@ -39,4 +45,4 @@ assert.match(server, /belongs to a different AXIS account/, 'A purchase cannot u
 assert.match(server, /"subs:" \+ SUBSCRIPTION, "inapp:" \+ LIFETIME/, 'Only the two Pro products are accepted');
 assert.match(server, /SUBSCRIPTION_STATE_EXPIRED/);
 assert.match(server, /action === "refresh"/, 'Refunds and renewals are re-checked with Google');
-console.log('Play purchases: Google sheet in app, verification, acknowledgement and Pro only on the server.');
+console.log('Play purchases: disabled; when on, Google sheet in app, verification, acknowledgement and Pro only on the server.');

@@ -6,8 +6,13 @@ import { cloudRequest, getCloudSession } from '@/lib/supabaseTest';
 // checks it with Google and decides Pro for the signed-in account.
 const billing = registerPlugin('AxisPlayBilling');
 const FUNCTION = '/functions/v1/axis-play-purchase';
+const NONE = { isPro: false, plan: null, validUntil: null };
 
-export const canBuyInApp = () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
+// Subscriptions are built but turned off: no plans, purchases, restores or
+// stored Pro are used until this is switched on.
+export const SUBSCRIPTIONS_ENABLED = false;
+
+export const canBuyInApp = () => SUBSCRIPTIONS_ENABLED && Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 
 async function sha256(text) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -18,7 +23,7 @@ async function sha256(text) {
 // so a purchase made on one phone unlocks Pro on another after sign-in.
 export async function readEntitlement() {
   const session = getCloudSession();
-  if (!session) return { isPro: false, plan: null, validUntil: null };
+  if (!SUBSCRIPTIONS_ENABLED || !session) return NONE;
   const rows = await cloudRequest('/rest/v1/axis_pro_entitlements?select=status,valid_until,external_reference&user_id=eq.' + session.user.id);
   const row = Array.isArray(rows) ? rows[0] : null;
   const live = row && ['active', 'trialing'].includes(row.status) &&
@@ -51,6 +56,7 @@ async function verify(purchases) {
 }
 
 export async function buyPlan(plan) {
+  if (!SUBSCRIPTIONS_ENABLED) throw new Error('AXIS 3D Pro is not available yet.');
   const session = getCloudSession();
   if (!session) throw new Error('Sign in to your AXIS account first, so Pro stays with you.');
   const accountId = await sha256(session.user.id);
@@ -64,6 +70,7 @@ export async function buyPlan(plan) {
 // Re-sends this Google account's Play purchases and re-checks stored ones,
 // so renewals, refunds and purchases from another phone all apply.
 export async function restorePurchases() {
+  if (!SUBSCRIPTIONS_ENABLED) return NONE;
   if (!getCloudSession()) throw new Error('Sign in to your AXIS account first.');
   if (canBuyInApp()) {
     const { purchases = [] } = await billing.queryPurchases();
