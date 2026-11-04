@@ -74,8 +74,10 @@ android {
             if (axisSigningReady) {
                 signingConfig signingConfigs.axisUpload
             }
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // R8: shrinks and optimizes code and drops unused resources.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }

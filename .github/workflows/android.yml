@@ -84,6 +84,20 @@ jobs:
           export AXIS_UPLOAD_KEYSTORE="$PWD/android/upload.jks"
           cd android && ./gradlew --no-daemon bundleRelease
 
+      - name: Check R8 kept the web bridge and the AXIS plugins
+        if: hashFiles('android/app/build/outputs/bundle/release/app-release.aab') != ''
+        run: |
+          AAB=android/app/build/outputs/bundle/release/app-release.aab
+          rm -rf /tmp/aab && mkdir -p /tmp/aab && unzip -q "$AAB" 'base/dex/*' -d /tmp/aab
+          DEXDUMP="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)dexdump"
+          for dex in /tmp/aab/base/dex/*.dex; do "$DEXDUMP" "$dex"; done > /tmp/aab/dump.txt
+          for needed in 'Lcom/getcapacitor/MessageHandler;' 'postMessage' \
+                        'Lcom/base6a5340f43f8fd031c5921680/app/AxisFilesPlugin;' 'saveFile' \
+                        'Lcom/base6a5340f43f8fd031c5921680/app/AxisPlayBillingPlugin;' 'getProducts' 'queryPurchases'; do
+            grep -qF "$needed" /tmp/aab/dump.txt || { echo "::error::R8 removed $needed"; rm -f "$AAB"; exit 1; }
+          done
+          echo "R8 kept the Capacitor bridge and AXIS plugins."
+
       - name: Check which key signed the bundle
         if: hashFiles('android/app/build/outputs/bundle/release/app-release.aab') != ''
         run: |

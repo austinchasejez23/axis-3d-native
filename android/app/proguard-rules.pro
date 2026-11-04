@@ -19,3 +19,12 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# The web app talks to Android through the Capacitor bridge
+# (@JavascriptInterface methods) and the AXIS plugins; R8 must keep both.
+-keepattributes *Annotation*,JavascriptInterface
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+-keep class com.getcapacitor.** { *; }
+-keep class com.base6a5340f43f8fd031c5921680.app.** { *; }
