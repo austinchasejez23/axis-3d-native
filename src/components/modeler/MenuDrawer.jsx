@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { FileText, Settings as SettingsIcon, FilePlus, Save, LayoutGrid, FileDown, Upload, Monitor, Sun, User, BookOpen, Mail, ChevronDown, ChevronRight, Grid2X2, Highlighter, Boxes, Box } from 'lucide-react';
 import AccountPanel from './AccountPanel';
 import { useTheme } from '@/lib/theme';
@@ -44,7 +44,7 @@ const TITLES = {
   gridColor: 'Grid color',
 };
 
-export default function MenuDrawer({ open, onClose, backRef, projectName, onRename, onNewProject, onSaveProject, onExport, onLibrary, onImport, onImportFromLibrary, currentProjectId, onGuide, onLighting, display, isPro, onProLock, initialScreen = null, onConsumeInitialScreen = undefined }) {
+export default function MenuDrawer({ open, onClose, backRef, projectName, onRename, onNewProject, onSaveProject, onExport, onLibrary, onImport, onImportFromLibrary, currentProjectId, onGuide, onLighting, display, isPro, onProLock, initialScreen = null, onConsumeInitialScreen = undefined, onPanelRect = undefined }) {
   const { uiColor, highlightColor, backgroundColor } = useTheme();
   // Navigation stack: every sub-menu REPLACES the one before it in the same
   // spot, and the header's back chevron steps back exactly one level.
@@ -88,6 +88,30 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
     };
     return () => { backRef.current = null; };
   }, [backRef, stack]);
+  // Tells the page where the open menu sits, so it only hides what the menu
+  // actually covers.
+  const reportedRect = useRef('');
+  const reportPanelRect = () => {
+    let rect = null;
+    for (const child of cascadeLayoutRef.current?.children || []) {
+      const box = child.getBoundingClientRect();
+      if (!box.width || !box.height) continue;
+      rect = rect
+        ? { left: Math.min(rect.left, box.left), top: Math.min(rect.top, box.top), right: Math.max(rect.right, box.right), bottom: Math.max(rect.bottom, box.bottom) }
+        : { left: box.left, top: box.top, right: box.right, bottom: box.bottom };
+    }
+    const key = rect ? [rect.left, rect.top, rect.right, rect.bottom].map(Math.round).join(',') : '';
+    if (key !== reportedRect.current) { reportedRect.current = key; onPanelRect?.(rect); }
+  };
+  useLayoutEffect(reportPanelRect);
+  useEffect(() => {
+    const node = cascadeLayoutRef.current;
+    if (!open || !node || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(reportPanelRect);
+    observer.observe(node);
+    for (const child of node.children) observer.observe(child);
+    return () => observer.disconnect();
+  }, [open, stack, viewportCascade]);
   if (!open) return null;
   const closeAll = () => { setStack([]); setViewportCascade(null); onClose(); };
   const borderCol = 'rgba(255,255,255,0.10)';

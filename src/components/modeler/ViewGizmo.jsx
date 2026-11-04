@@ -35,7 +35,7 @@ function setPosition(node, point) {
   node.setAttribute('cy', String(point.y));
 }
 
-export default function ViewGizmo({ managerRef }) {
+export default function ViewGizmo({ managerRef, coverRef = undefined, hidden = false }) {
   const { highlightColor } = useTheme();
   const svgRef = useRef(null);
   const ringRefs = useRef([]);
@@ -109,15 +109,16 @@ export default function ViewGizmo({ managerRef }) {
 
   return (
     <svg
-      ref={svgRef}
+      ref={(node) => { svgRef.current = node; if (coverRef) coverRef.current = node; }}
       width={S}
       height={S}
       viewBox={`0 0 ${S} ${S}`}
-      className="absolute right-[1px] z-30 pointer-events-none"
+      className="absolute right-[7px] z-30 pointer-events-none"
       style={{
         // Directly under Undo, above the information button.
         top: 'calc(env(safe-area-inset-top, 0px) + 108px)',
         filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))',
+        visibility: hidden ? 'hidden' : undefined,
       }}
       role="img"
       aria-label="World axis orientation: X red, Y green, Z blue; filled ends are positive and hollow ends are negative."

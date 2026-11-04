@@ -30,6 +30,8 @@ assert.match(purchases, /canBuyInApp = \(\) => SUBSCRIPTIONS_ENABLED &&/, 'No pl
 assert.match(purchases, /if \(!SUBSCRIPTIONS_ENABLED \|\| !session\) return NONE;/, 'No stored Pro while disabled');
 assert.match(purchases, /if \(!SUBSCRIPTIONS_ENABLED\) return NONE;/, 'No restores while disabled');
 assert.match(access, /if \(!SUBSCRIPTIONS_ENABLED\) return null;/, 'No cached Pro while disabled');
+assert.match(access, /const FREE_ACCESS = !SUBSCRIPTIONS_ENABLED;/, 'Pro tools are free only while subscriptions are disabled');
+assert.match(access, /isPro: FREE_ACCESS \|\| stillValid\(access\)/, 'Free access, otherwise only a verified entitlement');
 assert.doesNotMatch(purchases, /SERVICE_ROLE|service_role/i, 'No admin credentials in the app');
 assert.match(purchases, /\/functions\/v1\/axis-play-purchase/);
 assert.match(purchases, /axis_pro_entitlements/);

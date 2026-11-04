@@ -55,6 +55,7 @@ import { toolMemory } from '@/lib/toolMemory';
 import { useTheme, theme } from '@/lib/theme';
 import { setRenderBoostManual, resetRenderBoostAuto } from '@/lib/renderBoost';
 import useBackDismiss from '@/hooks/use-back-dismiss';
+import useCoveredBy from '@/hooks/use-covered-by';
 import useAutoSave from '@/hooks/use-autosave';
 import { isRadialPrimitive } from '@/lib/primitives';
 import useKeyboardViewport from '@/hooks/use-keyboard-viewport';
@@ -80,6 +81,12 @@ export default function Modeler() {
   const [toolSelectionClearTick] = useState(0);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Where the open menu sits: only what it actually covers is hidden.
+  const [menuRect, setMenuRect] = useState(null);
+  const [tipRef, tipCovered] = useCoveredBy(menuOpen ? menuRect : null);
+  const [hudPillRef, hudCovered] = useCoveredBy(menuOpen ? menuRect : null);
+  const [promptsRef, promptsCovered] = useCoveredBy(menuOpen ? menuRect : null);
+  const [gizmoRef, gizmoCovered] = useCoveredBy(menuOpen ? menuRect : null);
   const [lightingOpen, setLightingOpen] = useState(false);
   const [lightingState, setLightingState] = useState(null);
   // New shapes are created with the segment count last used on a shape.
@@ -1037,10 +1044,11 @@ export default function Modeler() {
       />
 
       {/* The HUD and its tips only exist while the canvas is actually visible —
-          menus, guides, the library and drawers hide them. */}
-      {!(menuOpen || guideOpen || libraryOpen || transformDrawerOpen) && (<>
+          guides, the library and drawers hide them; the menu hides only what
+          it covers. */}
+      {!(guideOpen || libraryOpen || transformDrawerOpen) && (<>
       <div className="absolute left-[3.75rem] right-[4.25rem] top-[calc(env(safe-area-inset-top,0px)+0.25rem)] z-[60] flex flex-col items-center gap-1 pointer-events-none">
-      <div className="w-fit max-w-full overflow-hidden rounded-xl" style={{ background: 'rgba(9,13,22,0.26)', border: '1px solid rgba(255,255,255,0.07)' }}>
+      <div ref={tipRef} className="w-fit max-w-full overflow-hidden rounded-xl" style={{ background: 'rgba(9,13,22,0.26)', border: '1px solid rgba(255,255,255,0.07)', visibility: tipCovered ? 'hidden' : undefined }}>
       <ContextTip
         context={
           cut?.kind === 'loop' ? 'cutLoop'
@@ -1060,7 +1068,7 @@ export default function Modeler() {
         }
       />
       </div>
-      <div className="w-fit max-w-full overflow-hidden rounded-xl" style={{ background: 'rgba(9,13,22,0.26)', border: '1px solid rgba(255,255,255,0.07)' }}>
+      <div ref={hudPillRef} className="w-fit max-w-full overflow-hidden rounded-xl" style={{ background: 'rgba(9,13,22,0.26)', border: '1px solid rgba(255,255,255,0.07)', visibility: hudCovered ? 'hidden' : undefined }}>
       <PositionHud
         hud={hud}
         onOpenTransform={(target) => {
@@ -1076,6 +1084,7 @@ export default function Modeler() {
       />
       </div>
       {/* Labels and prompts stack in this same column under the HUD, so they can never overlap it or each other. */}
+      <div ref={promptsRef} className="w-full flex flex-col items-center gap-1" style={{ visibility: promptsCovered ? 'hidden' : undefined }}>
       <MultiSelectLabel active={multiSelect} />
       <ToolAnnouncement suppressed={multiSelect} toolActive={!!(draw?.active || cut || addVertex || selectionPattern || bevelOpen || booleanPanel || radialArrayOpen || measureMode || angleMode || materialsOpen || sculptOpen || transformDrawerOpen)} />
       <PaintToolFlash suppressed={multiSelect} />
@@ -1106,7 +1115,8 @@ export default function Modeler() {
         </div>
       )}
       </div>
-      <ViewGizmo managerRef={managerRef} />
+      </div>
+      <ViewGizmo managerRef={managerRef} coverRef={gizmoRef} hidden={gizmoCovered} />
       </>)}
 
       {modeToolsOpen && (
@@ -1250,6 +1260,7 @@ export default function Modeler() {
 
       <MenuDrawer
         open={menuOpen}
+        onPanelRect={setMenuRect}
         backRef={menuBackRef}
         onClose={() => setMenuOpen(false)}
         projectName={projectName}

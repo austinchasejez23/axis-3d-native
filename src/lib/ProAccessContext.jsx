@@ -9,6 +9,9 @@ import { SUBSCRIPTIONS_ENABLED, readEntitlement, restorePurchases } from '@/lib/
 const ProAccessContext = createContext(null);
 const CACHE_KEY = 'axis.pro.access';
 const NONE = { isPro: false, plan: null, validUntil: null };
+// Subscriptions are disabled, so every Pro tool is open to everyone (like
+// production's free-access period) until they are switched on.
+const FREE_ACCESS = !SUBSCRIPTIONS_ENABLED;
 
 function stillValid(access) {
   return !!access?.isPro && (!access.validUntil || Date.parse(access.validUntil) > Date.now());
@@ -65,7 +68,7 @@ export function ProAccessProvider({ children }) {
   const openUpgrade = useCallback((reason) => setUpgradeReason(reason || 'This feature requires Pro.'), []);
   const closeUpgrade = useCallback(() => setUpgradeReason(null), []);
   const value = useMemo(() => ({
-    isPro: stillValid(access),
+    isPro: FREE_ACCESS || stillValid(access),
     plan: access.plan,
     validUntil: access.validUntil,
     openUpgrade,
