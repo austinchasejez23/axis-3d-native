@@ -96,13 +96,11 @@ export function applySceneLights(SceneManager) {
     const channelMean = (color.r + color.g + color.b) / 3;
     if (channelMean > 1e-6) color.multiplyScalar(1 / channelMean);
     object.color.copy(color);
-    // Only the Intensity slider changes light power. The slider works in
-    // exposure steps: 0 is off, the default 1.5 lights a nearby object at a
-    // mid level (spot and point lights used to be near pure white already),
-    // and each step up roughly doubles the light, so the whole slider range
-    // visibly changes the scene instead of flattening out at the top.
+    // Only the Intensity slider changes light power, evenly along the slider:
+    // 0 is off, the default 1.5 lights an object at a mid level, and the top
+    // is bright without washing every face out to the same white.
     const level = clamp(record.intensity ?? 1.5, 0, 5);
-    const gain = (2 ** level - 1) / (2 ** 1.5 - 1);
+    const gain = level / 1.5;
     object.intensity = gain * (record.type === 'directional' ? 3.4 : 22);
     object.castShadow = custom && !!record.shadows;
     object.shadow.intensity = clamp(record.shadowIntensity, 0, 1);
@@ -184,10 +182,9 @@ export function applySceneLights(SceneManager) {
   P.applyLighting = /** @this {import("./SceneManager").SceneManager} */ function () {
     // Default lighting: a studio setup with a real key light from above and to
     // the side (so objects show a lit and a shaded side, and can cast shadows),
-    // plus softer fill. Custom lighting: the user's lights do the work. Only a
-    // faint fill and a little environment remain, enough that metal is not
-    // pitch black, so every light setting has a clearly visible effect and the
-    // scene goes dark when the lights are turned down.
+    // plus softer fill. Custom lighting: the user's lights do the work over a
+    // soft sky fill, so the sides they don't reach stay readable instead of
+    // going black, while every light setting still visibly changes the scene.
     const base = theme.defaultLightingEnabled;
     if (this.dirLight) {
       this.dirLight.intensity = base ? 2 : 0;
@@ -198,9 +195,9 @@ export function applySceneLights(SceneManager) {
         this.dirLight.target.updateMatrixWorld();
       }
     }
-    if (this.ambientLight) this.ambientLight.intensity = base ? 0.3 : 0.03;
+    if (this.ambientLight) this.ambientLight.intensity = base ? 0.3 : 0.15;
     if (this.hemiLight) {
-      this.hemiLight.intensity = base ? 0.5 : 0.06;
+      this.hemiLight.intensity = base ? 0.5 : 0.35;
       this.hemiLight.color.set(0xffffff);
       this.hemiLight.groundColor.set(0x888888);
     }
@@ -208,7 +205,7 @@ export function applySceneLights(SceneManager) {
       this.fillLight.intensity = base ? 0.35 : 0;
       this.fillLight.color.set(0xffffff);
     }
-    this.scene.environmentIntensity = base ? 0.7 : 0.22;
+    this.scene.environmentIntensity = base ? 0.7 : 0.5;
     for (const light of this.sceneLights || []) this._syncSceneLight(light);
   };
   P.setLightingEdit = /** @this {import("./SceneManager").SceneManager} */ function (active) {

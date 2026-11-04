@@ -35,6 +35,8 @@ try {
       isGroupMode: () => false,
       getMesh(id) { return this.meshes.find(mesh => mesh.id === id); },
       pushUndo() { this.undoCalls = (this.undoCalls || 0) + 1; },
+      captureSnapshot() { return null; },
+      pushUndoSnapshot() { this.undoCalls = (this.undoCalls || 0) + 1; },
       removeMesh(id) { this.meshes = this.meshes.filter(mesh => mesh.id !== id); },
       rebuildThreeMesh() { this.rebuilds = (this.rebuilds || 0) + 1; },
       edgeIndicesForPairs(mesh, pairs) { return SceneManager.prototype.edgeIndicesForPairs.call(this, mesh, pairs); },

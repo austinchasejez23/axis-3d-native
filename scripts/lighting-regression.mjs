@@ -86,14 +86,13 @@ try {
     assert.ok(Math.abs(mean(white) - mean(full)) < 1e-4);
     console.log('PASS: color strength changes hue saturation without dimming light');
 
-    // Intensity works in exposure steps: 0 is off, and each step up roughly
-    // doubles the light, all the way to the top of the slider.
+    // Intensity rises evenly from off to bright along the whole slider.
     const powerAt = (level) => { light.intensity = level; manager._syncSceneLight(light); return light.object.intensity; };
     assert.equal(powerAt(0), 0, 'Intensity 0 turns the light off');
-    assert.ok(Math.abs(powerAt(3) / powerAt(2) - 7 / 3) < 1e-9, 'Each step up roughly doubles the light');
+    assert.ok(Math.abs(powerAt(3) / powerAt(1.5) - 2) < 1e-9, 'Twice the slider is twice the light');
     assert.ok(powerAt(5) > powerAt(4) && powerAt(4) > powerAt(3), 'Brightness keeps rising to the top of the slider');
     assert.equal(powerAt(2), power, 'Only intensity slider controls brightness');
-    console.log('PASS: intensity runs from off to bright in exposure steps');
+    console.log('PASS: intensity runs evenly from off to bright');
     manager._disposeSceneLight(light);
 
     theme.set({ defaultLightingEnabled: true });

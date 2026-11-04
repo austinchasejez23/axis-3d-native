@@ -9,7 +9,10 @@ import ModelingPanel from '@/components/modeler/ModelingPanel';
 export default function RadialArrayPanel({ onPreview, onApply, onCancel }) {
   const { uiColor, highlightColor } = useTheme();
   const [values, setValues] = useState(() => ({ ...toolMemory.radialArray }));
-  const [keypadOpen, setKeypadOpen] = useState(false);
+  // One keypad at a time: Count and Radius each have their own, so typing goes
+  // to the field that was tapped.
+  const [activeKeypad, setActiveKeypad] = useState(null);
+  const keypad = (name) => ({ keypadOpen: activeKeypad === name, onKeypadOpen: (open = true) => setActiveKeypad(open ? name : null) });
   const update = (change) => {
     const next = { ...values, ...change };
     setValues(next);
@@ -18,7 +21,7 @@ export default function RadialArrayPanel({ onPreview, onApply, onCancel }) {
   };
   const buttonStyle = (active) => ({ color: active ? highlightColor : uiColor });
   return (
-    <ModelingPanel label="Radial array controls" keypadOpen={keypadOpen}>
+    <ModelingPanel label="Radial array controls" keypadOpen={!!activeKeypad}>
       <div className="py-1.5">
         <div className="mb-1.5 flex items-center">
           <div className="flex min-w-0 flex-1 items-center gap-1.5 pl-0.5">
@@ -38,11 +41,11 @@ export default function RadialArrayPanel({ onPreview, onApply, onCancel }) {
           <div className="grid grid-cols-2">
             <div className="min-w-0 border-r border-white/15 pr-3">
               <div className="mb-1 flex items-center gap-1 text-[12px] font-semibold" style={{ color: uiColor }}><Layers className="h-3.5 w-3.5 shrink-0 opacity-80" />Count</div>
-              <HorizontalChevronStepper label="Count" value={values.count} onChange={(count) => update({ count })} step={1} min={2} max={64} color={uiColor} highlightColor={highlightColor} appearance="radial" keypadOpen={keypadOpen} onKeypadOpen={(open = true) => setKeypadOpen(open)} />
+              <HorizontalChevronStepper label="Count" value={values.count} onChange={(count) => update({ count })} step={1} min={2} max={64} color={uiColor} highlightColor={highlightColor} appearance="radial" {...keypad('count')} />
             </div>
             <div className="min-w-0 pl-3">
               <div className="mb-1 flex items-center gap-1 text-[12px] font-semibold" style={{ color: uiColor }}><CircleDot className="h-3.5 w-3.5 shrink-0 opacity-80" />Radius (scale units)</div>
-              <HorizontalChevronStepper label="Radius" value={values.radius ?? 3} onChange={(radius) => update({ radius })} step={0.25} decimals={2} min={0} max={1000} color={uiColor} highlightColor={highlightColor} appearance="radial" keypadOpen={keypadOpen} onKeypadOpen={(open = true) => setKeypadOpen(open)} />
+              <HorizontalChevronStepper label="Radius" value={values.radius ?? 3} onChange={(radius) => update({ radius })} step={0.25} decimals={2} min={0} max={1000} color={uiColor} highlightColor={highlightColor} appearance="radial" {...keypad('radius')} />
             </div>
           </div>
           <div className="mt-1.5 flex items-center border-t border-white/10 pt-1.5">

@@ -179,6 +179,56 @@ function dissolveVertex(mesh, vid) {
   return true;
 }
 
+// Delete for vertices removes no other geometry. A vertex that is a corner
+// (a merging point) of any face is refused. One that only sits on a straight
+// edge between two neighbours is taken out of the faces around it, which keep
+// their shape. With apply = false nothing changes; it only answers whether
+// the vertex may be deleted.
+function deleteStraightVertex(mesh, vid, apply) {
+  if (!mesh.getVertex(vid)) return true;
+  const touching = mesh._ensureVertexFaceMap().get(vid);
+  if (!touching?.length) {
+    if (apply) { mesh.vertices = mesh.vertices.filter((v) => v.id !== vid); mesh.invalidateCache(); }
+    return true;
+  }
+  const neighbours = new Set();
+  for (const e of mesh.getEdges()) {
+    if (e.v1 === vid) neighbours.add(e.v2);
+    else if (e.v2 === vid) neighbours.add(e.v1);
+  }
+  if (neighbours.size !== 2) return false;
+  const [a, b] = [...neighbours].map((id) => mesh.getVertex(id));
+  const v = mesh.getVertex(vid);
+  if (!a || !b) return false;
+  const ux = a.x - v.x, uy = a.y - v.y, uz = a.z - v.z;
+  const wx = b.x - v.x, wy = b.y - v.y, wz = b.z - v.z;
+  const lu = Math.hypot(ux, uy, uz), lw = Math.hypot(wx, wy, wz);
+  if (lu < 1e-12 || lw < 1e-12) return false;
+  if ((ux * wx + uy * wy + uz * wz) / (lu * lw) > STRAIGHT) return false;
+  const { groupOf, groups } = visualFaceGroups(mesh);
+  const removed = new Set();
+  const adds = [];
+  for (const root of new Set(touching.map((fi) => groupOf[fi]))) {
+    const own = groups.get(root);
+    const loop = (own.length === 1 ? [...mesh.faces[own[0]]] : mergeLoop(mesh, own)?.loop)?.filter((id) => id !== vid);
+    if (!loop || loop.length < 3 || !checkPolygon(mesh, loop).ok) return false;
+    own.forEach((fi) => removed.add(fi));
+    adds.push({ poly: loop, color: firstColor(mesh, own), tris: null });
+  }
+  if (apply) replaceFaces(mesh, removed, adds);
+  return true;
+}
+
+// True when every vertex may be deleted without removing other geometry; then
+// they are deleted. Otherwise nothing changes.
+export function deleteVerticesKeepingGeometry(mesh, ids) {
+  mesh.lockTriangulationDiagonals();
+  if (!ids.every((vid) => deleteStraightVertex(mesh, vid, false))) return false;
+  for (const vid of ids) deleteStraightVertex(mesh, vid, true);
+  cleanupCommittedTopology(mesh);
+  return true;
+}
+
 function dissolveVertices(mesh, ids) {
   let changed = 0;
   for (const vid of ids) if (dissolveVertex(mesh, vid)) changed++;

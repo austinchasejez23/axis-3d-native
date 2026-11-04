@@ -311,6 +311,7 @@ export default function Modeler() {
   }, [clayViewport, transparentViewport, isPro, openUpgrade, navigate]);
 
   // Keyboard undo
+  const undoActionRef = useRef(null);
   useEffect(() => {
     const handler = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
@@ -321,7 +322,7 @@ export default function Modeler() {
         handleRedo();
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault();
-        handleUndo();
+        undoActionRef.current?.();
       }
     };
     window.addEventListener('keydown', handler);
@@ -457,13 +458,6 @@ export default function Modeler() {
     || toolsOpen || modeToolsOpen || segmentsOpen || radialArrayOpen || snapPanelOpen || freeTransformPanelOpen || !!selectionPattern || !!addVertex || !!booleanPanel;
   useBackDismiss(anyPanelOpen, handleBackStep);
 
-  const handleUndo = useCallback(() => {
-    // Tapping undo while a tool bar is open closes it (applies to all modes).
-    setModeToolsOpen(false);
-    setToolsOpen(false);
-    managerRef.current?.undo();
-  }, []);
-
   const handleRedo = useCallback(() => {
     setModeToolsOpen(false);
     setToolsOpen(false);
@@ -504,6 +498,29 @@ export default function Modeler() {
     if (!BOOLEAN_OPERATION_IDS.has(keep)) closeOpenBoolean();
     if (keep !== 'measure') stopMeasure();
   }, [cancelOpenAddVertex, cancelOpenBevel, cancelOpenRadialArray, closeOpenBoolean, stopMeasure, closeMaterials, closeSculpt]);
+
+  // Undo closes whatever panel or tool bar is open. A panel holding an edit
+  // that was never applied (Bevel, Radial array, Add vertex) is cancelled,
+  // which takes that edit back; otherwise the last step is undone.
+  const handleUndo = useCallback(() => {
+    const cancelled = cancelOpenAddVertex() || cancelOpenBevel() || cancelOpenRadialArray();
+    if (transformDrawerOpen) transformApplyRef.current?.();
+    dismissActiveTool();
+    setHelpOpen(false);
+    setModeToolsOpen(false);
+    setToolsOpen(false);
+    if (!cancelled) managerRef.current?.undo();
+  }, [cancelOpenAddVertex, cancelOpenBevel, cancelOpenRadialArray, dismissActiveTool, transformDrawerOpen]);
+  undoActionRef.current = handleUndo;
+
+  // Radial array works on one selected object: once nothing is selected the
+  // panel closes and its preview copies go away.
+  useEffect(() => {
+    if (!radialArrayOpen || selectedMeshId) return;
+    managerRef.current?.cancelRadialArray();
+    managerRef.current?.clearSelection();
+    setRadialArrayOpen(false);
+  }, [radialArrayOpen, selectedMeshId]);
 
   // Material and Texture edit whole objects: entering them switches to Object
   // mode, converting the current selection to its object so nothing is lost.
@@ -700,8 +717,9 @@ export default function Modeler() {
     }
     const limitSnapshot = !isPro && TRIANGLE_GROWTH_TOOLS.has(toolId) ? manager?.captureSnapshot() : null;
     manager?.executeTool(toolId);
-    // Dissolve reports why it could not merge (open boundary, non-planar result, ...).
-    if (toolId === 'dissolve' && manager?.toolNotice) showToolPrompt(manager.toolNotice);
+    // Dissolve reports why it could not merge (open boundary, non-planar result,
+    // ...); Delete reports a vertex it refused because it is a face corner.
+    if ((toolId === 'dissolve' || toolId === 'delete') && manager?.toolNotice) showToolPrompt(manager.toolNotice);
     if (!isPro && totalTriangles(manager) > FREE_TRIANGLE_LIMIT) {
       if (limitSnapshot) manager.restoreSnapshot(limitSnapshot);
       openUpgrade(`Free scenes are limited to ${FREE_TRIANGLE_LIMIT.toLocaleString()} triangles.`);

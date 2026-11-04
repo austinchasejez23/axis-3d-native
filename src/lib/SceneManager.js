@@ -3,7 +3,7 @@ import { EditableMesh } from './EditableMesh';
 import { createPrimitive, createPrimitiveSegments } from './primitives';
 import { generateProjectId } from './storage';
 import { makeShadowFloor } from './shadowFloor';
-import { dissolveSelection } from './dissolveTools';
+import { dissolveSelection, deleteVerticesKeepingGeometry } from './dissolveTools';
 import { toggleSmoothShading, separateMesh as separateMeshTool, createFaceFromVertices, targetMergeVertices, connectVertices, detachFaces, cloneFaces, splitEdge, bevelEdge, selectLoop, selectRing, createFaceFromBorder } from './meshTools';
 import { theme } from './theme';
 import { createMaterial as buildMaterial, applyShadows as applyShadowsFn, applyShine as applyShineFn, applyWireframe as applyWireframeFn, updateObjectMaterial as updateObjectMaterialFn } from './materials';
@@ -1859,6 +1859,7 @@ export class SceneManager {
 
   deleteSelection() {
     const sel = this.selection;
+    this.toolNotice = null;
     if (!sel.meshId) return;
     // Group delete: remove every selected object.
     if (this.isGroupMode()) {
@@ -1870,6 +1871,25 @@ export class SceneManager {
       this.updateStats();
       return;
     }
+    if (sel.type === 'vertex') {
+      // A vertex is only deleted when that removes no other geometry: never
+      // a corner (merging point) of a face. Otherwise nothing changes, the
+      // selection stays and the reason is shown.
+      const mesh = this.getMesh(sel.meshId);
+      if (!mesh) return;
+      const ids = [...new Set(sel.indices.map(i => mesh.vertices[i]?.id).filter(id => id != null))];
+      const snapshot = this.captureSnapshot();
+      if (!deleteVerticesKeepingGeometry(mesh, ids)) {
+        this.toolNotice = "Can't delete: that vertex is a corner of a face";
+        return;
+      }
+      this.pushUndoSnapshot(snapshot);
+      if (!mesh.faces.length) this.removeMesh(mesh.id);
+      else this.rebuildThreeMesh(mesh.id);
+      this.clearSelection();
+      this.updateStats();
+      return;
+    }
     this.pushUndo();
     const mesh = this.getMesh(sel.meshId);
     if (!mesh) return;
@@ -1878,17 +1898,6 @@ export class SceneManager {
       this.clearSelection();
     } else if (sel.type === 'face') {
       for (const fi of [...sel.indices].sort((a, b) => b - a)) removeFaceByIndex(mesh, fi);
-      cleanupCommittedTopology(mesh);
-      if (!mesh.faces.length) this.removeMesh(mesh.id);
-      else this.rebuildThreeMesh(mesh.id);
-      this.clearSelection();
-    } else if (sel.type === 'vertex') {
-      const toDelete = new Set(sel.indices.map(i => mesh.vertices[i]?.id).filter(id => id != null));
-      // Removing a vertex invalidates its incident faces. Sweep the remaining
-      // topology so no loose verts or edges survive.
-      for (let fi = mesh.faces.length - 1; fi >= 0; fi--) {
-        if (mesh.faces[fi].some(id => toDelete.has(id))) removeFaceByIndex(mesh, fi);
-      }
       cleanupCommittedTopology(mesh);
       if (!mesh.faces.length) this.removeMesh(mesh.id);
       else this.rebuildThreeMesh(mesh.id);
