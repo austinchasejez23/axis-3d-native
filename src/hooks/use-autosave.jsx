@@ -4,6 +4,7 @@ import { saveProject, listProjects } from '@/lib/storage';
 import { createAutosaveWriteQueue } from '@/lib/autosaveWriteQueue';
 import { isAccountDeletionActive } from '@/lib/accountDeletionState';
 import { theme } from '@/lib/theme';
+import { FREE_PROJECT_LIMIT } from '@/lib/proAccess';
 
 // Every model is kept in the Library automatically: the current scene is saved
 // under its project id (named "Untitled" until the user renames it) once a
@@ -74,7 +75,7 @@ export default function useAutoSave(managerRef, projectName, onSaved, { isPro = 
 
       const data = mgr.serialize();
       const exists = listProjects().some((project) => project.id === data.id);
-      if (!isPro && !exists && listProjects().length >= 5) { onProjectLimit?.(); return; }
+      if (!isPro && !exists && listProjects().length >= FREE_PROJECT_LIMIT) { onProjectLimit?.(); return; }
       saveQueueRef.current.schedule({
         id: data.id,
         signature,
