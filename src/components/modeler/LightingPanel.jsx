@@ -2,9 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Flashlight, Lightbulb, Sun, X } from 'lucide-react';
 import { theme, useTheme } from '@/lib/theme';
 import { hexToHsv, hsvToHex } from '@/lib/color';
+import { MAX_LIGHT_RANGE } from '@/lib/sceneLights';
 import ModelingPanel from '@/components/modeler/ModelingPanel';
 import InlineSlider from '@/components/modeler/InlineSlider';
 import RoundColorPicker from '@/components/modeler/RoundColorPicker';
+
+// Range runs from 1 to the longest range on a ratio scale, so short ranges
+// for small models and long ones for full-size models are both easy to set.
+const rangeToSlider = (range) => (Math.log(Math.max(1, range)) / Math.log(MAX_LIGHT_RANGE)) * 100;
+const sliderToRange = (value) => Math.max(1, Math.round(MAX_LIGHT_RANGE ** (value / 100) * 2) / 2);
 
 const TYPES = [
   { id: 'spot', label: 'Spot', Icon: Flashlight },
@@ -122,8 +128,8 @@ export default function LightingPanel({ state, managerRef, onClose }) {
         <div className="modeling-value mb-1.5 grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-lg px-2.5 py-2">
           <InlineSlider grow compact label="Intensity" value={light.intensity} display={light.intensity.toFixed(2)} min={0} max={5} step={0.05}
             onChange={(intensity) => change({ intensity })} onActiveChange={begin} />
-          <InlineSlider grow compact label="Range" value={light.range} display={light.range.toFixed(1)} min={1} max={50} step={0.5}
-            onChange={(range) => change({ range })} onActiveChange={begin} />
+          <InlineSlider grow compact label="Range" value={rangeToSlider(light.range)} display={light.range.toFixed(1)} min={0} max={100} step={0.1}
+            onChange={(value) => change({ range: sliderToRange(value) })} onActiveChange={begin} />
           <InlineSlider grow compact label={spot ? 'Cone' : 'Radius'} value={light.radius} display={spot ? `${Math.round(light.radius)}°` : light.radius.toFixed(1)}
             min={spot ? 5 : 0.1} max={spot ? 85 : 5} step={spot ? 1 : 0.1} disabled={light.type === 'directional'}
             onChange={(radius) => change({ radius })} onActiveChange={begin} />

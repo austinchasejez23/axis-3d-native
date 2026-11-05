@@ -96,22 +96,16 @@ try {
     console.log('PASS: intensity runs from off to bright in exposure steps');
     manager._disposeSceneLight(light);
 
-    // Spot and directional lights aim at the objects, wherever the light is
-    // dragged.
-    const cube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2));
-    cube.position.set(4, 1, -2);
-    manager.threeObjects = new Map([['cube', { mesh: cube }]]);
-    manager._lightAim = null;
-    for (const type of ['directional', 'spot']) {
-      const aimed = manager._createSceneLight({ type, position: [-3, 5, 6] });
-      const direction = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(...aimed.rotation));
-      const toward = new THREE.Vector3(4, 1, -2).sub(new THREE.Vector3(-3, 5, 6)).normalize();
-      assert.ok(direction.angleTo(toward) < 1e-6, `${type} light must aim at the objects`);
-      manager._disposeSceneLight(aimed);
+    // Spot and point lights reach as far as their Range on a model of any
+    // size: the same light scaled with its Range lights the same way.
+    for (const type of ['spot', 'point']) {
+      const near = manager._createSceneLight({ type, range: 5, intensity: 1.5 });
+      const far = manager._createSceneLight({ type, range: 50, intensity: 1.5 });
+      assert.ok(Math.abs(far.object.intensity / 50 ** 2 - near.object.intensity / 5 ** 2) < 1e-9, `${type} light must scale with its Range`);
+      manager._disposeSceneLight(near);
+      manager._disposeSceneLight(far);
     }
-    manager.threeObjects = undefined;
-    manager._lightAim = null;
-    console.log('PASS: lights aim at the objects');
+    console.log('PASS: spot and point lights reach their Range on any model size');
 
     theme.set({ defaultLightingEnabled: true });
     manager.sceneLights = [];

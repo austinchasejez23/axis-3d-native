@@ -4,6 +4,9 @@ import { theme } from './theme';
 import makeLightGizmo from '@/lib/makeLightGizmo';
 import { makeLightRangeGuide, updateLightRangeGuide } from './lightRangeGuide';
 
+// Longest Range a light can have: enough to light a full-size model.
+export const MAX_LIGHT_RANGE = 500;
+
 const TYPES = new Set(['spot', 'point', 'directional']);
 const freshId = () => `light-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 const plain = (light) => ({
@@ -73,39 +76,8 @@ export function applySceneLights(SceneManager) {
     record.object.dispose?.();
   };
 
-  // Where lights aim: the centre of the objects in the scene (the origin when
-  // there are none). Spot and directional lights always point here, so
-  // dragging a light around the objects changes which side is lit.
-  P._sceneLightAim = /** @this {import("./SceneManager").SceneManager} */ function () {
-    const bounds = new THREE.Box3();
-    for (const { mesh } of this.threeObjects?.values?.() || []) {
-      if (!mesh?.visible || !mesh.geometry) continue;
-      if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
-      mesh.updateMatrixWorld();
-      const box = mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld);
-      if (!box.isEmpty()) bounds.union(box);
-    }
-    return bounds.isEmpty() ? new THREE.Vector3() : bounds.getCenter(new THREE.Vector3());
-  };
-  // Re-aim when objects are added, moved or removed.
-  P.updateSceneLightAim = /** @this {import("./SceneManager").SceneManager} */ function () {
-    if (!this.sceneLights?.length) return;
-    const aim = this._sceneLightAim();
-    if (this._lightAim && this._lightAim.distanceToSquared(aim) < 1e-10) return;
-    this._lightAim = aim;
-    for (const light of this.sceneLights) this._syncSceneLight(light);
-  };
-
   P._syncSceneLight = /** @this {import("./SceneManager").SceneManager} */ function (record) {
     const { object, gizmo } = record;
-    if (record.type !== 'point') {
-      const aim = this._lightAim || (this._lightAim = this._sceneLightAim());
-      const toward = aim.clone().sub(new THREE.Vector3().fromArray(record.position));
-      if (toward.lengthSq() < 1e-10) toward.set(0, -1, 0);
-      const aimRotation = new THREE.Euler().setFromQuaternion(
-        new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), toward.normalize()));
-      record.rotation = [aimRotation.x, aimRotation.y, aimRotation.z];
-    }
     object.position.fromArray(record.position);
     gizmo.position.fromArray(record.position);
     gizmo.rotation.fromArray(record.rotation);
@@ -134,7 +106,12 @@ export function applySceneLights(SceneManager) {
     // visibly changes the scene instead of flattening out at the top.
     const level = clamp(record.intensity ?? 1.5, 0, 5);
     const gain = (2 ** level - 1) / (2 ** 1.5 - 1);
-    object.intensity = gain * (record.type === 'directional' ? 3.4 : 22);
+    // Spot and point lights fade with distance over their Range, not over a
+    // fixed number of units, so they light a full-size model as strongly as a
+    // small one: a quarter of the Range away they are as bright as a
+    // directional light at the same Intensity.
+    const reach = clamp(record.range ?? 15, 1, MAX_LIGHT_RANGE);
+    object.intensity = gain * 3.4 * (record.type === 'directional' ? 1 : (reach / 4) ** 2);
     // A light turned all the way down casts no shadow either.
     object.castShadow = custom && !!record.shadows && level > 0;
     object.shadow.intensity = clamp(record.shadowIntensity, 0, 1);
@@ -290,7 +267,7 @@ export function applySceneLights(SceneManager) {
       light.intensity = clamp(light.intensity, 0, 5);
       light.colorIntensity = clamp(light.colorIntensity, 0, 1);
       light.shadowIntensity = clamp(light.shadowIntensity, 0, 1);
-      light.range = clamp(light.range, 1, 50);
+      light.range = clamp(light.range, 1, MAX_LIGHT_RANGE);
       light.radius = clamp(light.radius, light.type === 'spot' ? 5 : 0.1, light.type === 'spot' ? 85 : 5);
       this._syncSceneLight(light);
     }
@@ -430,18 +407,22 @@ export function applySceneLights(SceneManager) {
     const pts = [...this.pointers.values()];
     const g = this.gestureData;
     const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    const angle = Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x);
     const midX = (pts[0].x + pts[1].x) / 2, midY = (pts[0].y + pts[1].y) / 2;
     const dx = midX - g.startMidX, dy = midY - g.startMidY;
+    let angleDelta = Math.atan2(Math.sin(angle - g.startAngle), Math.cos(angle - g.startAngle));
     if (!g.mode) {
       const p0 = pts[0], p1 = pts[1];
       const a0 = [p0.x - p0.startX, p0.y - p0.startY], a1 = [p1.x - p1.startX, p1.y - p1.startY];
       const l0 = Math.hypot(...a0), l1 = Math.hypot(...a1);
       const parallel = l0 > 4 && l1 > 4 && (a0[0] * a1[0] + a0[1] * a1[1]) / (l0 * l1) > 0.8;
       if (parallel && Math.hypot(dx, dy) > 6) g.mode = Math.abs(dx) >= Math.abs(dy) ? 'range' : 'intensity';
+      else if (Math.abs(angleDelta) * dist > 7 && this.getSelectedSceneLight()?.type !== 'point') g.mode = 'rotate';
       else if (Math.abs(dist - g.startDist) > 7 && this.getSelectedSceneLight()?.type !== 'directional') g.mode = 'radius';
       if (g.mode) this.pushUndo(); else return true;
     }
-    if (g.mode === 'radius') this.updateSelectedSceneLight({ radius: g.radius * Math.max(0.1, dist / g.startDist) });
+    if (g.mode === 'rotate') { this.rotateSelectedSceneLight(angle - g.lastAngle); g.lastAngle = angle; g.startAngle = angle; }
+    else if (g.mode === 'radius') this.updateSelectedSceneLight({ radius: g.radius * Math.max(0.1, dist / g.startDist) });
     else if (g.mode === 'range') this.updateSelectedSceneLight({ range: g.range * Math.exp(dx / 120) });
     else if (g.mode === 'intensity') this.updateSelectedSceneLight({ intensity: g.intensity * Math.exp(-dy / 120) });
     return true;

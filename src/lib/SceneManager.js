@@ -2510,7 +2510,6 @@ export class SceneManager {
       updateCameraMotion(this);
       updateSceneShadowBounds(this);
       this.updateReflections?.();
-      this.updateSceneLightAim?.();
       this.updateSceneLightGizmos?.();
       updateObjectAxisArrows(this);
       updateDrawFaceGrid(this);

@@ -447,13 +447,6 @@ declare module './SceneManager.js' {
     /** Implemented by sceneLights.js */
     updateSceneLightGizmos(): any;
     /** Implemented by sceneLights.js */
-    _lightAim?: any;
-    /** Implemented by sceneLights.js */
-    _sceneLightAim(): any;
-    /** Implemented by sceneLights.js */
-    updateSceneLightAim(): any;
-    /** Implemented by sceneLights.js */
-    /** Implemented by sceneLights.js */
     updateSceneLightMouse(e: any): any;
     /** Implemented by sceneLights.js */
     updateSelectedSceneLight(patch: any, recordUndo?: boolean): any;
