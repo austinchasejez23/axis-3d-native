@@ -20,7 +20,7 @@ const server = await createServer({
 });
 
 try {
-  const { applySceneLights, sceneLightPlacement } = await server.ssrLoadModule('/src/lib/sceneLights.js');
+  const { applySceneLights } = await server.ssrLoadModule('/src/lib/sceneLights.js');
   const { theme } = await server.ssrLoadModule('/src/lib/theme.js');
   class LightingFixture {}
   applySceneLights(LightingFixture);
@@ -86,17 +86,18 @@ try {
     assert.ok(Math.abs(mean(white) - mean(full)) < 1e-4);
     console.log('PASS: color strength changes hue saturation without dimming light');
 
-    // Intensity rises evenly from off to bright along the whole slider.
+    // Intensity works in exposure steps: 0 is off, and each step up roughly
+    // doubles the light, all the way to the top of the slider.
     const powerAt = (level) => { light.intensity = level; manager._syncSceneLight(light); return light.object.intensity; };
     assert.equal(powerAt(0), 0, 'Intensity 0 turns the light off');
-    assert.ok(Math.abs(powerAt(3) / powerAt(1.5) - 2) < 1e-9, 'Twice the slider is twice the light');
+    assert.ok(Math.abs(powerAt(3) / powerAt(2) - 7 / 3) < 1e-9, 'Each step up roughly doubles the light');
     assert.ok(powerAt(5) > powerAt(4) && powerAt(4) > powerAt(3), 'Brightness keeps rising to the top of the slider');
     assert.equal(powerAt(2), power, 'Only intensity slider controls brightness');
-    console.log('PASS: intensity runs evenly from off to bright');
+    console.log('PASS: intensity runs from off to bright in exposure steps');
     manager._disposeSceneLight(light);
 
     // Spot and directional lights aim at the objects, wherever the light is
-    // moved; Around / Height describe where it sits around them.
+    // dragged.
     const cube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2));
     cube.position.set(4, 1, -2);
     manager.threeObjects = new Map([['cube', { mesh: cube }]]);
@@ -108,12 +109,9 @@ try {
       assert.ok(direction.angleTo(toward) < 1e-6, `${type} light must aim at the objects`);
       manager._disposeSceneLight(aimed);
     }
-    const place = sceneLightPlacement([4, 1 + 5 * Math.sin(Math.PI / 6), -2 + 5 * Math.cos(Math.PI / 6)], [4, 1, -2]);
-    assert.ok(Math.min(place.around, 360 - place.around) < 1e-6, 'In front is Around 0');
-    assert.ok(Math.abs(place.height - 30) < 1e-6 && Math.abs(place.distance - 5) < 1e-6);
     manager.threeObjects = undefined;
     manager._lightAim = null;
-    console.log('PASS: lights aim at the objects; Around and Height place them around');
+    console.log('PASS: lights aim at the objects');
 
     theme.set({ defaultLightingEnabled: true });
     manager.sceneLights = [];

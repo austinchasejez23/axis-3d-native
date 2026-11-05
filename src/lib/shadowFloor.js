@@ -8,6 +8,10 @@ import objectShadowMaterial from '@/lib/objectShadowMaterial';
 // scene's lights and fading out into the background towards its edge.
 const FLOOR_LIFT = 6; // floor albedo relative to the background colour (linear)
 const FLOOR_MIN = 0.04; // keeps a black background's floor from vanishing
+// Under custom lights the floor also glows in the background's own colour
+// wherever it is out of shadow, so shadows on it stay clearly visible however
+// far away or dim the lights are; the lights add their own light on top.
+const FLOOR_GLOW = 2.2; // tone mapping darkens it: this matches the background on screen
 
 function fadeTexture() {
   const size = 256;
@@ -34,6 +38,15 @@ export function makeShadowFloor() {
     // highlights that sit at / below grid level.
     depthWrite: false,
   }));
+  // The glow darkens in shadow, by the lights' Shadow strength.
+  const compile = material.onBeforeCompile;
+  const cacheKey = material.customProgramCacheKey();
+  material.onBeforeCompile = function (shader, renderer) {
+    compile.call(this, shader, renderer);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <aomap_fragment>', `#include <aomap_fragment>
+totalEmissiveRadiance *= getShadowMask();`);
+  };
+  material.customProgramCacheKey = () => `${cacheKey}:axis-floor-glow`;
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), material);
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0;
@@ -44,8 +57,9 @@ export function makeShadowFloor() {
 }
 
 // Match the floor to the current background colour.
-export function updateShadowFloor(floor, backgroundColor) {
+export function updateShadowFloor(floor, backgroundColor, glow = false) {
   const base = new THREE.Color(backgroundColor || '#1c1c1c');
+  floor.material.emissive.copy(base).multiplyScalar(glow ? FLOOR_GLOW : 0);
   floor.material.color.setRGB(
     Math.min(1, Math.max(FLOOR_MIN, base.r * FLOOR_LIFT)),
     Math.min(1, Math.max(FLOOR_MIN, base.g * FLOOR_LIFT)),

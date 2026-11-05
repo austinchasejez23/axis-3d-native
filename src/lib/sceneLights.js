@@ -39,15 +39,6 @@ function makeGizmo(data) {
   return group;
 }
 
-// Around / Height of a light relative to the point it aims at, in degrees.
-export function sceneLightPlacement(position, aim) {
-  const offset = new THREE.Vector3().fromArray(position).sub(new THREE.Vector3(...(Array.isArray(aim) ? aim : [aim.x, aim.y, aim.z])));
-  const distance = Math.max(1e-6, offset.length());
-  const around = (THREE.MathUtils.radToDeg(Math.atan2(offset.x, offset.z)) + 360) % 360;
-  const height = THREE.MathUtils.radToDeg(Math.asin(clamp(offset.y / distance, -1, 1)));
-  return { around, height, distance };
-}
-
 export function applySceneLights(SceneManager) {
   const P = SceneManager.prototype;
 
@@ -83,8 +74,8 @@ export function applySceneLights(SceneManager) {
   };
 
   // Where lights aim: the centre of the objects in the scene (the origin when
-  // there are none). Spot and directional lights always point here, so moving
-  // a light around the objects changes which side is lit.
+  // there are none). Spot and directional lights always point here, so
+  // dragging a light around the objects changes which side is lit.
   P._sceneLightAim = /** @this {import("./SceneManager").SceneManager} */ function () {
     const bounds = new THREE.Box3();
     for (const { mesh } of this.threeObjects?.values?.() || []) {
@@ -103,25 +94,6 @@ export function applySceneLights(SceneManager) {
     if (this._lightAim && this._lightAim.distanceToSquared(aim) < 1e-10) return;
     this._lightAim = aim;
     for (const light of this.sceneLights) this._syncSceneLight(light);
-  };
-  // Places the selected light around the objects: Around turns it horizontally
-  // (0° in front, 90° to the right), Height raises it (89° is straight above),
-  // keeping its distance.
-  P.placeSelectedSceneLight = /** @this {import("./SceneManager").SceneManager} */ function ({ around, height }) {
-    const light = this.getSelectedSceneLight();
-    if (!light) return;
-    const aim = this._sceneLightAim();
-    const offset = new THREE.Vector3().fromArray(light.position).sub(aim);
-    const distance = Math.max(0.5, offset.length());
-    const current = sceneLightPlacement(light.position, aim);
-    const a = THREE.MathUtils.degToRad(around ?? current.around);
-    const h = THREE.MathUtils.degToRad(clamp(height ?? current.height, -45, 89));
-    const position = [
-      aim.x + distance * Math.cos(h) * Math.sin(a),
-      aim.y + distance * Math.sin(h),
-      aim.z + distance * Math.cos(h) * Math.cos(a),
-    ];
-    this.updateSelectedSceneLight({ position });
   };
 
   P._syncSceneLight = /** @this {import("./SceneManager").SceneManager} */ function (record) {
@@ -155,13 +127,16 @@ export function applySceneLights(SceneManager) {
     const channelMean = (color.r + color.g + color.b) / 3;
     if (channelMean > 1e-6) color.multiplyScalar(1 / channelMean);
     object.color.copy(color);
-    // Only the Intensity slider changes light power, evenly along the slider:
-    // 0 is off, the default 1.5 lights an object at a mid level, and the top
-    // is bright without washing every face out to the same white.
+    // Only the Intensity slider changes light power. The slider works in
+    // exposure steps: 0 is off, the default 1.5 lights a nearby object at a
+    // mid level (spot and point lights used to be near pure white already),
+    // and each step up roughly doubles the light, so the whole slider range
+    // visibly changes the scene instead of flattening out at the top.
     const level = clamp(record.intensity ?? 1.5, 0, 5);
-    const gain = level / 1.5;
+    const gain = (2 ** level - 1) / (2 ** 1.5 - 1);
     object.intensity = gain * (record.type === 'directional' ? 3.4 : 22);
-    object.castShadow = custom && !!record.shadows;
+    // A light turned all the way down casts no shadow either.
+    object.castShadow = custom && !!record.shadows && level > 0;
     object.shadow.intensity = clamp(record.shadowIntensity, 0, 1);
     object.shadow.radius = record.type === 'point' ? clamp(record.radius * 2, 0, 10) : 3;
     if (record.type === 'spot') {
@@ -205,8 +180,7 @@ export function applySceneLights(SceneManager) {
   P.getLightingState = /** @this {import("./SceneManager").SceneManager} */ function () {
     const lights = (this.sceneLights || []).map(plain);
     const selectedIndex = Math.max(0, lights.findIndex((light) => light.id === this.selectedLightId));
-    const aim = this._sceneLightAim();
-    return { lights, selectedIndex, selected: lights[selectedIndex] || null, aim: aim.toArray() };
+    return { lights, selectedIndex, selected: lights[selectedIndex] || null };
   };
   P.serializeSceneLights = /** @this {import("./SceneManager").SceneManager} */ function () { return (this.sceneLights || []).map(plain); };
 
@@ -244,9 +218,10 @@ export function applySceneLights(SceneManager) {
   P.applyLighting = /** @this {import("./SceneManager").SceneManager} */ function () {
     // Default lighting: a studio setup with a real key light from above and to
     // the side (so objects show a lit and a shaded side, and can cast shadows),
-    // plus softer fill. Custom lighting: the user's lights do the work over a
-    // soft sky fill, so the sides they don't reach stay readable instead of
-    // going black, while every light setting still visibly changes the scene.
+    // plus softer fill. Custom lighting: the user's lights do the work. Only a
+    // faint fill and a little environment remain, enough that metal is not
+    // pitch black, so every light setting has a clearly visible effect and the
+    // scene goes dark when the lights are turned down.
     const base = theme.defaultLightingEnabled;
     if (this.dirLight) {
       this.dirLight.intensity = base ? 2 : 0;
@@ -257,9 +232,9 @@ export function applySceneLights(SceneManager) {
         this.dirLight.target.updateMatrixWorld();
       }
     }
-    if (this.ambientLight) this.ambientLight.intensity = base ? 0.3 : 0.15;
+    if (this.ambientLight) this.ambientLight.intensity = base ? 0.3 : 0.03;
     if (this.hemiLight) {
-      this.hemiLight.intensity = base ? 0.5 : 0.35;
+      this.hemiLight.intensity = base ? 0.5 : 0.06;
       this.hemiLight.color.set(0xffffff);
       this.hemiLight.groundColor.set(0x888888);
     }
@@ -267,7 +242,7 @@ export function applySceneLights(SceneManager) {
       this.fillLight.intensity = base ? 0.35 : 0;
       this.fillLight.color.set(0xffffff);
     }
-    this.scene.environmentIntensity = base ? 0.7 : 0.5;
+    this.scene.environmentIntensity = base ? 0.7 : 0.22;
     for (const light of this.sceneLights || []) this._syncSceneLight(light);
   };
   P.setLightingEdit = /** @this {import("./SceneManager").SceneManager} */ function (active) {

@@ -453,7 +453,6 @@ declare module './SceneManager.js' {
     /** Implemented by sceneLights.js */
     updateSceneLightAim(): any;
     /** Implemented by sceneLights.js */
-    placeSelectedSceneLight(place: { around?: number; height?: number }): any;
     /** Implemented by sceneLights.js */
     updateSceneLightMouse(e: any): any;
     /** Implemented by sceneLights.js */

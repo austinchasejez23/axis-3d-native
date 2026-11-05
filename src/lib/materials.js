@@ -268,10 +268,10 @@ export function applyShadows(sm) {
     sm.dirLight.shadow.intensity = intensity;
   }
   if (sm.shadowGround) {
-    // The lit floor appears with shadows (and with the grid); the lights'
+    // The lit floor appears with shadows, with or without the grid; the lights'
     // own shadow strength decides how dark the shadows on it are.
-    sm.shadowGround.visible = on && (sm.grid?.visible ?? true);
-    updateShadowFloor(sm.shadowGround, theme.backgroundColor);
+    sm.shadowGround.visible = on;
+    updateShadowFloor(sm.shadowGround, theme.backgroundColor, !theme.defaultLightingEnabled);
   }
   for (const [id, obj] of sm.threeObjects) {
     const geometryOnly = !!sm.getMesh(id)?.importedWireframeOnly;

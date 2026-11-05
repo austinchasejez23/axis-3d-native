@@ -2324,9 +2324,9 @@ export class SceneManager {
 
   toggleGrid() {
     this.grid.visible = !this.grid.visible;
-    // The shadow-catching floor is part of the grid: hide it too. It only
-    // shows while shadows are on.
-    if (this.shadowGround) this.shadowGround.visible = this.grid.visible && this._shadowState().on;
+    // The shadow-catching floor does not depend on the grid: it shows whenever
+    // shadows are on.
+    if (this.shadowGround) this.shadowGround.visible = this._shadowState().on;
   }
 
   combineMeshes() {

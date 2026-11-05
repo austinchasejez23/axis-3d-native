@@ -28,7 +28,7 @@ export default function updateSceneShadowBounds(manager) {
       return `${id}:${mesh.visible ? 1 : 0}:${mesh.geometry.uuid}:${p.x},${p.y},${p.z}:${r.x},${r.y},${r.z}:${s.x},${s.y},${s.z}`;
     }).join('|');
     const lightSignature = lights.map((record) =>
-      `${record.id}:${record.type}:${record.range}:${record.direction ? 'key' : record.rotation.join(',')}:${record.object.shadow.mapSize.x}x${record.object.shadow.mapSize.y}`
+      `${record.id}:${record.type}:${record.range}:${record.direction ? 'key' : record.rotation.join(',')}:${record.type === 'spot' ? record.position.join(',') : ''}:${record.object.shadow.mapSize.x}x${record.object.shadow.mapSize.y}`
     ).join('|');
     const signature = `${meshSignature}#${lightSignature}`;
     if (signature === manager._shadowBoundsSignature) return;
@@ -77,6 +77,15 @@ export default function updateSceneShadowBounds(manager) {
       Object.assign(object.shadow.camera, { left: -radius, right: radius, top: radius, bottom: -radius, near: radius * 0.01, far: radius * 4 });
     } else {
       object.shadow.camera.near = Math.max(0.00001, Math.min(smallest * 0.01, record.range * 0.001));
+      // Spot shadows store perspective depth. With the near plane right at the
+      // light, an object and the floor behind it end up at almost the same
+      // depth once the light is a few units away, the shadow bias swallows the
+      // difference and the shadow disappears. Start the shadow camera halfway
+      // to the objects instead.
+      if (record.type === 'spot') {
+        const toObjects = bounds.distanceToPoint(object.position);
+        object.shadow.camera.near = Math.max(object.shadow.camera.near, Math.min(toObjects * 0.5, record.range * 0.5));
+      }
       object.shadow.camera.far = record.range;
     }
     object.shadow.camera.updateProjectionMatrix();
