@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Flashlight, Lightbulb, Sun, X } from 'lucide-react';
 import { theme, useTheme } from '@/lib/theme';
 import { hexToHsv, hsvToHex } from '@/lib/color';
+import { sceneLightPlacement } from '@/lib/sceneLights';
 import ModelingPanel from '@/components/modeler/ModelingPanel';
 import InlineSlider from '@/components/modeler/InlineSlider';
 import RoundColorPicker from '@/components/modeler/RoundColorPicker';
@@ -69,6 +70,10 @@ export default function LightingPanel({ state, managerRef, onClose }) {
   const actionBtn = 'modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95';
   const rowBtn = 'modeling-value flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-lg px-1 text-[12px] font-semibold active:scale-95 disabled:opacity-35';
   const lightCount = state.lights.length;
+  // Where the light sits around the objects it shines on.
+  const place = sceneLightPlacement(light.position, state.aim || [0, 0, 0]);
+  const around = Math.round(place.around) % 360;
+  const height = Math.round(place.height);
 
   return (
     <ModelingPanel label="Lighting controls" keypadOpen={false} docked>
@@ -120,9 +125,14 @@ export default function LightingPanel({ state, managerRef, onClose }) {
         </div>
 
         <div className="modeling-value mb-1.5 grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-lg px-2.5 py-2">
+          <InlineSlider grow compact label="Around" value={around} display={`${around}°`} min={0} max={359} step={1}
+            onChange={(value) => manager?.placeSelectedSceneLight({ around: value })} onActiveChange={begin} />
+          <InlineSlider grow compact label="Height" value={height} display={`${height}°`} min={-45} max={89} step={1}
+            onChange={(value) => manager?.placeSelectedSceneLight({ height: value })} onActiveChange={begin} />
           <InlineSlider grow compact label="Intensity" value={light.intensity} display={light.intensity.toFixed(2)} min={0} max={5} step={0.05}
             onChange={(intensity) => change({ intensity })} onActiveChange={begin} />
           <InlineSlider grow compact label="Range" value={light.range} display={light.range.toFixed(1)} min={1} max={50} step={0.5}
+            disabled={light.type === 'directional'}
             onChange={(range) => change({ range })} onActiveChange={begin} />
           <InlineSlider grow compact label={spot ? 'Cone' : 'Radius'} value={light.radius} display={spot ? `${Math.round(light.radius)}°` : light.radius.toFixed(1)}
             min={spot ? 5 : 0.1} max={spot ? 85 : 5} step={spot ? 1 : 0.1} disabled={light.type === 'directional'}

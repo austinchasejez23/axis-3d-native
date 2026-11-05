@@ -20,7 +20,7 @@ const server = await createServer({
 });
 
 try {
-  const { applySceneLights } = await server.ssrLoadModule('/src/lib/sceneLights.js');
+  const { applySceneLights, sceneLightPlacement } = await server.ssrLoadModule('/src/lib/sceneLights.js');
   const { theme } = await server.ssrLoadModule('/src/lib/theme.js');
   class LightingFixture {}
   applySceneLights(LightingFixture);
@@ -94,6 +94,26 @@ try {
     assert.equal(powerAt(2), power, 'Only intensity slider controls brightness');
     console.log('PASS: intensity runs evenly from off to bright');
     manager._disposeSceneLight(light);
+
+    // Spot and directional lights aim at the objects, wherever the light is
+    // moved; Around / Height describe where it sits around them.
+    const cube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2));
+    cube.position.set(4, 1, -2);
+    manager.threeObjects = new Map([['cube', { mesh: cube }]]);
+    manager._lightAim = null;
+    for (const type of ['directional', 'spot']) {
+      const aimed = manager._createSceneLight({ type, position: [-3, 5, 6] });
+      const direction = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(...aimed.rotation));
+      const toward = new THREE.Vector3(4, 1, -2).sub(new THREE.Vector3(-3, 5, 6)).normalize();
+      assert.ok(direction.angleTo(toward) < 1e-6, `${type} light must aim at the objects`);
+      manager._disposeSceneLight(aimed);
+    }
+    const place = sceneLightPlacement([4, 1 + 5 * Math.sin(Math.PI / 6), -2 + 5 * Math.cos(Math.PI / 6)], [4, 1, -2]);
+    assert.ok(Math.min(place.around, 360 - place.around) < 1e-6, 'In front is Around 0');
+    assert.ok(Math.abs(place.height - 30) < 1e-6 && Math.abs(place.distance - 5) < 1e-6);
+    manager.threeObjects = undefined;
+    manager._lightAim = null;
+    console.log('PASS: lights aim at the objects; Around and Height place them around');
 
     theme.set({ defaultLightingEnabled: true });
     manager.sceneLights = [];

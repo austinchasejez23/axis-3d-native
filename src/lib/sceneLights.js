@@ -39,6 +39,15 @@ function makeGizmo(data) {
   return group;
 }
 
+// Around / Height of a light relative to the point it aims at, in degrees.
+export function sceneLightPlacement(position, aim) {
+  const offset = new THREE.Vector3().fromArray(position).sub(new THREE.Vector3(...(Array.isArray(aim) ? aim : [aim.x, aim.y, aim.z])));
+  const distance = Math.max(1e-6, offset.length());
+  const around = (THREE.MathUtils.radToDeg(Math.atan2(offset.x, offset.z)) + 360) % 360;
+  const height = THREE.MathUtils.radToDeg(Math.asin(clamp(offset.y / distance, -1, 1)));
+  return { around, height, distance };
+}
+
 export function applySceneLights(SceneManager) {
   const P = SceneManager.prototype;
 
@@ -73,8 +82,58 @@ export function applySceneLights(SceneManager) {
     record.object.dispose?.();
   };
 
+  // Where lights aim: the centre of the objects in the scene (the origin when
+  // there are none). Spot and directional lights always point here, so moving
+  // a light around the objects changes which side is lit.
+  P._sceneLightAim = /** @this {import("./SceneManager").SceneManager} */ function () {
+    const bounds = new THREE.Box3();
+    for (const { mesh } of this.threeObjects?.values?.() || []) {
+      if (!mesh?.visible || !mesh.geometry) continue;
+      if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+      mesh.updateMatrixWorld();
+      const box = mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld);
+      if (!box.isEmpty()) bounds.union(box);
+    }
+    return bounds.isEmpty() ? new THREE.Vector3() : bounds.getCenter(new THREE.Vector3());
+  };
+  // Re-aim when objects are added, moved or removed.
+  P.updateSceneLightAim = /** @this {import("./SceneManager").SceneManager} */ function () {
+    if (!this.sceneLights?.length) return;
+    const aim = this._sceneLightAim();
+    if (this._lightAim && this._lightAim.distanceToSquared(aim) < 1e-10) return;
+    this._lightAim = aim;
+    for (const light of this.sceneLights) this._syncSceneLight(light);
+  };
+  // Places the selected light around the objects: Around turns it horizontally
+  // (0° in front, 90° to the right), Height raises it (89° is straight above),
+  // keeping its distance.
+  P.placeSelectedSceneLight = /** @this {import("./SceneManager").SceneManager} */ function ({ around, height }) {
+    const light = this.getSelectedSceneLight();
+    if (!light) return;
+    const aim = this._sceneLightAim();
+    const offset = new THREE.Vector3().fromArray(light.position).sub(aim);
+    const distance = Math.max(0.5, offset.length());
+    const current = sceneLightPlacement(light.position, aim);
+    const a = THREE.MathUtils.degToRad(around ?? current.around);
+    const h = THREE.MathUtils.degToRad(clamp(height ?? current.height, -45, 89));
+    const position = [
+      aim.x + distance * Math.cos(h) * Math.sin(a),
+      aim.y + distance * Math.sin(h),
+      aim.z + distance * Math.cos(h) * Math.cos(a),
+    ];
+    this.updateSelectedSceneLight({ position });
+  };
+
   P._syncSceneLight = /** @this {import("./SceneManager").SceneManager} */ function (record) {
     const { object, gizmo } = record;
+    if (record.type !== 'point') {
+      const aim = this._lightAim || (this._lightAim = this._sceneLightAim());
+      const toward = aim.clone().sub(new THREE.Vector3().fromArray(record.position));
+      if (toward.lengthSq() < 1e-10) toward.set(0, -1, 0);
+      const aimRotation = new THREE.Euler().setFromQuaternion(
+        new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), toward.normalize()));
+      record.rotation = [aimRotation.x, aimRotation.y, aimRotation.z];
+    }
     object.position.fromArray(record.position);
     gizmo.position.fromArray(record.position);
     gizmo.rotation.fromArray(record.rotation);
@@ -119,7 +178,9 @@ export function applySceneLights(SceneManager) {
       object.shadow.camera.updateProjectionMatrix();
     }
     const selected = record.id === this.selectedLightId;
-    const showHandles = !!this.lightingEdit && custom;
+    // While the Lighting panel is open the lights are always shown, so there
+    // is something to grab even with Default lighting on.
+    const showHandles = !!this.lightingEdit;
     updateLightRangeGuide(record.guide, record, selected, showHandles, theme.highlightColor);
     record.gizmo.visible = showHandles;
     record.gizmo.traverse((child) => {
@@ -144,7 +205,8 @@ export function applySceneLights(SceneManager) {
   P.getLightingState = /** @this {import("./SceneManager").SceneManager} */ function () {
     const lights = (this.sceneLights || []).map(plain);
     const selectedIndex = Math.max(0, lights.findIndex((light) => light.id === this.selectedLightId));
-    return { lights, selectedIndex, selected: lights[selectedIndex] || null };
+    const aim = this._sceneLightAim();
+    return { lights, selectedIndex, selected: lights[selectedIndex] || null, aim: aim.toArray() };
   };
   P.serializeSceneLights = /** @this {import("./SceneManager").SceneManager} */ function () { return (this.sceneLights || []).map(plain); };
 
@@ -393,22 +455,18 @@ export function applySceneLights(SceneManager) {
     const pts = [...this.pointers.values()];
     const g = this.gestureData;
     const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-    const angle = Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x);
     const midX = (pts[0].x + pts[1].x) / 2, midY = (pts[0].y + pts[1].y) / 2;
     const dx = midX - g.startMidX, dy = midY - g.startMidY;
-    let angleDelta = Math.atan2(Math.sin(angle - g.startAngle), Math.cos(angle - g.startAngle));
     if (!g.mode) {
       const p0 = pts[0], p1 = pts[1];
       const a0 = [p0.x - p0.startX, p0.y - p0.startY], a1 = [p1.x - p1.startX, p1.y - p1.startY];
       const l0 = Math.hypot(...a0), l1 = Math.hypot(...a1);
       const parallel = l0 > 4 && l1 > 4 && (a0[0] * a1[0] + a0[1] * a1[1]) / (l0 * l1) > 0.8;
       if (parallel && Math.hypot(dx, dy) > 6) g.mode = Math.abs(dx) >= Math.abs(dy) ? 'range' : 'intensity';
-      else if (Math.abs(angleDelta) * dist > 7 && this.getSelectedSceneLight()?.type !== 'point') g.mode = 'rotate';
       else if (Math.abs(dist - g.startDist) > 7 && this.getSelectedSceneLight()?.type !== 'directional') g.mode = 'radius';
       if (g.mode) this.pushUndo(); else return true;
     }
-    if (g.mode === 'rotate') { this.rotateSelectedSceneLight(angle - g.lastAngle); g.lastAngle = angle; g.startAngle = angle; }
-    else if (g.mode === 'radius') this.updateSelectedSceneLight({ radius: g.radius * Math.max(0.1, dist / g.startDist) });
+    if (g.mode === 'radius') this.updateSelectedSceneLight({ radius: g.radius * Math.max(0.1, dist / g.startDist) });
     else if (g.mode === 'range') this.updateSelectedSceneLight({ range: g.range * Math.exp(dx / 120) });
     else if (g.mode === 'intensity') this.updateSelectedSceneLight({ intensity: g.intensity * Math.exp(-dy / 120) });
     return true;
