@@ -110,6 +110,12 @@ declare module './SceneManager.js' {
       target: import('three').Vector3;
       distance: number;
     } | null;
+    _firstTouchCamera?: {
+      theta: number;
+      phi: number;
+      target: import('three').Vector3;
+      distance: number;
+    } | null;
     _resumeObjectGesture?: boolean;
     measureMode?: boolean;
     _radialArray?: RadialArrayState | null;
@@ -297,7 +303,7 @@ declare module './SceneManager.js' {
     /** Implemented by sceneMouse.js */
     isMouseOverSelection(x: number, y: number): any;
     /** Implemented by sceneSelection.js */
-    isPointNearSelection(clientX: number, clientY: number, buffer?: any): any;
+    isPointNearSelection(clientX: number, clientY: number, buffer?: any, minPx?: number): any;
     /** Implemented by sceneLights.js */
     isPointOverSelectedSceneLight(x: number, y: number): any;
     /** Implemented by sceneSelection.js */
@@ -336,6 +342,22 @@ declare module './SceneManager.js' {
     radialArraySelectPreview(): any;
     /** Implemented by sceneSelection.js */
     raycastMeshes(ndcX: number, ndcY: number): import('three').Intersection[];
+    /** Implemented by sceneSelection.js */
+    raycastTap(clientX: number, clientY: number): import('three').Intersection[];
+    /** Implemented by sceneOrientation.js */
+    orientationTargets(): any[];
+    /** Implemented by sceneOrientation.js */
+    _finishOrientation(meshes: any[]): void;
+    /** Implemented by sceneOrientation.js */
+    resetOrientation(): boolean;
+    /** Implemented by sceneOrientation.js */
+    canUndoOrientationReset(): boolean;
+    /** Implemented by sceneOrientation.js */
+    undoOrientationReset(): boolean;
+    /** Implemented by sceneOrientation.js */
+    captureOrientation(meshes: any[]): any[];
+    /** Implemented by sceneOrientation.js */
+    restoreOrientation(saved: any[]): boolean;
     /** Implemented by sceneRadialArray.js */
     recordRadialArrayPreviewAffine(change: any): any;
     /** Implemented by sceneRadialArray.js */

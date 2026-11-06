@@ -554,10 +554,26 @@ export function beginBevelPreview(sm) {
   return true;
 }
 
+// Only the beveled object changes while the panel is open. Restoring every
+// object in the scene on each change rebuilt them all, which made every
+// Segments or Radius tap lag on a big scene.
+function restoreBevelTarget(sm, snap) {
+  const id = snap.selection.meshId;
+  const saved = snap.meshes.find((m) => m.id === id);
+  const index = sm.meshes.findIndex((m) => m.id === id);
+  if (!saved || index < 0 || !sm.threeObjects?.has(id)) { sm.restoreSnapshot(snap); return; }
+  sm.editVersion = (sm.editVersion || 0) + 1;
+  const mesh = saved.clone();
+  sm.meshes[index] = mesh;
+  sm.rebuildThreeMesh(id);
+  const obj = sm.threeObjects.get(id);
+  if ((obj.material.userData.axisPaintTexture || null) !== (mesh.paintLayer?.texture || null)) sm.updateObjectMaterial(id);
+}
+
 export function updateBevelPreview(sm, options) {
   const snap = sm._bevelSnapshot;
   if (!snap) return;
-  sm.restoreSnapshot(snap);
+  restoreBevelTarget(sm, snap);
   // bevelEdge clears the selection when it finishes (and re-maps indices when it
   // welds). Restoring the mesh without also restoring the selection meant every
   // preview after the first one had nothing selected, so changing radius or

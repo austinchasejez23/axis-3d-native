@@ -28,6 +28,26 @@ const TAP_MS = 240, TAP_PX = 22;   // the quick-tap test used on release
 // Smallest release speed worth a glide, and the fastest glide allowed.
 const GLIDE_MIN = { orbit: 55, pan: 80, zoom: 0.15 };
 const GLIDE_MAX = { orbit: 850, pan: 2500, zoom: 3 };
+// Speed boost: a quick, sweeping gesture moves the camera further than a slow
+// one over the same finger travel, so a big change of view takes fewer
+// repeated swipes or pinches. Slow, careful gestures are unchanged and the
+// boost stays modest. Finger speed (pixels per second for orbit and pan, zoom
+// ratio per second for a pinch) where the boost starts, and where it is full.
+const BOOST = { orbit: [900, 2600], pan: [900, 2600], zoom: [1.5, 5] };
+const BOOST_MAX = 1.6;
+const BOOST_WINDOW_MS = 100;
+
+function speedBoost(manager, kind, amount, now) {
+  const history = manager._boostSamples || (manager._boostSamples = { orbit: [], pan: [], zoom: [] });
+  const samples = history[kind];
+  samples.push({ t: now, amount });
+  while (samples.length && now - samples[0].t > BOOST_WINDOW_MS) samples.shift();
+  const span = Math.max(16, now - samples[0].t + 16) / 1000;
+  const speed = samples.reduce((sum, sample) => sum + sample.amount, 0) / span;
+  const [start, full] = BOOST[kind];
+  const t = THREE.MathUtils.clamp((speed - start) / (full - start), 0, 1);
+  return 1 + (BOOST_MAX - 1) * t * t * (3 - 2 * t);
+}
 
 // Dolly along the view direction. Away from the pivot (or far from it) this is
 // the usual exponential zoom. Close to the pivot the pace holds steady, and
@@ -112,6 +132,7 @@ function flushTapHold(manager) {
 }
 
 export function stopCameraMotion(manager) {
+  manager._boostSamples = null;
   manager._cameraMotion = empty();
   manager._touchPending = empty();
   manager._touchMid = empty();
@@ -151,6 +172,7 @@ function stepCameraTween(manager, now) {
 // without dropping movement that is still easing in.
 export function resetCameraTouchSpeed(manager) {
   manager._touchSamples = [];
+  manager._boostSamples = null;
   manager._cameraGlide = null;
   manager._cameraLastMoveAt = null;
   manager._cameraOrbitVelocity = null;
@@ -178,6 +200,8 @@ export function queueCameraMotion(manager, kind, x, y = 0) {
   if (touch) {
     manager.cameraGesture = true;
     const now = performance.now();
+    const boost = speedBoost(manager, kind, kind === 'zoom' ? Math.abs(Math.log(x)) : Math.hypot(x, y), now);
+    if (boost !== 1) for (const k of KEYS) delta[k] *= boost;
     if (tapCandidate(manager, now)) {
       const held = manager._tapHold || (manager._tapHold = empty());
       for (const k of KEYS) held[k] += delta[k];

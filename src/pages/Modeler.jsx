@@ -16,6 +16,7 @@ import DrawFacePanel from '@/components/modeler/DrawFacePanel';
 import SegmentsModal from '@/components/modeler/SegmentsModal';
 import MaterialsPanel from '@/components/modeler/MaterialsPanel';
 import LightingPanel from '@/components/modeler/LightingPanel';
+import OrientationPanel from '@/components/modeler/OrientationPanel';
 import SculptPanel from '@/components/modeler/SculptPanel';
 import SculptRingOverlay from '@/components/modeler/SculptRingOverlay';
 import BevelPanel from '@/components/modeler/BevelPanel';
@@ -88,6 +89,11 @@ export default function Modeler() {
   const [promptsRef, promptsCovered] = useCoveredBy(menuOpen ? menuRect : null);
   const [gizmoRef, gizmoCovered] = useCoveredBy(menuOpen ? menuRect : null);
   const [lightingOpen, setLightingOpen] = useState(false);
+  // Orientation reset panel (double-tap the button under Help). What its Undo
+  // changed is kept so Cancel can put it back.
+  const [orientationOpen, setOrientationOpen] = useState(false);
+  const [, setOrientationVersion] = useState(0);
+  const orientationSaved = useRef(null);
   const [lightingState, setLightingState] = useState(null);
   // New shapes are created with the segment count last used on a shape.
   const [segments, setSegments] = useState(toolMemory.primitiveSegments);
@@ -435,9 +441,10 @@ export default function Modeler() {
     }
     if (libraryOpen) { setLibraryOpen(false); return true; }
     if (lightingOpen) { setLightingOpen(false); return true; }
+    if (orientationOpen) { setOrientationOpen(false); return true; }
     if (sculptOpen) { closeSculpt(); return true; }
     return false;
-  }, [cancelOpenAddVertex, selectionPattern, cancelOpenBevel, cancelOpenRadialArray, cancelOpenSnapPanel, cancelOpenFreeTransformPanel, menuOpen, guideOpen, transformDrawerOpen, libraryOpen, lightingOpen, sculptOpen, closeSculpt]);
+  }, [cancelOpenAddVertex, selectionPattern, cancelOpenBevel, cancelOpenRadialArray, cancelOpenSnapPanel, cancelOpenFreeTransformPanel, menuOpen, guideOpen, transformDrawerOpen, libraryOpen, lightingOpen, orientationOpen, sculptOpen, closeSculpt]);
 
   // Device back button closes ONE layer at a time: menu sub-panels first (via
   // the drawer's own back handler), then open tool bars, then the same chain a
@@ -455,7 +462,7 @@ export default function Modeler() {
   }, [menuOpen, helpOpen, segmentsOpen, toolsOpen, modeToolsOpen, booleanPanel, cancelOpenBoolean, handleCanvasBack]);
 
   const anyPanelOpen = menuOpen || libraryOpen || materialsOpen || sculptOpen || transformDrawerOpen || guideOpen || lightingOpen || helpOpen
-    || toolsOpen || modeToolsOpen || segmentsOpen || radialArrayOpen || snapPanelOpen || freeTransformPanelOpen || !!selectionPattern || !!addVertex || !!booleanPanel;
+    || toolsOpen || modeToolsOpen || segmentsOpen || radialArrayOpen || snapPanelOpen || freeTransformPanelOpen || orientationOpen || !!selectionPattern || !!addVertex || !!booleanPanel;
   useBackDismiss(anyPanelOpen, handleBackStep);
 
   const handleRedo = useCallback(() => {
@@ -483,6 +490,7 @@ export default function Modeler() {
     // The Help panel stays open while tools or modes are selected; only its own
     // close button, the Help button, or Back close it.
     setLightingOpen(false);
+    setOrientationOpen(false);
     setSnapPanelOpen(false);
     setFreeTransformPanelOpen(false);
     setPrecisionPanelOpen(false);
@@ -625,6 +633,35 @@ export default function Modeler() {
       window.removeEventListener('axis-render-boost-active', showRenderBoostNotice);
       clearTimeout(renderBoostNoticeTimer.current);
     };
+  }, []);
+
+  // Orientation reset (right side, under Help): a tap lines the selected
+  // geometry's own axes up with the world axes; a double-tap opens its panel.
+  const handleOrientationReset = useCallback(() => {
+    const manager = managerRef.current;
+    if (!manager?.orientationTargets().length) { showToolPrompt('Select geometry to reset its axis orientation'); return; }
+    manager.resetOrientation();
+    setOrientationVersion((v) => v + 1);
+    showToolPrompt('Axis orientation reset');
+  }, [showToolPrompt]);
+  const openOrientationPanel = useCallback(() => {
+    dismissActiveTool();
+    orientationSaved.current = null;
+    setOrientationOpen(true);
+  }, [dismissActiveTool]);
+  const undoOrientationReset = useCallback(() => {
+    const manager = managerRef.current;
+    if (!manager) return;
+    const saved = orientationSaved.current || [];
+    const known = new Set(saved.map((item) => item.id));
+    orientationSaved.current = [...saved, ...manager.captureOrientation(manager.orientationTargets().filter((mesh) => !known.has(mesh.id)))];
+    manager.undoOrientationReset();
+    setOrientationVersion((v) => v + 1);
+  }, []);
+  const cancelOrientationPanel = useCallback(() => {
+    if (orientationSaved.current) managerRef.current?.restoreOrientation(orientationSaved.current);
+    orientationSaved.current = null;
+    setOrientationOpen(false);
   }, []);
 
   const handleTool = useCallback((toolId) => {
@@ -1057,6 +1094,9 @@ export default function Modeler() {
         helpOpen={helpOpen}
         counter={!(menuOpen || guideOpen || libraryOpen || transformDrawerOpen) ? <TriangleCounter metric={selectionMetric} /> : null}
         onHelp={() => { if (helpOpen) { setHelpOpen(false); return; } dismissActiveTool(); setHelpOpen(true); }}
+        onOrientationReset={handleOrientationReset}
+        onOpenOrientationPanel={openOrientationPanel}
+        orientationOpen={orientationOpen}
         onUndo={() => { setSnapPanelOpen(false); setFreeTransformPanelOpen(false); handleUndo(); }}
         onRedo={() => { setSnapPanelOpen(false); setFreeTransformPanelOpen(false); handleRedo(); }}
       />
@@ -1397,6 +1437,15 @@ export default function Modeler() {
           }}
           onApply={(options) => { updateBevelPreview(managerRef.current, options); commitBevelPreview(managerRef.current); setBevelOpen(false); }}
           onCancel={() => { cancelBevelPreview(managerRef.current); setBevelOpen(false); }}
+        />
+      )}
+
+      {orientationOpen && (
+        <OrientationPanel
+          canUndo={!!managerRef.current?.canUndoOrientationReset()}
+          onUndo={undoOrientationReset}
+          onCancel={cancelOrientationPanel}
+          onApply={() => { orientationSaved.current = null; setOrientationOpen(false); }}
         />
       )}
 

@@ -142,8 +142,7 @@ export function applySceneSelection(SceneManager) {
 
   // Object-mode multi-select: tap to toggle an object in/out of the group.
   P.toggleObjectAtScreenPoint = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
-    const { x, y } = this.screenToNDC(clientX, clientY);
-    const hits = this.raycastMeshes(x, y);
+    const hits = this.raycastTap(clientX, clientY);
     if (hits.length === 0) return false;
     const meshId = this.findMeshIdByObject(hits[0].object);
     if (!meshId) return false;
@@ -196,7 +195,7 @@ export function applySceneSelection(SceneManager) {
         }
       }
     } else if (mode === 'face') {
-      const hits = this.raycastMeshes(x, y);
+      const hits = this.raycastTap(clientX, clientY);
       if (hits.length > 0) {
         const meshId = this.findMeshIdByObject(hits[0].object);
         const mesh = this.getMesh(meshId);
@@ -239,6 +238,23 @@ export function applySceneSelection(SceneManager) {
       meshes.push(obj.mesh);
     }
     return this.raycaster.intersectObjects(meshes, false);
+  };
+
+  // Raycast for a tap: straight under the finger first, then a small ring
+  // around it, so a tap that lands just beside a thin part (a spoke, a rail,
+  // a narrow face) still selects it instead of counting as empty canvas.
+  P.raycastTap = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
+    const at = (cx, cy) => { const ndc = this.screenToNDC(cx, cy); return this.raycastMeshes(ndc.x, ndc.y); };
+    const direct = at(clientX, clientY);
+    if (direct.length) return direct;
+    for (const radius of [8, 16]) {
+      for (let k = 0; k < 8; k++) {
+        const angle = (k / 8) * Math.PI * 2;
+        const hits = at(clientX + Math.cos(angle) * radius, clientY + Math.sin(angle) * radius);
+        if (hits.length) return hits;
+      }
+    }
+    return [];
   };
 
   P.isWorldPointVisible = /** @this {import('./SceneManager.js').SceneManager} */ function (point) {
@@ -392,7 +408,7 @@ export function applySceneSelection(SceneManager) {
       const hit = this.findClosestEdge(x, y);
       if (hit) { this.setSelection({ meshId: hit.meshId, type: 'edge', indices: [hit.index] }); selected = true; }
     } else if (mode === 'face') {
-      const hits = this.raycastMeshes(x, y);
+      const hits = this.raycastTap(clientX, clientY);
       if (hits.length > 0) {
         const { meshId, faceIndex } = this.faceIndexFromHit(hits[0]);
         if (meshId) {
@@ -403,7 +419,7 @@ export function applySceneSelection(SceneManager) {
         }
       }
     } else {
-      const hits = this.raycastMeshes(x, y);
+      const hits = this.raycastTap(clientX, clientY);
       if (hits.length > 0) {
         const meshId = this.findMeshIdByObject(hits[0].object);
         if (meshId) { this.setSelection({ meshId, type: 'object', indices: [] }); selected = true; }
@@ -580,8 +596,14 @@ export function applySceneSelection(SceneManager) {
   // distance of any selected element's projected geometry prioritizes the
   // selection (translate) over camera orbit, so a gesture near a thin edge or
   // face boundary still grabs the selection instead of orbiting.
-  P.isPointNearSelection = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY, buffer = 0.12) {
+  P.isPointNearSelection = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY, buffer = 0.12, minPx = 0) {
     const { x, y } = this.screenToNDC(clientX, clientY);
+    // Measure on screen, in pixels, the same distance across as down. In
+    // screen units the reach was only about half as wide as it was tall on a
+    // phone held upright, so a finger right beside a thin part missed it.
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const halfW = Math.max(1, rect.width / 2), halfH = Math.max(1, rect.height / 2);
+    const reachPx = Math.max(minPx, buffer * Math.max(halfW, halfH));
     // Segments of the selection's OWN outline (not a bounding box — a box let a
     // gesture in empty space beside the object still grab and move it).
     const collectSegs = (mesh, indices, type) => {
@@ -633,7 +655,7 @@ export function applySceneSelection(SceneManager) {
       const len2 = dx * dx + dy * dy;
       let t = len2 > 0 ? ((x - sa.x) * dx + (y - sa.y) * dy) / len2 : 0;
       t = Math.max(0, Math.min(1, t));
-      if (Math.hypot(x - (sa.x + t * dx), y - (sa.y + t * dy)) <= buffer) return true;
+      if (Math.hypot((x - (sa.x + t * dx)) * halfW, (y - (sa.y + t * dy)) * halfH) <= reachPx) return true;
     }
     return false;
   };

@@ -54,7 +54,7 @@ export default function GesturePanel() {
       </div>
 
       <button
-        onClick={() => theme.set({ gestureMoveThreshold: 5, gestureHoldDelay: 500, gestureSelectReach: 0.025, gesturePinchThreshold: 6, gestureRotateSensitivity: 1, gestureScaleSensitivity: 1 })}
+        onClick={() => theme.set({ gestureMoveThreshold: 5, gestureHoldDelay: 400, gestureSelectReach: 0.025, gesturePinchThreshold: 6, gestureRotateSensitivity: 1, gestureScaleSensitivity: 1 })}
         className="mt-1 w-full h-7 rounded-md text-[11px] font-semibold border active:scale-95"
         style={{ color: t.uiColor, borderColor: 'rgba(255,255,255,0.2)' }}
       >

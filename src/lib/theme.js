@@ -14,7 +14,8 @@ const STARTUP_DEFAULTS_OFF_MIGRATION = 'axis_startup_defaults_off_v1';
 const RENDER_BOOST_MANUAL_ONLY_MIGRATION = 'axis_render_boost_manual_only_v1';
 const GRID_DEFAULT_ON_MIGRATION = 'axis_grid_default_on_v1';
 const TOOL_LABELS_DEFAULT_ON_MIGRATION = 'axis_tool_labels_default_on_v1';
-const DEFAULTS = { backgroundColor: '#1c1c1c', highlightColor: '#0066ff', gridColor: '#3a7bbf', shadowsEnabled: false, shadowIntensity: 0.6, defaultLightingEnabled: true, shineEnabled: true, shineIntensity: 0.7, wireframeEnabled: true, toolLabelsEnabled: true, unit: 'in', gridSquareSize: 1, gridSize: 100, snapToGrid: false, snapDistance: 0.0625, snapAngle: 15, lightFollowCamera: false, lightAzimuth: 45, lightElevation: 50, lightDistance: 8, lightColor: '#ffffff', lightIntensity: 1.5, savedColors: [], gestureMoveThreshold: 5, gestureHoldDelay: 500, gestureSelectReach: 0.025, gesturePinchThreshold: 6, gestureRotateSensitivity: 1, gestureScaleSensitivity: 1, hideDetailWhileEditing: true, renderBoostEnabled: false, focusRenderBoostEnabled: false, gridVisible: true, objectArrowsEnabled: false, measurementsOn: false, measurementOption: 'edge' };
+const SHORTER_HOLD_MIGRATION = 'axis_shorter_hold_v1';
+const DEFAULTS = { backgroundColor: '#1c1c1c', highlightColor: '#0066ff', gridColor: '#3a7bbf', shadowsEnabled: false, shadowIntensity: 0.6, defaultLightingEnabled: true, shineEnabled: true, shineIntensity: 0.7, wireframeEnabled: true, toolLabelsEnabled: true, unit: 'in', gridSquareSize: 1, gridSize: 100, snapToGrid: false, snapDistance: 0.0625, snapAngle: 15, lightFollowCamera: false, lightAzimuth: 45, lightElevation: 50, lightDistance: 8, lightColor: '#ffffff', lightIntensity: 1.5, savedColors: [], gestureMoveThreshold: 5, gestureHoldDelay: 400, gestureSelectReach: 0.025, gesturePinchThreshold: 6, gestureRotateSensitivity: 1, gestureScaleSensitivity: 1, hideDetailWhileEditing: true, renderBoostEnabled: false, focusRenderBoostEnabled: false, gridVisible: true, objectArrowsEnabled: false, measurementsOn: false, measurementOption: 'edge' };
 
 // Display settings that belong to one model. They are saved with it and restored
 // when it opens; everything else here (highlight color, gestures, tool labels,
@@ -98,6 +99,12 @@ function load() {
       saved.toolLabelsEnabled = true;
       localStorage.setItem(TOOL_LABELS_DEFAULT_ON_MIGRATION, '1');
     }
+    // The press-hold that enters multi-select is a little shorter by default
+    // (400 ms instead of 500). A hold delay someone chose themselves is kept.
+    if (!localStorage.getItem(SHORTER_HOLD_MIGRATION)) {
+      if (saved.gestureHoldDelay == null || saved.gestureHoldDelay === 500) saved.gestureHoldDelay = 400;
+      localStorage.setItem(SHORTER_HOLD_MIGRATION, '1');
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
     return { ...DEFAULTS, ...saved };
   } catch {}
@@ -142,7 +149,7 @@ export const theme = {
   get lightIntensity() { return state.lightIntensity ?? 1.5; },
   get savedColors() { return state.savedColors || []; },
   get gestureMoveThreshold() { return state.gestureMoveThreshold ?? 5; },
-  get gestureHoldDelay() { return state.gestureHoldDelay ?? 500; },
+  get gestureHoldDelay() { return state.gestureHoldDelay ?? 400; },
   get gestureSelectReach() { return state.gestureSelectReach ?? 0.025; },
   get gesturePinchThreshold() { return state.gesturePinchThreshold ?? 6; },
   get gestureRotateSensitivity() { return state.gestureRotateSensitivity ?? 1; },

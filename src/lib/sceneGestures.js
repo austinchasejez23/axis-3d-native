@@ -59,6 +59,12 @@ function extentAlongAxis(sm, axis, localAxes) {
   return { x: bounds.sx, y: bounds.sy, z: bounds.sz }[axis] || 0;
 }
 
+// A finger this close to the selection (in screen pixels) grabs it, even when
+// the Select buffer setting works out smaller on screen: about half a fingertip.
+const TOUCH_REACH_PX = 20;
+// A touch this quick and this short is still a tap, not a drag.
+const TAP_MS = 240, TAP_PX = 22;
+
 // Touch gesture handling for SceneManager, extracted so SceneManager.js stays
 // within the file size limit. Behavior is unchanged from when it lived inline.
 export function applySceneGestures(SceneManager) {
@@ -80,6 +86,10 @@ export function applySceneGestures(SceneManager) {
     };
     window.addEventListener('blur', this._cancelCameraOnBlur);
     el.addEventListener('contextmenu', (e) => e.preventDefault());
+    // A finger held still (as when entering multi-select) is otherwise also
+    // read by the WebView as a long press, which buzzes the phone. The canvas
+    // handles every touch itself, so the browser's own long press is cancelled.
+    el.addEventListener('touchstart', (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
     this.setupMouseEvents();
   };
 
@@ -151,6 +161,7 @@ export function applySceneGestures(SceneManager) {
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY, startTime: performance.now() });
     if (this.pointers.size === 1) this._quickTapCamera = { theta: this.cameraTheta, phi: this.cameraPhi, target: this.cameraTarget.clone(), distance: this.cameraDist };
     else this._quickTapCamera = null;
+    if (this.pointers.size === 1) this._firstTouchCamera = this._quickTapCamera;
     // The camera is always free (orbit / pan / zoom, any number of fingers).
     // Gestures just never overlap: while the camera is moving, extra fingers
     // keep driving the camera and can never manipulate the selection.
@@ -189,7 +200,7 @@ export function applySceneGestures(SceneManager) {
       // raycasts can miss the mathematical boundary between its two faces; that
       // must still begin paint, never fall through to camera orbit.
       const selectedEdgeHit = this.selection.type === 'edge' && this.selection.indices.length > 0
-        && this.isPointNearSelection(e.clientX, e.clientY, theme.gestureSelectReach);
+        && this.isPointNearSelection(e.clientX, e.clientY, theme.gestureSelectReach, TOUCH_REACH_PX);
       if (paintHits.length > 0 || selectedEdgeHit) {
         // Touching a mesh with the brush/spray paints it directly; nothing
         // is selected while these tools are active.
@@ -255,7 +266,7 @@ export function applySceneGestures(SceneManager) {
     if (this.extrudeDrag && this.pointers.size === 1) {
       clearTimeout(this.pressHoldTimer);
       const canGrab = this.isPointOverSelection(e.clientX, e.clientY)
-        || this.isPointNearSelection(e.clientX, e.clientY, theme.gestureSelectReach);
+        || this.isPointNearSelection(e.clientX, e.clientY, theme.gestureSelectReach, TOUCH_REACH_PX);
       if (canGrab) this.beginHeavyEdit();
       this.gesture = canGrab ? 'extrude_drag' : 'orbit_pending';
       this.gestureData = canGrab ? { startX: e.clientX, startY: e.clientY } : null;
@@ -270,7 +281,7 @@ export function applySceneGestures(SceneManager) {
       if (this._radialArray) {
         clearTimeout(this.pressHoldTimer);
         this.gesture = this.isPointOverSelection(e.clientX, e.clientY)
-          || this.isPointNearSelection(e.clientX, e.clientY, theme.gestureSelectReach)
+          || this.isPointNearSelection(e.clientX, e.clientY, theme.gestureSelectReach, TOUCH_REACH_PX)
           ? 'translate_pending' : 'orbit_pending';
         return;
       }
@@ -288,7 +299,7 @@ export function applySceneGestures(SceneManager) {
         // thin selected part (a tube, a frame rail) can be grabbed without a
         // pixel-perfect hit.
         if (!this.surfaceMode && this.selection.meshId && (this.isPointOverSelection(e.clientX, e.clientY)
-          || this.isPointNearSelection(e.clientX, e.clientY, theme.gestureSelectReach))) {
+          || this.isPointNearSelection(e.clientX, e.clientY, theme.gestureSelectReach, TOUCH_REACH_PX))) {
           this.gesture = 'translate_pending';
           this.gestureData = { lastX: e.clientX, lastY: e.clientY, startX: e.clientX, startY: e.clientY, axis: null };
           return;
@@ -332,7 +343,7 @@ export function applySceneGestures(SceneManager) {
       // within a very small screen-space margin. Everything else controls camera.
       // Surface mode never transforms objects — the finger only selects/paints.
       const overSelection = !this.surfaceMode && (this.isPointOverSelection(e.clientX, e.clientY)
-        || this.isPointNearSelection(e.clientX, e.clientY, theme.gestureSelectReach));
+        || this.isPointNearSelection(e.clientX, e.clientY, theme.gestureSelectReach, TOUCH_REACH_PX));
       const ndc = this.screenToNDC(e.clientX, e.clientY);
       let onGeometry = false;
       if (this.selectionMode === 'vertex') onGeometry = !!this.findClosestVertex(ndc.x, ndc.y, 0.1);
@@ -393,7 +404,7 @@ export function applySceneGestures(SceneManager) {
       // it (tight buffer) — a pinch out in empty space runs the camera instead
       // of silently resizing the selected object.
       const overSelection = this.isPointOverSelection(pts[0].x, pts[0].y) || this.isPointOverSelection(pts[1].x, pts[1].y)
-        || this.isPointNearSelection(pts[0].x, pts[0].y, theme.gestureSelectReach) || this.isPointNearSelection(pts[1].x, pts[1].y, theme.gestureSelectReach);
+        || this.isPointNearSelection(pts[0].x, pts[0].y, theme.gestureSelectReach, TOUCH_REACH_PX) || this.isPointNearSelection(pts[1].x, pts[1].y, theme.gestureSelectReach, TOUCH_REACH_PX);
 
       // While sculpting, two fingers always run the camera (never object manipulate).
       if (this.sculptTool && this.sculptTool.active) {
@@ -407,6 +418,26 @@ export function applySceneGestures(SceneManager) {
         return;
       }
 
+      // Two fingers rarely land at the same instant. When the first finger had
+      // only just started turning the view (nothing shown yet, still a tap by
+      // time and distance) and either finger is on or beside the selection,
+      // the pair was meant for the selection: drop that start of an orbit.
+      const first = pts[0];
+      if (this.cameraGesture && this.gesture === 'orbit' && this._firstTouchCamera && overSelection
+        && this.selection.meshId && !this.surfaceMode && first.startTime != null
+        && performance.now() - first.startTime < TAP_MS
+        && Math.hypot(first.x - first.startX, first.y - first.startY) < TAP_PX) {
+        const view = this._firstTouchCamera;
+        discardTapMotion(this);
+        this.stopCameraMotion();
+        this.cameraTheta = view.theta;
+        this.cameraPhi = view.phi;
+        this.cameraTarget.copy(view.target);
+        this.cameraDist = view.distance;
+        this.applyCamera();
+        this.cameraGesture = false;
+        this.gesture = null;
+      }
       if (this.selection.meshId && (overSelection || this._resumeObjectGesture) && !this.cameraGesture && !this.surfaceMode) {
         this.gesture = 'manipulate';
         this.gestureData = {
@@ -560,7 +591,13 @@ export function applySceneGestures(SceneManager) {
         // commits, preventing a selection tap from immediately dragging geometry.
         // In multi-select the same grace applies, so a tap on a selected item
         // toggles it off instead of being read as a tiny drag.
-        const translateGrace = this.multiSelect || this.selection.type === 'face' || this.selection.type === 'edge' ? 8 : 0.5;
+        const baseGrace = this.multiSelect || this.selection.type === 'face' || this.selection.type === 'edge' ? 8 : 0.5;
+        // A quick touch on the selection stays a tap until it clearly travels,
+        // so a tap's natural wobble (or a finger landing just before a second
+        // one) never nudges the selection. A drag then catches up at once,
+        // since it follows the finger from where it first touched.
+        const quick = ptr.startTime != null && performance.now() - ptr.startTime < TAP_MS;
+        const translateGrace = quick ? Math.max(baseGrace, TAP_PX) : baseGrace;
         if (totalMove > translateGrace) {
           this.movedSignificantly = true;
           clearTimeout(this.pressHoldTimer);
@@ -872,6 +909,11 @@ export function applySceneGestures(SceneManager) {
       this.movedSignificantly = false;
       this.gesture = 'orbit_pending';
     }
+    // A quick touch on the selection that never became a drag is a tap too,
+    // even when the finger wobbled past the tap tolerance on the way.
+    if (!quickTap && this.pointers.size === 1 && pointer && this.gesture === 'translate_pending'
+      && performance.now() - pointer.startTime < TAP_MS
+      && Math.hypot(e.clientX - pointer.startX, e.clientY - pointer.startY) < TAP_PX) this.movedSignificantly = false;
     this._quickTapCamera = null;
     const cameraTouchEnded = quickTap ? false : endCameraTouch(this, e);
     this.pointers.delete(e.pointerId);
@@ -976,7 +1018,7 @@ export function applySceneGestures(SceneManager) {
         // Only a genuinely empty canvas tap may dismiss an open panel. Tapping
         // geometry must continue through to selection while Surface stays open.
         const tapNdc = this.screenToNDC(e.clientX, e.clientY);
-        const tapHitsGeometry = this.raycastMeshes(tapNdc.x, tapNdc.y).length > 0;
+        const tapHitsGeometry = this.raycastTap(e.clientX, e.clientY).length > 0;
         const panelHandled = !tapHitsGeometry && this.cb.onEmptyTap?.();
         if (panelHandled) {
           this.activeAction = 'idle';
@@ -1023,12 +1065,21 @@ export function applySceneGestures(SceneManager) {
           let hit = false;
           if (this.selectionMode === 'object') hit = this.toggleObjectAtScreenPoint(e.clientX, e.clientY);
           else hit = this.toggleSelectionAtScreenPoint(e.clientX, e.clientY);
-          if (!hit) { this.exitMultiSelect(); this.clearSelection(); }
-          else if (this.selectionMode === 'object') {
+          // Only a tap on empty canvas ends multi-select and clears it. A tap
+          // on an object that finds nothing there to toggle leaves the
+          // selection as it is.
+          if (!hit && !tapHitsGeometry) { this.exitMultiSelect(); this.clearSelection(); }
+          else if (hit && this.selectionMode === 'object') {
             this.selection = { meshId: this.selectedMeshIds[0] || null, type: 'object', indices: [] };
             this.updateHighlights();
             this.updateStats();
           }
+          // Deselecting the last selected piece closes multi-select.
+          const sel = this.selection;
+          const nothingLeft = this.selectionMode === 'object'
+            ? this.selectedMeshIds.length === 0
+            : !(sel.meshId && sel.indices.length > 0);
+          if (hit && nothingLeft) { this.exitMultiSelect(); this.clearSelection(); }
         } else if (this.gesture === 'translate_pending') {
           if (this.selectionMode === 'object') {
             const ndcUp = this.screenToNDC(e.clientX, e.clientY);

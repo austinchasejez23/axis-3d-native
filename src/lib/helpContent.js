@@ -1,7 +1,7 @@
 import {
   Globe, Scan, Gauge, Move3D, Magnet, Crosshair, ImagePlus, Palette, Hand, ArrowLeftRight, EyeOff, Grid3x3,
   PaintBucket, Paintbrush, SprayCan, Blend, Pipette, Check, Undo2, Ban, Plus, SlidersHorizontal,
-  Sun, Spline, RotateCcw, Image, FlipHorizontal2, Box,
+  Sun, Spline, RotateCcw, Image, FlipHorizontal2, Box, Axis3d,
 } from 'lucide-react';
 import { ProtractorIcon, MeasureIcon } from '@/lib/toolIcons';
 import ResistanceIcon from '@/components/modeler/ResistanceIcon';
@@ -155,6 +155,7 @@ const SIDE = [
   { key: 'side:snap', side: 'snap', label: 'Snapping', icon: Magnet, desc: `Snaps movement to set distances and angles. Double-tap to open its settings panel: distance and angle.` },
   { key: 'side:precision', side: 'precision', label: 'Resistance', icon: ResistanceIcon, desc: `Adds resistance to movement for finer control. Double-tap to open its settings panel.` },
   { key: 'side:focus', side: 'focus', label: 'Focus', icon: Crosshair, desc: 'Re-centers the camera on the selection.' },
+  { key: 'side:orientation', side: 'orientation', label: 'Reset orientation', icon: Axis3d, desc: `Lines the selected geometry's own axes up with the world axes without moving it, so scaling follows the world axes. Double-tap to open its panel and undo the last reset.` },
 ];
 
 // Tools grouped by mode: Object, Face, Edge, Vertex, General, then the side buttons.

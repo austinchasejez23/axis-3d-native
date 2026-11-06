@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import ModelingNumberPad from './ModelingNumberPad';
 import NumericValueField from '@/components/modeler/NumericValueField';
 
-export default function HorizontalChevronStepper({ label, value, onChange, step, decimals = 0, min = 0, max = Infinity, color, highlightColor, boxed = false, appearance, keypadOpen = false, onKeypadOpen }) {
+export default function HorizontalChevronStepper({ label, value, onChange, step, decimals = 0, min = 0, max = Infinity, color, highlightColor, boxed = false, appearance, keypadOpen = false, onKeypadOpen, onChevron = undefined }) {
   const [text, setText] = useState(Number(value).toFixed(decimals));
   const replaceNext = useRef(true);
   const signNext = useRef('');
@@ -45,13 +45,16 @@ export default function HorizontalChevronStepper({ label, value, onChange, step,
       }
     }
   };
+  // A chevron tap can also close an open keypad first (onChevron), then steps
+  // from the current value.
+  const stepBy = (delta) => { onChevron?.(); apply(value + delta); };
   const openPad = () => { pendingText.current = text; replaceNext.current = true; signNext.current = ''; onKeypadOpen?.(); };
   const closePad = () => { apply(pendingText.current); onKeypadOpen?.(false); };
   return (
     <div className={`flex min-w-0 items-center ${appearance === 'radial' ? 'gap-0 rounded-md' : 'justify-start gap-0.5'}`} style={appearance === 'radial' ? { background: 'rgb(var(--modeling-sheet) / 0.65)', boxShadow: 'inset 0 0 0 1px rgb(var(--modeling-border) / 0.16)' } : undefined}>
-      <button type="button" onClick={() => apply(value - step)} aria-label={`Decrease ${label}`} className={`flex shrink-0 items-center justify-center active:scale-75 ${appearance === 'radial' ? 'modeling-value h-7 w-7 rounded-md' : 'h-10 w-8'}`} style={{ color: appearance === 'radial' ? highlightColor : color, ...(appearance === 'radial' ? { borderColor: highlightColor } : {}) }}><ChevronLeft className={appearance === 'radial' ? 'h-5 w-5' : 'h-6 w-6'} strokeWidth={2.5} /></button>
+      <button type="button" onClick={() => stepBy(-step)} aria-label={`Decrease ${label}`} className={`flex shrink-0 items-center justify-center active:scale-75 ${appearance === 'radial' ? 'modeling-value h-7 w-7 rounded-md' : 'h-10 w-8'}`} style={{ color: appearance === 'radial' ? highlightColor : color, ...(appearance === 'radial' ? { borderColor: highlightColor } : {}) }}><ChevronLeft className={appearance === 'radial' ? 'h-5 w-5' : 'h-6 w-6'} strokeWidth={2.5} /></button>
       <NumericValueField label={`${label} value`} value={text} active={keypadOpen} onOpen={openPad} onKey={pressKey} onClose={closePad} color={color} highlightColor={highlightColor} className={`h-7 font-semibold ${appearance === 'radial' ? 'flex-1 !rounded-none !bg-transparent !border-0 text-[16px]' : `flex-none w-14 text-[16px] ${boxed ? '' : '!bg-transparent !border-0'}`}`} />
-      <button type="button" onClick={() => apply(value + step)} aria-label={`Increase ${label}`} className={`flex shrink-0 items-center justify-center active:scale-75 ${appearance === 'radial' ? 'modeling-value h-7 w-7 rounded-md' : 'h-10 w-8'}`} style={{ color: appearance === 'radial' ? highlightColor : color, ...(appearance === 'radial' ? { borderColor: highlightColor } : {}) }}><ChevronRight className={appearance === 'radial' ? 'h-5 w-5' : 'h-6 w-6'} strokeWidth={2.5} /></button>
+      <button type="button" onClick={() => stepBy(step)} aria-label={`Increase ${label}`} className={`flex shrink-0 items-center justify-center active:scale-75 ${appearance === 'radial' ? 'modeling-value h-7 w-7 rounded-md' : 'h-10 w-8'}`} style={{ color: appearance === 'radial' ? highlightColor : color, ...(appearance === 'radial' ? { borderColor: highlightColor } : {}) }}><ChevronRight className={appearance === 'radial' ? 'h-5 w-5' : 'h-6 w-6'} strokeWidth={2.5} /></button>
       <ModelingNumberPad open={keypadOpen} onKey={pressKey} onClose={closePad} decimal={decimals > 0} signed={min < 0} />
     </div>
   );

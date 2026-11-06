@@ -26,6 +26,9 @@ export class EditableMesh {
     this.primitiveType = null;
     this.segments = null;
     this.primitiveParams = null; // primitive-specific editable settings
+    // Rotations taken off by Orientation reset, newest last, so each reset
+    // can be undone later without losing edits made in between.
+    this.orientationResets = [];
     this.smoothShading = false;
     // Imported triangle meshes can display only feature/crease edges without
     // removing any underlying editable topology.
@@ -824,6 +827,7 @@ export class EditableMesh {
     m.primitiveType = this.primitiveType;
     m.segments = this.segments ? { ...this.segments } : null;
     m.primitiveParams = this.primitiveParams ? { ...this.primitiveParams } : null;
+    m.orientationResets = (this.orientationResets || []).map((r) => [...r]);
     m.smoothShading = this.smoothShading;
     m.importedFeatureEdges = this.importedFeatureEdges;
     m.importedWireframeOnly = this.importedWireframeOnly;
@@ -870,6 +874,7 @@ export class EditableMesh {
       scale: { x: this.scale.x, y: this.scale.y, z: this.scale.z },
       visible: this.visible, locked: this.locked, color: this.color,
       primitiveType: this.primitiveType, segments: this.segments, primitiveParams: this.primitiveParams,
+      orientationResets: (this.orientationResets || []).map((r) => [...r]),
       smoothShading: this.smoothShading,
       importedFeatureEdges: this.importedFeatureEdges,
       importedWireframeOnly: this.importedWireframeOnly,
@@ -915,6 +920,7 @@ export class EditableMesh {
     m.primitiveType = data.primitiveType || null;
     m.segments = data.segments || null;
     m.primitiveParams = data.primitiveParams || null;
+    m.orientationResets = (data.orientationResets || []).map((r) => [...r]);
     m.smoothShading = data.smoothShading || false;
     m.importedFeatureEdges = !!data.importedFeatureEdges;
     m.importedWireframeOnly = !!data.importedWireframeOnly;

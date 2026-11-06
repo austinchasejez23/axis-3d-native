@@ -27,6 +27,7 @@ import { applySceneCut } from './sceneCut';
 import { applySceneMeasure } from './sceneMeasure';
 import { applySceneAddVertex } from './sceneAddVertex';
 import { applySceneReference, loadReferenceImage } from './sceneReference';
+import { applySceneOrientation } from './sceneOrientation';
 import { mergeVerticesWithin, weldCoincidentVertices, edgeKey } from './meshTopology';
 import { cleanupCommittedTopology, dissolveSharedBoundary, adjacentFacesForBoundary, removeFaceByIndex, resolveLegacyDeletedBorders } from './meshTopologyInvariants';
 import { updateGeometryInPlace } from './meshBufferUpdate';
@@ -2370,6 +2371,22 @@ export class SceneManager {
   subdivideMesh() { subdivideMeshTool(this); }
 
   // === STATS & HUD ===
+  // Triangle count of an object, remembered with the geometry it was built
+  // into. Counting re-triangulates every face, and doing it for every object
+  // on each change made edits lag on a big scene.
+  meshTriangleCount(mesh) {
+    const obj = this.threeObjects.get(mesh.id);
+    const geometry = obj && (obj.focusDetailGeometry || obj.mesh.geometry);
+    if (!geometry) return mesh.getTriangleCount();
+    if (!this._triangleCounts) this._triangleCounts = new WeakMap();
+    let count = this._triangleCounts.get(geometry);
+    if (count === undefined) {
+      count = mesh.getTriangleCount();
+      this._triangleCounts.set(geometry, count);
+    }
+    return count;
+  }
+
   updateStats() {
     this.refreshFocusRenderBoost?.();
     const sel = this.selection;
@@ -2381,7 +2398,7 @@ export class SceneManager {
       const ids = this.selectedMeshIds.length > 0
         ? this.selectedMeshIds
         : selectedMesh ? [selectedMesh.id] : this.meshes.map((mesh) => mesh.id);
-      const count = ids.reduce((sum, id) => sum + (this.getMesh(id)?.getTriangleCount() || 0), 0);
+      const count = ids.reduce((sum, id) => { const mesh = this.getMesh(id); return sum + (mesh ? this.meshTriangleCount(mesh) : 0); }, 0);
       metric = { type: 'object', count, label: `${count} selected triangles` };
     } else if (this.multiSelect) {
       const count = sel.indices.length;
@@ -2397,7 +2414,7 @@ export class SceneManager {
       metric = { type: 'face', count, label: `${count} total faces` };
     }
 
-    const totalTriangles = this.meshes.reduce((sum, mesh) => sum + mesh.getTriangleCount(), 0);
+    const totalTriangles = this.meshes.reduce((sum, mesh) => sum + this.meshTriangleCount(mesh), 0);
     updateRenderBoostTriangleLoad(this, totalTriangles);
     this.cb.onStatsChange?.(metric.label);
     this.cb.onTriangleCountChange?.(metric);
@@ -2744,3 +2761,4 @@ applySceneMeasure(SceneManager);
 applySceneAddVertex(SceneManager);
 applySceneReference(SceneManager);
 applySceneDrawFace(SceneManager);
+applySceneOrientation(SceneManager);

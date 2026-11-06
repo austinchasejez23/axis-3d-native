@@ -37,7 +37,9 @@ export default function BevelPanel({ onPreview, onApply, onCancel, isPro, onProL
     opacity: disabled ? 0.4 : 1,
     textShadow: txtShadow,
   });
-  const keypad = (name) => ({ keypadOpen: activeKeypad === name, onKeypadOpen: (open = true) => setActiveKeypad(open ? name : null) });
+  // Tapping either field's chevron closes an open keypad (not the panel) and
+  // steps that field; tapping a value opens its keypad as usual.
+  const keypad = (name) => ({ keypadOpen: activeKeypad === name, onKeypadOpen: (open = true) => setActiveKeypad(open ? name : null), onChevron: () => setActiveKeypad(null) });
 
   return (
     <ModelingPanel label="Bevel controls" keypadOpen={!!activeKeypad}>
