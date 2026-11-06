@@ -34,6 +34,7 @@ const files = [
   'sceneReflections', 'sceneConvert', 'sceneSelection', 'sceneLights',
   'sceneMouse', 'sceneGestures', 'sceneCut', 'sceneMeasure',
   'sceneAddVertex', 'sceneReference', 'sceneDrawFace', 'focusRenderBoost',
+  'sceneOrientation',
 ];
 const installed = new Set();
 for (const moduleName of files) {
