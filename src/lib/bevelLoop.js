@@ -565,14 +565,20 @@ export function bevelLoopEdges(sm, options = {}) {
     return pv.clone().addScaledVector(best.d, step);
   };
 
-  // At an interior vertex of an open selected ridge, the two side polygons
-  // often meet along a real transverse mesh edge (a spoke). The bevel rail
-  // follows that spoke so every profile point stays on the model surface.
+  // At a vertex inside a selected chain, the two side polygons often meet
+  // along a real transverse mesh edge (a spoke). The bevel rail follows that
+  // spoke so every profile point stays on the model surface. That holds for a
+  // closed loop too: around a tapered wall (a cup, a cone, a frustum) the
+  // bisector of the two faces tips off the wall, so the band came out
+  // straight up and down and kinked the taper. (A closed Sweep keeps its own
+  // pipe-bend construction.)
   // Returns { unit, length, alignment } for the spoke, or null.
   const spokeFor = (i, pick) => {
     const inc = at[i];
-    if (closed || inc.length !== 2) return null;
+    if ((closed && sweep) || inc.length !== 2) return null;
     const vid = order[i];
+    const prevVid = closed ? order[(i - 1 + N) % N] : order[i - 1];
+    const nextVid = closed ? order[(i + 1) % N] : order[i + 1];
     const f0 = pick === 'dA' ? sides[inc[0]].a : sides[inc[0]].b;
     const f1 = pick === 'dA' ? sides[inc[1]].a : sides[inc[1]].b;
     if (f0 === f1) return null;
@@ -585,7 +591,7 @@ export function bevelLoopEdges(sm, options = {}) {
     let best = null, bestAlignment = 0.15;
     for (const w of around(f0)) {
       if (!shared.has(w) || !shownEdges.has(edgeKey(vid, w)) ||
-          w === order[i - 1] || w === order[i + 1]) continue;
+          w === prevVid || w === nextVid) continue;
       const offset = V3(mesh.getVertex(w)).sub(vv);
       const length = offset.length();
       if (length < 1e-8) continue;
