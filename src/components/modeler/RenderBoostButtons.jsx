@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Gauge, Move3D, Magnet, Crosshair } from 'lucide-react';
+import { Move3D, Magnet, Crosshair } from 'lucide-react';
 import ResistanceIcon from './ResistanceIcon';
+import OrientationResetIcon from './OrientationResetIcon';
 import { useTheme } from '@/lib/theme';
 import { helpIntercept } from '@/lib/helpMode';
 
@@ -13,7 +14,7 @@ const FREE_HINT = 'Double-tap the Free Transform icon for settings';
 const FREE_HINT_WIDTH_REM = 12;
 const RESISTANCE_HINT = 'Double-tap the Resistance icon for settings';
 
-export default function RenderBoostButtons({ renderBoost, freeTransform, snapping, onRenderBoost, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel, onFocus, precision, onTogglePrecision, onOpenPrecisionPanel, group = 'all' }) {
+export default function RenderBoostButtons({ orientationOpen, onOrientationReset, onOpenOrientationPanel, freeTransform, snapping, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel, onFocus, precision, onTogglePrecision, onOpenPrecisionPanel, group = 'all' }) {
   const { uiColor, highlightColor } = useTheme();
   const [notice, setNotice] = useState(null);
   const timerRef = useRef(null);
@@ -73,9 +74,12 @@ export default function RenderBoostButtons({ renderBoost, freeTransform, snappin
 
   return (
     <div className="relative z-10 flex w-full flex-col items-center">
-      {(group === 'all' || group === 'visual') && <button {...tapProps('boost', () => select('Render boost', onRenderBoost))} aria-label="Toggle navigation render boost" aria-pressed={renderBoost} style={style(renderBoost)} className={button}>
-        {notice === 'Render boost' && <span className="absolute left-full ml-1 z-20 text-sm whitespace-nowrap translate-y-[3px]">Render boost</span>}
-        <Gauge className="w-5 h-5 shrink-0" strokeWidth={2} />
+      {/* Orientation reset: a tap lines the selection's axes up with the
+          world axes; a double-tap opens its panel. Render boost lives in the
+          menu. */}
+      {(group === 'all' || group === 'visual') && <button {...tapProps('orientation', () => select('Reset orientation', onOrientationReset), onOpenOrientationPanel)} aria-label="Reset orientation" aria-pressed={!!orientationOpen} title="Double-tap to undo an orientation reset" style={style(orientationOpen)} className={button}>
+        {notice === 'Reset orientation' && <span className="absolute left-full ml-1 z-20 text-sm whitespace-nowrap translate-y-[3px]">Reset orientation</span>}
+        <OrientationResetIcon className="w-5 h-5 shrink-0" />
       </button>}
       {group === 'all' && <div className="h-[10px] w-full" aria-hidden="true" />}
       {(group === 'all' || group === 'action') && <>

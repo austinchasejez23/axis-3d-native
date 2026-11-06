@@ -54,7 +54,7 @@ import { useProAccess } from '@/lib/ProAccessContext';
 import { FREE_PROJECT_LIMIT, FREE_TRIANGLE_LIMIT, PRO_TOOL_IDS, TRIANGLE_GROWTH_TOOLS, totalTriangles } from '@/lib/proAccess';
 import { toolMemory } from '@/lib/toolMemory';
 import { useTheme, theme } from '@/lib/theme';
-import { setRenderBoostManual, resetRenderBoostAuto } from '@/lib/renderBoost';
+import { resetRenderBoostAuto } from '@/lib/renderBoost';
 import useBackDismiss from '@/hooks/use-back-dismiss';
 import useCoveredBy from '@/hooks/use-covered-by';
 import useAutoSave from '@/hooks/use-autosave';
@@ -73,7 +73,7 @@ export default function Modeler() {
   const menuBackRef = useRef(null);
   const transformApplyRef = useRef(null);
   const sculptSessionSnapshotRef = useRef(null);
-  const { uiColor, highlightColor, unit, renderBoostEnabled, snapToGrid, gridVisible } = useTheme();
+  const { uiColor, highlightColor, unit, snapToGrid, gridVisible } = useTheme();
   const { isPro, openUpgrade } = useProAccess();
   const { height: workspaceHeight } = useKeyboardViewport();
   const [selectionMode, setSelectionMode] = useState('object');
@@ -1065,7 +1065,6 @@ export default function Modeler() {
       <TopBar
         clayViewport={clayViewport}
         transparentViewport={transparentViewport}
-        renderBoost={renderBoostEnabled}
         freeTransform={freeTransform}
         snapping={snapToGrid}
         precision={precision}
@@ -1073,7 +1072,6 @@ export default function Modeler() {
         onOpenPrecisionPanel={() => { dismissActiveTool(); setPrecision(true); setPrecisionPanelOpen(true); setSnapPanelOpen(false); setFreeTransformPanelOpen(false); }}
         onToggleClayViewport={() => { setSnapPanelOpen(false); setFreeTransformPanelOpen(false); setClayViewport((value) => !value); }}
         onToggleTransparentViewport={() => { setSnapPanelOpen(false); setFreeTransformPanelOpen(false); setTransparentViewport((value) => !value); }}
-        onToggleRenderBoost={() => { setSnapPanelOpen(false); setFreeTransformPanelOpen(false); setRenderBoostManual(!renderBoostEnabled); }}
         onToggleFreeTransform={() => { dismissActiveTool(); handleToggleFreeTransform(); }}
         onToggleSnapping={() => {
           dismissActiveTool();

@@ -321,7 +321,7 @@
   0%, 33.333%, 66.666%, 100% { background-color: rgba(9, 13, 22, 0.38); border-color: rgba(255, 255, 255, 0.07); }
   16.666%, 50%, 83.333% { background-color: var(--axis-help-flash); border-color: var(--axis-help-flash); }
 }
-.axis-help-flash { animation: axis-help-flash 5s ease-in-out 1; }
+.axis-help-flash { animation: axis-help-flash 4s ease-in-out 1; }
 
 /* Let the splash's blue glow dissolve outward in its natural orb shape. */
 .axis-splash-video-fade {

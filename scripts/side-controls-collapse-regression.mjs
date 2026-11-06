@@ -27,13 +27,13 @@ assert.match(source, /motion-reduce:transition-none/);
 assert.match(source, /\+ 5\.6rem\)/, 'Fixed chevron must occupy the former top control position');
 assert.match(source, /\+ 8\.6rem\)/, 'Seven controls move down enough to make space for the chevron');
 assert.match(source, /<ViewportModeButtons clay=\{clayViewport\} transparent=\{transparentViewport\}/);
-assert.match(source, /<RenderBoostButtons renderBoost=\{renderBoost\}/);
+assert.match(source, /<RenderBoostButtons orientationOpen=\{orientationOpen\}/);
 assert.match(source, /transition-transform duration-300 ease-in-out/, 'Entire group must animate as one');
 for (const label of ['Toggle clay viewport', 'Toggle transparent viewport']) {
   assert.ok(viewport.includes('aria-label="' + label + '"'), 'Retain ' + label);
 }
 for (const label of [
-  'Toggle navigation render boost', 'Toggle free transform',
+  'Reset orientation', 'Toggle free transform',
   'Toggle snapping', 'Toggle resistance', 'Focus on selection',
 ]) {
   assert.ok(boost.includes('aria-label="' + label + '"'), 'Retain ' + label);

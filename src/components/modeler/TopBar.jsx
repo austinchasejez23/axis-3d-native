@@ -1,21 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import { Menu, Undo2, Redo2, Info, ChevronLeft, ChevronRight, Axis3d } from 'lucide-react';
+import { Menu, Undo2, Redo2, Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
 import { helpHintActive, stopHelpHint } from '@/lib/helpHint';
-import { helpIntercept } from '@/lib/helpMode';
 import ViewportModeButtons from '@/components/modeler/ViewportModeButtons';
 import RenderBoostButtons from '@/components/modeler/RenderBoostButtons';
 
 const PANEL = { background: 'rgba(9,13,22,0.38)', border: '1px solid rgba(255,255,255,0.07)' };
 const TOP = 'calc(env(safe-area-inset-top, 0px) + 0.25rem)';
-// Help sits under the axis gizmo, which sits under Undo; Orientation reset
-// shares Help's background, below it.
-const HELP_TOP = 'calc(env(safe-area-inset-top, 0px) + 170px)';
+// Help sits directly under Undo; the axis gizmo sits under Help.
+const HELP_TOP = 'calc(env(safe-area-inset-top, 0px) + 108px)';
+// New users: three slow flashes over four seconds, every two minutes, for the
+// first ten minutes after the app starts.
 const FLASH_FIRST_MS = 4000;
-const FLASH_MS = 5000;
-const FLASH_EVERY_MS = 45000;
+const FLASH_MS = 4000;
+const FLASH_EVERY_MS = 120000;
+const FLASH_WINDOW_MS = 600000;
 
-export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transparentViewport, renderBoost, freeTransform, snapping, onToggleClayViewport, onToggleTransparentViewport, onToggleRenderBoost, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel, onFocus, precision, onTogglePrecision, onOpenPrecisionPanel, onHelp, helpOpen, counter, onOrientationReset, onOpenOrientationPanel, orientationOpen }) {
+export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transparentViewport, freeTransform, snapping, onToggleClayViewport, onToggleTransparentViewport, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel, onFocus, precision, onTogglePrecision, onOpenPrecisionPanel, onHelp, helpOpen, counter, onOrientationReset, onOpenOrientationPanel, orientationOpen }) {
   const { uiColor, highlightColor } = useTheme();
   // New users: the information button now and then flashes three times.
   const [helpFlash, setHelpFlash] = useState(false);
@@ -24,6 +25,8 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
     if (!helpHintActive()) return undefined;
     let timer;
     const schedule = (delay) => {
+      // performance.now() counts from when the app started.
+      if (performance.now() + delay >= FLASH_WINDOW_MS) return;
       timer = setTimeout(() => {
         setHelpFlash(true);
         timer = setTimeout(() => { setHelpFlash(false); schedule(FLASH_EVERY_MS); }, FLASH_MS);
@@ -48,19 +51,6 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
       setSideChevronFacesRight(!nextExpanded);
     }
   };
-  // Orientation reset acts on a tap; a double-tap opens its panel.
-  const orientationTapRef = useRef(0);
-  const tapOrientation = () => {
-    if (helpIntercept({ id: 'orientation' })) return;
-    const now = performance.now();
-    if (now - orientationTapRef.current < 360) {
-      orientationTapRef.current = 0;
-      onOpenOrientationPanel?.();
-      return;
-    }
-    orientationTapRef.current = now;
-    onOrientationReset?.();
-  };
   const txtShadow = '0 1px 3px rgba(0,0,0,0.35)';
   const btn = 'pointer-events-auto w-full flex items-center justify-center active:scale-95 transition-transform touch-none';
   return (
@@ -77,8 +67,7 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
         </div>
       )}
 
-      {/* Redo and Undo share one background; Help and Orientation reset share
-          another, below the axis gizmo. */}
+      {/* Redo and Undo share one background; Help has its own, below them. */}
       <div className="absolute right-[6px] w-14 rounded-xl pointer-events-auto flex flex-col items-center" style={{ ...PANEL, top: TOP }}>
         <button onClick={onRedo} aria-label="Redo" style={{ color: uiColor, textShadow: txtShadow }} className={`${btn} h-12`}>
           <Redo2 className="w-11 h-11" strokeWidth={2.3} />
@@ -87,17 +76,9 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
           <Undo2 className="w-11 h-11" strokeWidth={2.3} />
         </button>
       </div>
-      <div className="absolute right-[6px] w-14 rounded-xl pointer-events-auto flex flex-col items-center" style={{ ...PANEL, top: HELP_TOP }}>
-        <button onClick={onHelp} aria-label="Help" aria-pressed={!!helpOpen} style={{ color: uiColor, textShadow: txtShadow, '--axis-help-flash': highlightColor }} className={`${btn} h-9 rounded-xl ${helpFlash ? 'axis-help-flash' : ''}`}>
+      <div className={`absolute right-[6px] w-14 rounded-xl pointer-events-auto flex flex-col items-center ${helpFlash ? 'axis-help-flash' : ''}`} style={{ ...PANEL, top: HELP_TOP, '--axis-help-flash': highlightColor }}>
+        <button onClick={onHelp} aria-label="Help" aria-pressed={!!helpOpen} style={{ color: uiColor, textShadow: txtShadow }} className={`${btn} h-9`}>
           <Info className="w-5 h-5" strokeWidth={2} />
-        </button>
-        {/* A dividing line, with a little more room than between the seven
-            side buttons. */}
-        <div className="flex h-[14px] w-full items-center justify-center" aria-hidden="true">
-          <div className="h-px w-8" style={{ background: 'rgba(255,255,255,0.16)' }} />
-        </div>
-        <button onClick={tapOrientation} aria-label="Reset orientation" aria-pressed={!!orientationOpen} style={{ color: orientationOpen ? highlightColor : uiColor, textShadow: txtShadow }} className={`${btn} h-9`}>
-          <Axis3d className="w-5 h-5" strokeWidth={2} />
         </button>
       </div>
 
@@ -133,8 +114,8 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
         <ViewportModeButtons clay={clayViewport} transparent={transparentViewport}
           onClay={onToggleClayViewport} onTransparent={onToggleTransparentViewport} />
         <div className="h-[10px] w-full" aria-hidden="true" />
-        <RenderBoostButtons renderBoost={renderBoost} freeTransform={freeTransform} snapping={snapping}
-          onRenderBoost={onToggleRenderBoost} onToggleFreeTransform={onToggleFreeTransform}
+        <RenderBoostButtons orientationOpen={orientationOpen} freeTransform={freeTransform} snapping={snapping}
+          onOrientationReset={onOrientationReset} onOpenOrientationPanel={onOpenOrientationPanel} onToggleFreeTransform={onToggleFreeTransform}
           onToggleSnapping={onToggleSnapping} onOpenFreeTransformPanel={onOpenFreeTransformPanel}
           onOpenSnapPanel={onOpenSnapPanel} onFocus={onFocus} precision={precision}
           onTogglePrecision={onTogglePrecision} onOpenPrecisionPanel={onOpenPrecisionPanel} />

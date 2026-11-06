@@ -1,10 +1,11 @@
 import {
-  Globe, Scan, Gauge, Move3D, Magnet, Crosshair, ImagePlus, Palette, Hand, ArrowLeftRight, EyeOff, Grid3x3,
+  Globe, Scan, Move3D, Magnet, Crosshair, ImagePlus, Palette, Hand, ArrowLeftRight, EyeOff, Grid3x3,
   PaintBucket, Paintbrush, SprayCan, Blend, Pipette, Check, Undo2, Ban, Plus, SlidersHorizontal,
-  Sun, Spline, RotateCcw, Image, FlipHorizontal2, Box, Axis3d,
+  Sun, Spline, RotateCcw, Image, FlipHorizontal2, Box,
 } from 'lucide-react';
 import { ProtractorIcon, MeasureIcon } from '@/lib/toolIcons';
 import ResistanceIcon from '@/components/modeler/ResistanceIcon';
+import OrientationResetIcon from '@/components/modeler/OrientationResetIcon';
 import { TOOLS } from '@/lib/tools';
 
 // Basics shown at the top of the main Help page.
@@ -150,12 +151,11 @@ const segments = { key: 'object:segments', mode: 'object', label: 'Segments', ic
 const SIDE = [
   { key: 'side:clay', side: 'clay', label: 'Clay', icon: Globe, desc: 'Displays the model in plain clay shading.' },
   { key: 'side:transparent', side: 'transparent', label: 'Transparent', icon: Scan, desc: 'Makes the model see-through.' },
-  { key: 'side:boost', side: 'boost', label: 'Render boost', icon: Gauge, desc: 'Lowers render quality while the camera moves for smoother navigation.' },
+  { key: 'side:orientation', side: 'orientation', label: 'Reset orientation', icon: OrientationResetIcon, desc: `Lines the selected geometry's own axes up with the world axes without moving it, so scaling follows the world axes. Double-tap to open its panel and undo the last reset.` },
   { key: 'side:free', side: 'free', label: 'Free Transform', icon: Move3D, desc: `Turns Free Transform on or off. Double-tap to open its settings panel.` },
   { key: 'side:snap', side: 'snap', label: 'Snapping', icon: Magnet, desc: `Snaps movement to set distances and angles. Double-tap to open its settings panel: distance and angle.` },
   { key: 'side:precision', side: 'precision', label: 'Resistance', icon: ResistanceIcon, desc: `Adds resistance to movement for finer control. Double-tap to open its settings panel.` },
   { key: 'side:focus', side: 'focus', label: 'Focus', icon: Crosshair, desc: 'Re-centers the camera on the selection.' },
-  { key: 'side:orientation', side: 'orientation', label: 'Reset orientation', icon: Axis3d, desc: `Lines the selected geometry's own axes up with the world axes without moving it, so scaling follows the world axes. Double-tap to open its panel and undo the last reset.` },
 ];
 
 // Tools grouped by mode: Object, Face, Edge, Vertex, General, then the side buttons.

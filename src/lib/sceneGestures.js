@@ -172,7 +172,23 @@ export function applySceneGestures(SceneManager) {
       this.gestureData = null;
       this.stopCameraMotion();
       this._resumeObjectGesture = false;
-    } else if (this.gesture === 'translate' || this.gesture === 'manipulate') {
+    } else if (this.gesture === 'translate') {
+      // A committed drag is never switched by an extra finger, except when the
+      // first finger had only just begun to move as this one landed: then the
+      // pair was meant as a two-finger gesture on the selection. The tiny start
+      // of the drag is put back and the two fingers carry on below.
+      const first = [...this.pointers.values()][0];
+      const snapshot = this.gestureData?.undoSnapshot;
+      const justStarted = this.pointers.size === 2 && snapshot && this.undoStack[this.undoStack.length - 1] === snapshot
+        && first.startTime != null && performance.now() - first.startTime < TAP_MS
+        && Math.hypot(first.x - first.startX, first.y - first.startY) < TAP_PX;
+      if (!justStarted) return;
+      this.undoStack.pop();
+      this.restoreSnapshot(snapshot);
+      this.gesture = null;
+      this.gestureData = null;
+      this.movedSignificantly = false;
+    } else if (this.gesture === 'manipulate') {
       // An object gesture is already committed — an extra finger never switches it.
       return;
     } else if (this.gesture === 'paint') {
@@ -591,13 +607,7 @@ export function applySceneGestures(SceneManager) {
         // commits, preventing a selection tap from immediately dragging geometry.
         // In multi-select the same grace applies, so a tap on a selected item
         // toggles it off instead of being read as a tiny drag.
-        const baseGrace = this.multiSelect || this.selection.type === 'face' || this.selection.type === 'edge' ? 8 : 0.5;
-        // A quick touch on the selection stays a tap until it clearly travels,
-        // so a tap's natural wobble (or a finger landing just before a second
-        // one) never nudges the selection. A drag then catches up at once,
-        // since it follows the finger from where it first touched.
-        const quick = ptr.startTime != null && performance.now() - ptr.startTime < TAP_MS;
-        const translateGrace = quick ? Math.max(baseGrace, TAP_PX) : baseGrace;
+        const translateGrace = this.multiSelect || this.selection.type === 'face' || this.selection.type === 'edge' ? 8 : 0.5;
         if (totalMove > translateGrace) {
           this.movedSignificantly = true;
           clearTimeout(this.pressHoldTimer);
@@ -608,6 +618,9 @@ export function applySceneGestures(SceneManager) {
             if (this.multiSelect) this._msManipulated = true;
             this.beginHeavyEdit();
             this.pushUndo();
+            // Kept so a second finger landing a moment later can take the
+            // drag back and turn it into a two-finger gesture.
+            this.gestureData.undoSnapshot = this.undoStack[this.undoStack.length - 1];
           } else {
             this.gesture = 'orbit';
           }

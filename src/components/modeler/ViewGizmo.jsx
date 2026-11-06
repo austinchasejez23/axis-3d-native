@@ -6,6 +6,8 @@ import { useTheme } from '@/lib/theme';
 // small hollow disks mark their negative counterparts. It remains display-only
 // and follows the camera without causing React re-renders during gestures.
 const S = 54, C = S / 2, R = 19;
+// Drawn 5px larger than its 54px drawing, everything scaled together.
+const SHOWN = S + 5;
 const AXES = [
   { id: 'x', label: 'X', vector: [1, 0, 0], color: '#f16b6b' },
   { id: 'y', label: 'Y', vector: [0, 1, 0], color: '#64d991' },
@@ -110,13 +112,13 @@ export default function ViewGizmo({ managerRef, coverRef = undefined, hidden = f
   return (
     <svg
       ref={(node) => { svgRef.current = node; if (coverRef) coverRef.current = node; }}
-      width={S}
-      height={S}
+      width={SHOWN}
+      height={SHOWN}
       viewBox={`0 0 ${S} ${S}`}
-      className="absolute right-[7px] z-30 pointer-events-none"
+      className="absolute right-[4.5px] z-30 pointer-events-none"
       style={{
-        // Directly under Undo, above the information button.
-        top: 'calc(env(safe-area-inset-top, 0px) + 108px)',
+        // Under the information button, centred under Undo.
+        top: 'calc(env(safe-area-inset-top, 0px) + 152px)',
         filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))',
         visibility: hidden ? 'hidden' : undefined,
       }}
