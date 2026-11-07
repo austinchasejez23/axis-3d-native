@@ -147,7 +147,7 @@ export function applySceneSelection(SceneManager) {
     if (hits.length === 0) return false;
     const meshId = this.findMeshIdByObject(hits[0].object);
     if (!meshId) return false;
-    const before = this.captureSnapshot();
+    const before = this.captureSnapshot(true);
     const i = this.selectedMeshIds.indexOf(meshId);
     if (i >= 0) this.selectedMeshIds.splice(i, 1);
     else this.selectedMeshIds.push(meshId);
@@ -167,7 +167,7 @@ export function applySceneSelection(SceneManager) {
   P.toggleSelectionAtScreenPoint = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
     const { x, y } = this.screenToNDC(clientX, clientY);
     const mode = this.selectionMode;
-    const before = this.captureSnapshot();
+    const before = this.captureSnapshot(true);
     let hit = false;
     if (mode === 'vertex') {
       const v = this.findClosestVertex(x, y);
@@ -400,7 +400,7 @@ export function applySceneSelection(SceneManager) {
       const pendingEdge = this.findClosestEdge(x, y);
       if (pendingEdge) this.cb.onBeforeSelectionTap?.({ meshId: pendingEdge.meshId, type: 'edge', indices: [pendingEdge.index] });
     }
-    const before = this.captureSnapshot();
+    const before = this.captureSnapshot(true);
     let selected = false;
 
     if (mode === 'vertex') {
@@ -444,6 +444,9 @@ export function applySceneSelection(SceneManager) {
       if (this.lockedObjectAt(clientX, clientY)) notifyUnavailable('That object is locked, so it can\'t be selected');
       // Clean tap on empty canvas acts as a back button: if a panel/tool/menu
       // consumed it, keep the current selection intact.
+      // The callback can change the scene, so copy it first when a selection
+      // exists that this tap might clear.
+      if (this.selection.meshId || this.selectedMeshIds.length) this.materializeSnapshot(before);
       const handled = this.cb.onEmptyTap?.();
       if (!handled) this.clearSelection();
     }

@@ -7,19 +7,31 @@ import { capturePaintPatches, applyPaintPatches } from './paintLayer';
 export function applySceneUndo(SceneManager) {
   const P = SceneManager.prototype;
 
-  P.captureSnapshot = /** @this {import("./SceneManager").SceneManager} */ function () {
+  // deferMeshes: for selection-only changes. The mesh and light copies are
+  // skipped here and made by pushUndoSnapshot, and only if the selection
+  // actually changed (selecting never edits a mesh, so the copy is identical).
+  P.captureSnapshot = /** @this {import("./SceneManager").SceneManager} */ function (deferMeshes = false) {
     return {
-      meshes: this.meshes.map((m) => m.clone()),
+      meshes: deferMeshes ? null : this.meshes.map((m) => m.clone()),
       selection: { ...this.selection, indices: [...this.selection.indices] },
       selectedMeshIds: [...this.selectedMeshIds],
       multiSelect: this.multiSelect,
       selectionMode: this.selectionMode,
-      lights: this.serializeSceneLights?.() || [],
+      lights: deferMeshes ? null : (this.serializeSceneLights?.() || []),
       selectedLightId: this.selectedLightId,
     };
   };
 
+  P.materializeSnapshot = /** @this {import("./SceneManager").SceneManager} */ function (snapshot) {
+    if (snapshot.meshes === null) {
+      snapshot.meshes = this.meshes.map((m) => m.clone());
+      snapshot.lights = this.serializeSceneLights?.() || [];
+    }
+    return snapshot;
+  };
+
   P.pushUndoSnapshot = /** @this {import("./SceneManager").SceneManager} */ function (snapshot) {
+    this.materializeSnapshot(snapshot);
     // Cheap monotonic marker of "the scene was edited", so autosave can detect
     // changes without serializing the whole model.
     this.editVersion = (this.editVersion || 0) + 1;
