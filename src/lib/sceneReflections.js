@@ -18,12 +18,45 @@ const CUBE_SIZE = 256;
 // Environment images, also used for the small previews inside the picker buttons.
 // These are true 2:1 equirectangular panoramas — a normal photo wrapped as an
 // equirect map is what made reflections look hugely magnified and smeared.
+// Light Studio: a bright, soft room with white softboxes and darker gaps
+// between them, drawn here so it needs no image file. It is lighter than the
+// other studio but the gaps and box edges still give surfaces something to reflect.
+function makeLightStudioUrl() {
+  if (typeof document === 'undefined') return '';
+  const w = 1024, h = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const g = canvas.getContext('2d');
+  const sky = g.createLinearGradient(0, 0, 0, h);
+  sky.addColorStop(0, '#f6f8fb');
+  sky.addColorStop(0.5, '#d4d9df');
+  sky.addColorStop(1, '#a9aeb5');
+  g.fillStyle = sky;
+  g.fillRect(0, 0, w, h);
+  const box = (x, y, bw, bh, color) => {
+    g.fillStyle = color;
+    g.fillRect(x, y, bw, bh);
+  };
+  for (let i = 0; i < 6; i++) {
+    const x = (i * w) / 6 + 24;
+    box(x, 70, 110, 150, '#ffffff');
+    box(x + 4, 250, 100, 22, '#eef2f7');
+  }
+  box(0, 0, w, 36, '#ffffff');
+  g.fillStyle = 'rgba(70,76,86,0.55)';
+  for (let i = 0; i < 6; i++) g.fillRect((i * w) / 6 + 150, 60, 14, 190);
+  g.fillRect(0, 300, w, 10);
+  return canvas.toDataURL('image/png');
+}
+const LIGHT_STUDIO_URL = makeLightStudioUrl();
+
 export const ENV_URLS = {
   studio: '/media/fd46f6957_generated_image.png',
   city: '/media/fcdabaffe_generated_image.png',
   shop: '/media/114b0179c_generated_image.png',
   sunset: '/media/c9e3b0241_generated_image.png',
-  darkStudio: '/media/678406f73_generated_image.png',
+  lightStudio: LIGHT_STUDIO_URL,
+  darkStudio: LIGHT_STUDIO_URL, // projects saved with the old Dark Studio get Light Studio
   desert: '/media/54bb9e80f_generated_image.png',
   graffiti: '/media/4262c0d5d_generated_image.png',
 };

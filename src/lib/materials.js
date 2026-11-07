@@ -262,6 +262,7 @@ export function applyShadows(sm) {
   const { on, intensity } = sm._shadowState ? sm._shadowState() : { on: !!theme.shadowsEnabled, intensity: theme.shadowIntensity ?? 0.5 };
   sm.renderer.shadowMap.enabled = on;
   sm.renderer.shadowMap.needsUpdate = true;
+  if (sm.shadowGround && sm.shadowGround.material) sm.shadowGround.material.needsUpdate = true;
   // Default lighting's key light casts the shadows while Default is on.
   if (sm.dirLight) {
     sm.dirLight.castShadow = !!theme.defaultLightingEnabled && on;

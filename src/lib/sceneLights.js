@@ -51,9 +51,9 @@ export function applySceneLights(SceneManager) {
     data.position = [...(data.position || [3, 5, 4])];
     data.rotation = [...(data.rotation || [-0.65, 0.55, 0])];
     let object;
-    if (data.type === 'point') object = new THREE.PointLight(data.color, 1, data.range, 2);
+    if (data.type === 'point') object = new THREE.PointLight(data.color, 1, data.range, 0);
     else if (data.type === 'directional') object = new THREE.DirectionalLight(data.color, 1);
-    else object = new THREE.SpotLight(data.color, 1, data.range, THREE.MathUtils.degToRad(data.radius), 0.18, 2);
+    else object = new THREE.SpotLight(data.color, 1, data.range, THREE.MathUtils.degToRad(data.radius), 0.18, 0);
     const shadowResolution = data.type === 'directional' ? 2048 : 1024;
     object.shadow.mapSize.set(shadowResolution, shadowResolution);
     object.shadow.bias = -0.00035;
@@ -106,12 +106,11 @@ export function applySceneLights(SceneManager) {
     // visibly changes the scene instead of flattening out at the top.
     const level = clamp(record.intensity ?? 1.5, 0, 5);
     const gain = (2 ** level - 1) / (2 ** 1.5 - 1);
-    // Spot and point lights fade with distance over their Range, not over a
-    // fixed number of units, so they light a full-size model as strongly as a
-    // small one: a quarter of the Range away they are as bright as a
-    // directional light at the same Intensity.
-    const reach = clamp(record.range ?? 15, 1, MAX_LIGHT_RANGE);
-    object.intensity = gain * 3.4 * (record.type === 'directional' ? 1 : (reach / 4) ** 2);
+    // Intensity alone sets brightness. Spot and point lights use no distance
+    // falloff (decay 0), so Range only sets how far the light reaches and a
+    // light is as bright at any distance inside its Range.
+    if (record.type !== 'directional') object.decay = 0;
+    object.intensity = gain * 1.6;
     // A light turned all the way down casts no shadow either.
     object.castShadow = custom && !!record.shadows && level > 0;
     object.shadow.intensity = clamp(record.shadowIntensity, 0, 1);
@@ -148,7 +147,11 @@ export function applySceneLights(SceneManager) {
     });
     // One rule for shadows everywhere (see _shadowState), so this and
     // applyShadows can never switch shadow rendering in opposite directions.
-    this.renderer.shadowMap.enabled = this._shadowState().on || (custom && !!record.shadows);
+    const shadowsOn = this._shadowState().on || (custom && !!record.shadows);
+    if (this.renderer.shadowMap.enabled !== shadowsOn) {
+      this.renderer.shadowMap.enabled = shadowsOn;
+      for (const obj of this.threeObjects?.values?.() || []) if (obj.material) obj.material.needsUpdate = true;
+    }
     this.renderer.shadowMap.needsUpdate = true;
     this._reflectionDirty = true;
   };

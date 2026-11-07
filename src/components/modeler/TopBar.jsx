@@ -17,12 +17,12 @@ const FLASH_EVERY_MS = 120000;
 const FLASH_WINDOW_MS = 600000;
 
 export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transparentViewport, freeTransform, snapping, onToggleClayViewport, onToggleTransparentViewport, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel, onFocus, precision, onTogglePrecision, onOpenPrecisionPanel, onHelp, helpOpen, counter, onOrientationReset, onOpenOrientationPanel, orientationOpen }) {
-  const { uiColor, highlightColor } = useTheme();
+  const { uiColor, highlightColor, hintsEnabled } = useTheme();
   // New users: the information button now and then flashes three times.
   const [helpFlash, setHelpFlash] = useState(false);
   useEffect(() => {
     if (helpOpen) stopHelpHint();
-    if (!helpHintActive()) return undefined;
+    if (!hintsEnabled || !helpHintActive()) return undefined;
     let timer;
     const schedule = (delay) => {
       // performance.now() counts from when the app started.
@@ -34,7 +34,7 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
     };
     schedule(FLASH_FIRST_MS);
     return () => { clearTimeout(timer); setHelpFlash(false); };
-  }, [helpOpen]);
+  }, [helpOpen, hintsEnabled]);
   const [sideControlsExpanded, setSideControlsExpanded] = useState(true);
   const sideControlsRef = useRef(null);
   useEffect(() => {

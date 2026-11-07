@@ -2,6 +2,21 @@ import * as THREE from 'three';
 import { EditableMesh } from './EditableMesh';
 import { mergeHiddenDiagonals } from './quadMerge';
 
+// A helix keeps its OVERALL diameter fixed while the inside diameter changes:
+// a larger inside diameter makes the coil thinner instead of making the whole
+// helix bigger. Older helixes have no stored outer diameter, so it is worked
+// out from their inside diameter and thickness (the same size they had).
+export function resolveHelixParams(params = {}) {
+  const thickness0 = Math.max(0.02, Number(params.thickness) || 0.25);
+  const innerRaw = Number(params.innerDiameter ?? 0.5);
+  const inner0 = Number.isFinite(innerRaw) ? Math.max(0.02, innerRaw) : 0.5;
+  const outerRaw = Number(params.outerDiameter);
+  const outerDiameter = Number.isFinite(outerRaw) && outerRaw > 0.06 ? outerRaw : inner0 + 2 * thickness0;
+  const innerDiameter = Math.min(inner0, outerDiameter - 0.04);
+  const thickness = Math.max(0.02, (outerDiameter - innerDiameter) / 2);
+  return { turns: params.turns ?? 1, innerDiameter, height: params.height ?? 0.5, thickness, outerDiameter };
+}
+
 function buildHelixGeometry({ turns = 1, innerDiameter = 0.5, thickness = 0.25, height = 0.5, segmentsPerTurn = 12, sides = 6 } = {}) {
   turns = Math.max(0.05, Number(turns) || 1);
   thickness = Math.max(0.02, Number(thickness) || 0.25);
@@ -75,6 +90,17 @@ function buildHelixGeometry({ turns = 1, innerDiameter = 0.5, thickness = 0.25, 
 const RADIAL_X_TYPES = new Set(['sphere', 'cylinder', 'cone', 'tube', 'torus', 'helix']);
 const RADIAL_Y_TYPES = new Set(['sphere', 'torus', 'helix']);
 export const isRadialPrimitive = (type) => RADIAL_X_TYPES.has(type);
+// Which segment axes a shape actually uses. The others change nothing, so the
+// panel greys them out. A shape with no primitive type (an edited mesh) is cut
+// along all three axes.
+const USED_AXES = {
+  cube: 'xyz', plane: 'xy', sphere: 'xy', cylinder: 'xy', cone: 'xy',
+  pyramid: '', tube: 'x', torus: 'xy', helix: 'xy',
+};
+export function segmentAxisUsed(type, axis) {
+  if (!type || !(type in USED_AXES)) return true;
+  return USED_AXES[type].includes(axis);
+}
 export function segmentMinimum(type, axis) {
   if (axis === 'x' && RADIAL_X_TYPES.has(type)) return 3;
   if (axis === 'y' && RADIAL_Y_TYPES.has(type)) return 3;
@@ -101,13 +127,13 @@ function buildGeometry(type, segX, segY, segZ, params = {}) {
       return new THREE.TorusGeometry(innerDiameter / 2 + tubeRadius, tubeRadius, ry, rx);
     }
     case 'helix': {
-      const turns = Math.max(0.05, Number(params.turns) || 1);
-      const thickness = Math.max(0.02, Number(params.thickness) || 0.25);
+      const resolved = resolveHelixParams(params);
+      const turns = Math.max(0.05, Number(resolved.turns) || 1);
       return buildHelixGeometry({
         turns,
-        innerDiameter: params.innerDiameter ?? 0.5,
-        thickness,
-        height: params.height ?? 0.5,
+        innerDiameter: resolved.innerDiameter,
+        thickness: resolved.thickness,
+        height: resolved.height,
         segmentsPerTurn: rx,
         sides: ry,
       });
@@ -139,7 +165,7 @@ export function createPrimitiveSegments(type, segX, segY, segZ, params = {}) {
   mesh.primitiveType = type;
   mesh.segments = { x: segX, y: segY, z: segZ };
   mesh.primitiveParams = type === 'helix'
-    ? { turns: params.turns ?? 1, innerDiameter: params.innerDiameter ?? 0.5, height: params.height ?? 0.5, thickness: params.thickness ?? 0.25 }
+    ? resolveHelixParams(params)
     : type === 'torus' ? { innerDiameter: params.innerDiameter ?? 0.5 } : null;
   geometry.dispose();
   return mesh;

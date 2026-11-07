@@ -10,7 +10,7 @@ const FADE_MS = 600;
 // no border, no close button — just words, always relevant to what is currently
 // being done, and never overlapping anything.
 export default function ContextTip({ context }) {
-  const { uiColor } = useTheme();
+  const { uiColor, hintsEnabled } = useTheme();
   const [turn, setTurn] = useState(0);
   const [shown, setShown] = useState(false);
 
@@ -27,6 +27,7 @@ export default function ContextTip({ context }) {
   }, [turn, context]);
 
   const tip = pickTip();
+  if (!hintsEnabled) return <div className="min-h-[1.75rem]" />;
 
   return (
     <div className="flex min-h-[1.75rem] items-center justify-center px-2 py-0.5 pointer-events-none text-center">

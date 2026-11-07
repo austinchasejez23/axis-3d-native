@@ -259,7 +259,7 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
       case 'settings':
         return <div className="w-fit max-w-[62vw] px-2 pt-2 pb-1"><SettingsPanel onGestures={() => push('gestures')} onSnapping={() => push('snap')} /></div>;
       case 'gestures':
-        return <div className="w-48 max-w-[62vw] p-2"><GesturePanel /></div>;
+        return <div className="w-60 max-w-[78vw] px-2.5 py-1"><GesturePanel /></div>;
       case 'account':
         return <div className="w-52 max-w-[68vw] p-2"><AccountPanel /></div>;
       case 'colors':
@@ -317,8 +317,8 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
             sideways off the screen. */}
         <div ref={cascadeLayoutRef} className="relative flex items-start gap-1" style={{ zoom: MENU_ZOOM }}>
           <div
-            className="relative w-fit rounded-lg border flex flex-col pointer-events-auto overflow-y-auto axis-menu-scroll"
-            style={{ ...panelStyle, maxHeight: `calc((100vh - 6.75rem) / ${MENU_ZOOM})` }}
+            className="modeling-sheet relative w-fit rounded-2xl flex flex-col pointer-events-auto overflow-y-auto axis-menu-scroll"
+            style={{ background: panelStyle.background, maxHeight: `calc((100vh - 6.75rem) / ${MENU_ZOOM})` }}
           >
             {screen !== 'root' && (
               <MenuScreenHeader
@@ -329,13 +329,15 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
                 borderColor={borderCol}
               />
             )}
-            <div className={screen === 'account' ? undefined : 'py-1 [&_button]:min-h-8'}>{renderBody()}</div>
+            {/* Same two-tone look as the modeling panels: a sheet with the
+                menu content sitting on a lighter card inside it. */}
+            <div className={`modeling-value m-1.5 rounded-lg ${screen === 'account' ? '' : 'py-1 [&_button]:min-h-8'}`}>{renderBody()}</div>
           </div>
 
           {screen === 'viewport' && viewportCascade === 'grid' && (
             <div
-              className="absolute z-10 rounded-lg border pointer-events-auto"
-              style={{ ...panelStyle, top: gridAnchor.top, left: 'calc(100% + 0.25rem)', width: 'max-content' }}
+              className="modeling-sheet absolute z-10 rounded-2xl pointer-events-auto"
+              style={{ background: panelStyle.background, top: gridAnchor.top, left: 'calc(100% + 0.25rem)', width: 'max-content' }}
             >
               <GridCascade bare enabled={display.gridVisible} onToggle={display.onToggleGrid} panelStyle={panelStyle} />
             </div>

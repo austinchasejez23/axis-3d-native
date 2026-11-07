@@ -21,7 +21,7 @@ const ENVS = [
   { id: 'shop', label: 'Shop' },
   { id: 'city', label: 'City' },
   { id: 'sunset', label: 'Sunset' },
-  { id: 'darkStudio', label: 'Dark Studio' },
+  { id: 'lightStudio', label: 'Light Studio' },
   { id: 'desert', label: 'Desert' },
   { id: 'graffiti', label: 'Graffiti' },
 ];

@@ -53,7 +53,7 @@ export const HELP_MATERIALS = [
   {
     title: 'Material',
     entries: [
-      { key: 'material:environment', label: 'Environment', icon: Sun, desc: 'Chooses the scene reflected in shiny surfaces: Off, Studio, Shop, City, Sunset, Dark Studio, Desert or Graffiti.' },
+      { key: 'material:environment', label: 'Environment', icon: Sun, desc: 'Chooses the scene reflected in shiny surfaces: Off, Studio, Shop, City, Sunset, Light Studio, Desert or Graffiti.' },
       { key: 'material:soft', label: 'Soft Norms', icon: Spline, desc: 'Smooths the shading across faces without changing the shape. Tap again for sharp shading.' },
       { key: 'material:default', label: 'Default', icon: RotateCcw, desc: 'Resets the material sliders to a new object\'s values.' },
       { key: 'material:apply', label: 'Apply', icon: Check, desc: 'Keeps the material changes.' },

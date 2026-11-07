@@ -74,6 +74,12 @@ export default function Modeler() {
   const toolPromptTimer = useRef(null);
   const renderBoostNoticeTimer = useRef(null);
   const segmentSnapshotRef = useRef(null);
+  // Segment edits are applied to the scene once per frame (latest wins), so
+  // rapid taps don't each rebuild the shape and the number updates instantly.
+  const segmentFrameRef = useRef(0);
+  const segmentPendingRef = useRef(null);
+  const segmentsOpenRef = useRef(false);
+  const segmentMeshIdRef = useRef(null);
   const menuBackRef = useRef(null);
   const transformApplyRef = useRef(null);
   const sculptSessionSnapshotRef = useRef(null);
@@ -116,6 +122,7 @@ export default function Modeler() {
   const [multiSelect, setMultiSelect] = useState(false);
   const [segmentsOpen, setSegmentsOpen] = useState(false);
   const [segValues, setSegValues] = useState({ x: 1, y: 1, z: 1 });
+  segmentsOpenRef.current = segmentsOpen;
   const [materialsOpen, setMaterialsOpen] = useState(false);
   const [surfaceSub, setSurfaceSub] = useState(null);
   const [surfaceSection, setSurfaceSection] = useState(() => {
@@ -842,6 +849,7 @@ export default function Modeler() {
       return;
     }
     segmentSnapshotRef.current = mgr.captureSnapshot();
+    segmentMeshIdRef.current = mesh.id;
     setSegValues({
       ...(mesh.segments ? { ...mesh.segments } : { x: 1, y: 1, z: 1 }),
       primitiveType: mesh.primitiveType,
@@ -855,6 +863,46 @@ export default function Modeler() {
     setMenuOpen(false);
     setSegmentsOpen(true);
   }, [closeMaterials, closeSculpt, dismissActiveTool, showToolPrompt]);
+
+  const applySegmentValues = (next) => {
+    if (!next.primitiveType && segmentSnapshotRef.current) managerRef.current?.restoreSnapshot(segmentSnapshotRef.current);
+    managerRef.current?.changeSegments(next.x, next.y, next.z, next.primitiveParams);
+    if (!isPro && totalTriangles(managerRef.current) > FREE_TRIANGLE_LIMIT) {
+      if (segmentSnapshotRef.current) managerRef.current?.restoreSnapshot(segmentSnapshotRef.current);
+      setSegmentsOpen(false);
+      openUpgrade(`Free scenes are limited to ${FREE_TRIANGLE_LIMIT.toLocaleString()} triangles.`);
+    }
+  };
+  const scheduleSegmentValues = (next) => {
+    segmentPendingRef.current = next;
+    if (segmentFrameRef.current) return;
+    segmentFrameRef.current = requestAnimationFrame(() => {
+      segmentFrameRef.current = 0;
+      const pending = segmentPendingRef.current;
+      segmentPendingRef.current = null;
+      if (pending) applySegmentValues(pending);
+    });
+  };
+  // Applies any edit still waiting for its frame.
+  const flushSegmentValues = () => {
+    if (segmentFrameRef.current) { cancelAnimationFrame(segmentFrameRef.current); segmentFrameRef.current = 0; }
+    const pending = segmentPendingRef.current;
+    segmentPendingRef.current = null;
+    if (pending) applySegmentValues(pending);
+  };
+  const dropSegmentValues = () => {
+    if (segmentFrameRef.current) { cancelAnimationFrame(segmentFrameRef.current); segmentFrameRef.current = 0; }
+    segmentPendingRef.current = null;
+  };
+  // Closing the panel keeps the edits and records them as one undo step.
+  const closeSegmentsKeepingEdits = () => {
+    if (!segmentsOpenRef.current) return;
+    segmentsOpenRef.current = false;
+    flushSegmentValues();
+    if (segmentSnapshotRef.current) managerRef.current?.pushUndoSnapshot(segmentSnapshotRef.current);
+    segmentSnapshotRef.current = null;
+    setSegmentsOpen(false);
+  };
 
   // Bring another saved model into the scene alongside what is already here,
   // so several models can be assembled into one. The saved model is only read.
@@ -1056,6 +1104,11 @@ export default function Modeler() {
         onSelectionChange={() => {
           setFreeTransformPanelOpen(false);
           setSelectedMeshId(managerRef.current?.selection.meshId || null);
+          // Deselecting (or picking something else) closes the segments panel.
+          if (segmentsOpenRef.current) {
+            const sel = managerRef.current?.selection;
+            if (!sel?.meshId || sel.type !== 'object' || sel.meshId !== segmentMeshIdRef.current) closeSegmentsKeepingEdits();
+          }
           // Boolean panel: prompt for the next object to pick.
           if (booleanPanel && !booleanApplyingRef.current) {
             showToolPrompt(booleanPrompt(booleanPanel.operation, managerRef.current?.selectedMeshIds?.length || 0));
@@ -1271,20 +1324,13 @@ export default function Modeler() {
               toolMemory.primitiveSegments = next.x;
               setSegments(next.x);
             }
-            if (!next.primitiveType && segmentSnapshotRef.current) managerRef.current?.restoreSnapshot(segmentSnapshotRef.current);
-            managerRef.current?.changeSegments(next.x, next.y, next.z, next.primitiveParams);
-            if (!isPro && totalTriangles(managerRef.current) > FREE_TRIANGLE_LIMIT) {
-              if (segmentSnapshotRef.current) managerRef.current?.restoreSnapshot(segmentSnapshotRef.current);
-              setSegmentsOpen(false);
-              openUpgrade(`Free scenes are limited to ${FREE_TRIANGLE_LIMIT.toLocaleString()} triangles.`);
-            }
-            }}
+            scheduleSegmentValues(next);
+          }}
           onApply={() => {
-            if (segmentSnapshotRef.current) managerRef.current?.pushUndoSnapshot(segmentSnapshotRef.current);
-            segmentSnapshotRef.current = null;
-            setSegmentsOpen(false);
+            closeSegmentsKeepingEdits();
           }}
           onCancel={() => {
+            dropSegmentValues();
             if (segmentSnapshotRef.current) managerRef.current?.restoreSnapshot(segmentSnapshotRef.current);
             segmentSnapshotRef.current = null;
             setSegmentsOpen(false);

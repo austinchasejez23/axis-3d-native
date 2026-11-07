@@ -5,11 +5,12 @@ import { toDisplayUnit, fromDisplayUnit } from '@/lib/units';
 import ModelingNumberPad from '@/components/modeler/ModelingNumberPad';
 import NumericValueField from '@/components/modeler/NumericValueField';
 import ModelingPanel from '@/components/modeler/ModelingPanel';
-import { segmentMinimum } from '@/lib/primitives';
+import { segmentMinimum, segmentAxisUsed } from '@/lib/primitives';
 
-function ParamControl({ label, value, step, min, onChange, color, highlightColor, active, onOpen, onKey, onClose, dividerClass = '' }) {
+function ParamControl({ label, value, step, min, max = Infinity, onChange, color, highlightColor, active, onOpen, onKey, onClose, onChevron, dividerClass = '' }) {
   const safe = Number.isFinite(Number(value)) ? Number(value) : min;
-  const change = (delta) => onChange(Math.max(min, safe + delta));
+  // A chevron tap closes an open keypad first, then steps from the value.
+  const change = (delta) => { onChevron?.(); onChange(Math.min(max, Math.max(min, safe + delta))); };
   return (
     <div className={`flex min-w-0 flex-col items-center justify-center ${dividerClass}`}>
       <span className="mb-1 w-full pl-1 text-left text-[12px] font-semibold" style={{ color }}>{label}</span>
@@ -27,7 +28,17 @@ export default function SegmentsModal({ values, onChange, onApply, onCancel }) {
   const isHelix = values.primitiveType === 'helix';
   const isTorus = values.primitiveType === 'torus';
   const params = values.primitiveParams || {};
-  const updateParam = (key, value) => onChange({ ...values, primitiveParams: { ...params, [key]: value } });
+  // A helix keeps its overall diameter: the inside diameter can grow until it
+  // nearly meets the outside, and the coil gets thinner as it does.
+  const helixOuter = isHelix ? (params.outerDiameter ?? ((params.innerDiameter ?? 0.5) + 2 * (params.thickness ?? 0.25))) : Infinity;
+  const updateParam = (key, value) => {
+    const nextParams = { ...params, [key]: value };
+    if (isHelix) {
+      nextParams.outerDiameter = helixOuter;
+      if (key === 'innerDiameter') nextParams.innerDiameter = Math.min(Math.max(0.02, value), helixOuter - 0.04);
+    }
+    onChange({ ...values, primitiveParams: nextParams });
+  };
   const [activeAxis, setActiveAxis] = useState(null);
   const [paramDraft, setParamDraft] = useState('');
   const replaceNext = useRef(true);
@@ -52,8 +63,12 @@ export default function SegmentsModal({ values, onChange, onApply, onCancel }) {
   };
 
   const step = (axis, delta) => {
+    if (!segmentAxisUsed(values.primitiveType, axis)) return;
+    // Tapping a chevron closes an open keypad. Other axes keep their current
+    // values, so a half-typed entry elsewhere can't change them.
+    setActiveAxis(null);
     const current = parseInt(text[axis], 10) || values[axis];
-    commit({ ...text, [axis]: String(Math.max(minFor(axis), current + delta)) });
+    commit({ x: String(values.x), y: String(values.y), z: String(values.z), [axis]: String(Math.max(minFor(axis), current + delta)) });
   };
 
   const openKeypad = (axis) => {
@@ -136,6 +151,8 @@ export default function SegmentsModal({ values, onChange, onApply, onCancel }) {
           {axes.map((axis, index) => (
             <div
               key={axis}
+              aria-disabled={!segmentAxisUsed(values.primitiveType, axis)}
+              style={segmentAxisUsed(values.primitiveType, axis) ? undefined : { opacity: 0.35, pointerEvents: 'none' }}
               className={`flex min-w-0 flex-col items-center justify-center ${index === 0 ? 'pr-1.5' : index === 1 ? 'px-1.5' : 'pl-1.5'}`}
             >
               <span
@@ -146,19 +163,19 @@ export default function SegmentsModal({ values, onChange, onApply, onCancel }) {
               </span>
 
               <div className="flex w-full min-w-0 items-center justify-center gap-0 rounded-md" style={{ background: 'rgb(var(--modeling-sheet) / 0.65)', boxShadow: 'inset 0 0 0 1px rgb(var(--modeling-border) / 0.16)' }}>
-                <button type="button" aria-label={`Decrease axis ${axis}`} onClick={() => step(axis, -1)} className="modeling-value flex h-7 w-7 shrink-0 items-center justify-center rounded-md active:scale-75" style={{ color: highlightColor, borderColor: highlightColor }}><ChevronLeft className="h-5 w-5" strokeWidth={2.5} /></button>
+                <button type="button" disabled={!segmentAxisUsed(values.primitiveType, axis)} aria-label={`Decrease axis ${axis}`} onClick={() => step(axis, -1)} className="modeling-value flex h-7 w-7 shrink-0 items-center justify-center rounded-md active:scale-75" style={{ color: highlightColor, borderColor: highlightColor }}><ChevronLeft className="h-5 w-5" strokeWidth={2.5} /></button>
               <NumericValueField
                 label={`Axis ${axis.toUpperCase()} segments`}
                 value={text[axis]}
                 active={activeAxis === axis}
-                onOpen={() => openKeypad(axis)}
+                onOpen={() => { if (segmentAxisUsed(values.primitiveType, axis)) openKeypad(axis); }}
                 onKey={pressKey}
                 onClose={finishEntry}
                 color={uiColor}
                 highlightColor={highlightColor}
                 className="h-7 !rounded-none !bg-transparent !border-0 text-[16px] font-semibold"
               />
-                <button type="button" aria-label={`Increase axis ${axis}`} onClick={() => step(axis, 1)} className="modeling-value flex h-7 w-7 shrink-0 items-center justify-center rounded-md active:scale-75" style={{ color: highlightColor, borderColor: highlightColor }}><ChevronRight className="h-5 w-5" strokeWidth={2.5} /></button>
+                <button type="button" disabled={!segmentAxisUsed(values.primitiveType, axis)} aria-label={`Increase axis ${axis}`} onClick={() => step(axis, 1)} className="modeling-value flex h-7 w-7 shrink-0 items-center justify-center rounded-md active:scale-75" style={{ color: highlightColor, borderColor: highlightColor }}><ChevronRight className="h-5 w-5" strokeWidth={2.5} /></button>
               </div>
             </div>
           ))}
@@ -167,9 +184,9 @@ export default function SegmentsModal({ values, onChange, onApply, onCancel }) {
         {(isHelix || isTorus) && (
           <div className="mt-1.5">
             <div className={`modeling-value grid ${isHelix ? 'grid-cols-3' : 'grid-cols-1'} rounded-lg px-2 py-2`}>
-              {isHelix && <ParamControl dividerClass="pr-1.5" label="Turns" value={params.turns ?? 1} step={0.25} min={0.25} onChange={(v) => updateParam('turns', v)} color={uiColor} highlightColor={highlightColor} active={activeAxis === 'param:turns' ? { text: paramDraft } : null} onOpen={() => openParam('turns', params.turns ?? 1)} onKey={pressKey} onClose={finishEntry} />}
-              <ParamControl dividerClass={isHelix ? 'px-1.5' : ''} label="Inside Dia." value={toDisplayUnit(params.innerDiameter ?? 0.5, unit)} step={toDisplayUnit(0.05, unit)} min={toDisplayUnit(0.02, unit)} onChange={(v) => updateParam('innerDiameter', fromDisplayUnit(v, unit))} color={uiColor} highlightColor={highlightColor} active={activeAxis === 'param:innerDiameter' ? { text: paramDraft } : null} onOpen={() => openParam('innerDiameter', toDisplayUnit(params.innerDiameter ?? 0.5, unit))} onKey={pressKey} onClose={finishEntry} />
-              {isHelix && <ParamControl dividerClass="pl-1.5" label="Height" value={toDisplayUnit(params.height ?? 0.5, unit)} step={toDisplayUnit(0.05, unit)} min={0} onChange={(v) => updateParam('height', fromDisplayUnit(v, unit))} color={uiColor} highlightColor={highlightColor} active={activeAxis === 'param:height' ? { text: paramDraft } : null} onOpen={() => openParam('height', toDisplayUnit(params.height ?? 0.5, unit))} onKey={pressKey} onClose={finishEntry} />}
+              {isHelix && <ParamControl dividerClass="pr-1.5" label="Turns" value={params.turns ?? 1} step={0.25} min={0.25} onChange={(v) => updateParam('turns', v)} color={uiColor} highlightColor={highlightColor} active={activeAxis === 'param:turns' ? { text: paramDraft } : null} onOpen={() => openParam('turns', params.turns ?? 1)} onKey={pressKey} onClose={finishEntry} onChevron={() => setActiveAxis(null)} />}
+              <ParamControl dividerClass={isHelix ? 'px-1.5' : ''} label="Inside Dia." value={toDisplayUnit(params.innerDiameter ?? 0.5, unit)} step={toDisplayUnit(0.05, unit)} min={toDisplayUnit(0.02, unit)} max={isHelix ? toDisplayUnit(helixOuter - 0.04, unit) : Infinity} onChevron={() => setActiveAxis(null)} onChange={(v) => updateParam('innerDiameter', fromDisplayUnit(v, unit))} color={uiColor} highlightColor={highlightColor} active={activeAxis === 'param:innerDiameter' ? { text: paramDraft } : null} onOpen={() => openParam('innerDiameter', toDisplayUnit(params.innerDiameter ?? 0.5, unit))} onKey={pressKey} onClose={finishEntry} />
+              {isHelix && <ParamControl dividerClass="pl-1.5" label="Height" value={toDisplayUnit(params.height ?? 0.5, unit)} step={toDisplayUnit(0.05, unit)} min={0} onChevron={() => setActiveAxis(null)} onChange={(v) => updateParam('height', fromDisplayUnit(v, unit))} color={uiColor} highlightColor={highlightColor} active={activeAxis === 'param:height' ? { text: paramDraft } : null} onOpen={() => openParam('height', toDisplayUnit(params.height ?? 0.5, unit))} onKey={pressKey} onClose={finishEntry} />}
             </div>
           </div>
         )}

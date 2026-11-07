@@ -3,7 +3,6 @@
 // tell a brand-new install from an existing user before theme.js writes its
 // own storage on load.
 const KEY = 'axis3d.helpHint.v1';
-const SESSIONS = 10;
 const EXISTING_USER_KEY = 'gestura_wireframe_default_v3';
 
 let active = false;
@@ -16,7 +15,8 @@ try {
   state.sessions += 1;
   localStorage.setItem(KEY, JSON.stringify(state));
   newUser = !!state.newUser;
-  active = newUser && state.sessions <= SESSIONS;
+  // Hints decide whether it flashes (Settings); every launch starts it.
+  active = true;
 } catch {
   active = false;
 }
