@@ -261,6 +261,10 @@ export function applySceneSelection(SceneManager) {
     const at = (cx, cy) => { const ndc = this.screenToNDC(cx, cy); return this.raycastMeshes(ndc.x, ndc.y); };
     const direct = at(clientX, clientY);
     if (direct.length) return direct;
+    // The ring can only hit something within 16px of an object's outline. When
+    // the tap is farther than that from every object's screen-space box, skip
+    // the 16 extra raycasts (a tap on empty canvas used to cost 17).
+    if (!this.isTapNearAnyObject(clientX, clientY, 17)) return [];
     for (const radius of [8, 16]) {
       for (let k = 0; k < 8; k++) {
         const angle = (k / 8) * Math.PI * 2;
@@ -269,6 +273,39 @@ export function applySceneSelection(SceneManager) {
       }
     }
     return [];
+  };
+
+  P.isTapNearAnyObject = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY, reachPx) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const near = this.camera.near ?? 0.01;
+    const box = new THREE.Box3();
+    const corner = new THREE.Vector3();
+    for (const [id, obj] of this.threeObjects) {
+      if (!obj.mesh.visible) continue;
+      const em = this.getMesh(id);
+      if (em && em.locked) continue;
+      const geo = obj.mesh.geometry;
+      if (!geo.boundingBox) geo.computeBoundingBox();
+      if (!geo.boundingBox) return true;
+      obj.mesh.updateWorldMatrix(true, false);
+      box.copy(geo.boundingBox).applyMatrix4(obj.mesh.matrixWorld);
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (let i = 0; i < 8; i++) {
+        corner.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z);
+        // A corner at or behind the camera can't be projected reliably, so
+        // assume the tap could be near this object.
+        if (-corner.clone().applyMatrix4(this.camera.matrixWorldInverse).z <= near) return true;
+        corner.project(this.camera);
+        const px = rect.left + ((corner.x + 1) / 2) * rect.width;
+        const py = rect.top + ((1 - corner.y) / 2) * rect.height;
+        if (px < minX) minX = px;
+        if (px > maxX) maxX = px;
+        if (py < minY) minY = py;
+        if (py > maxY) maxY = py;
+      }
+      if (clientX >= minX - reachPx && clientX <= maxX + reachPx && clientY >= minY - reachPx && clientY <= maxY + reachPx) return true;
+    }
+    return false;
   };
 
   P.isWorldPointVisible = /** @this {import('./SceneManager.js').SceneManager} */ function (point) {
