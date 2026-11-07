@@ -323,6 +323,23 @@
 }
 .axis-help-flash { animation: axis-help-flash 4s ease-in-out 1; }
 
+/* Getting-started hint: fades in, then pulses slightly until it fades away. */
+@keyframes axis-hint-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes axis-hint-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+@keyframes axis-hint-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.axis-hint { animation: axis-hint-in 400ms ease-out both; }
+.axis-hint-out { animation: axis-hint-out 500ms ease forwards; }
+.axis-hint-body { animation: axis-hint-pulse 1.6s ease-in-out 400ms infinite; }
+
 /* Let the splash's blue glow dissolve outward in its natural orb shape. */
 .axis-splash-video-fade {
   -webkit-mask-image: radial-gradient(ellipse 50% 50% at center, black 55%, transparent 100%);

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { isNewUser } from './helpHint';
 
 const STORAGE_KEY = 'gestura_theme_v2';
 const WIREFRAME_DEFAULT_MIGRATION = 'gestura_wireframe_default_v3';
@@ -165,6 +166,8 @@ export const theme = {
   get objectArrowsEnabled() { return state.objectArrowsEnabled === true; },
   get measurementsOn() { return !!state.measurementsOn; },
   get measurementOption() { return state.measurementOption || 'edge'; },
+  // Getting-started hints. Unless set in Settings, they are on for new users.
+  get hintsEnabled() { return typeof state.hintsEnabled === 'boolean' ? state.hintsEnabled : isNewUser(); },
   getSceneSettings() { return pickScene(state, DEFAULTS); },
   applySceneSettings(settings) { theme.set(pickScene(settings, DEFAULTS)); },
   resetSceneSettings() { theme.set(pickScene(null, DEFAULTS)); },
@@ -219,5 +222,6 @@ export function useTheme() {
     objectArrowsEnabled: theme.objectArrowsEnabled,
     measurementsOn: theme.measurementsOn,
     measurementOption: theme.measurementOption,
+    hintsEnabled: theme.hintsEnabled,
   };
 }

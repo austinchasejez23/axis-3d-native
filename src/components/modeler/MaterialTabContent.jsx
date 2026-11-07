@@ -24,8 +24,8 @@ export default function MaterialTabContent({ environments, envId, onEnv, sliders
       <div className="flex-1 flex items-center gap-1.5">
         {/* Toggle: highlighted while the selected object has soft normals. */}
         <SheetActionButton label="Soft Norms" ariaLabel="Soft normals" active={softNormalsOn} onClick={onSoftNormals} />
-        <SheetActionButton label="Default" ariaLabel="Reset material to default" onClick={onDefault} disabled={!canApply} />
-        <SheetActionButton label="Apply" ariaLabel="Apply material changes" onClick={onApply} disabled={!canApply} primary />
+        <SheetActionButton label="Default" ariaLabel="Reset material to default" onClick={onDefault} disabled={!canApply} disabledReason="Select an object to reset its material" />
+        <SheetActionButton label="Apply" ariaLabel="Apply material changes" onClick={onApply} disabled={!canApply} disabledReason="Select an object to apply the material to" primary />
       </div>
       <SurfaceSliderRow scrollPadTop>
         {sliders.map((s) => (

@@ -5,6 +5,8 @@ import { hexToHsv, hsvToHex } from '@/lib/color';
 // distance from the center) wrapped in a 360° ring that acts as the brightness
 // slider — it starts at the selected color and fades to black around the loop.
 const RING = 10;
+// Center share of the wheel's radius that is pure white, so white is easy to land on.
+const WHITE = 0.2;
 
 // ring={false} drops the brightness ring so the wheel fills the whole size
 // (Paint pairs it with a separate vertical brightness slider instead).
@@ -35,7 +37,8 @@ export default function RoundColorPicker({ color, onChange, size = 130, ring = t
 
   const onWheelDown = track(wheelRef, (dx, dy, radius) => {
     const dist = Math.min(1, Math.hypot(dx, dy) / radius);
-    onChange(hsvToHex(angleOf(dx, dy), dist * 100, v));
+    const sat = dist <= WHITE ? 0 : (dist - WHITE) / (1 - WHITE);
+    onChange(hsvToHex(angleOf(dx, dy), sat * 100, v));
   });
   const onRingDown = track(ringRef, (dx, dy) => {
     onChange(hsvToHex(h, s, 100 - (angleOf(dx, dy) / 360) * 100));
@@ -45,7 +48,7 @@ export default function RoundColorPicker({ color, onChange, size = 130, ring = t
   const wheelSize = size - innerInset * 2;
   const rad = (deg) => (deg - 90) * Math.PI / 180;
   const thumbAngle = rad(h);
-  const thumbDist = (s / 100) * (wheelSize / 2);
+  const thumbDist = s > 0 ? (WHITE + (s / 100) * (1 - WHITE)) * (wheelSize / 2) : 0;
   const ringDegrees = (1 - v / 100) * 360;
   const ringAngle = rad(ringDegrees);
   const ringRadius = (size - RING) / 2;
@@ -69,7 +72,7 @@ export default function RoundColorPicker({ color, onChange, size = 130, ring = t
         style={{
           inset: innerInset,
           backgroundImage:
-            'radial-gradient(circle closest-side, #ffffff, rgba(255,255,255,0) 70%), conic-gradient(#ff0000 0deg, #ffff00 60deg, #00ff00 120deg, #00ffff 180deg, #0000ff 240deg, #ff00ff 300deg, #ff0000 360deg)',
+            `radial-gradient(circle closest-side, #ffffff ${WHITE * 100}%, rgba(255,255,255,0) ${(WHITE + 0.7 * (1 - WHITE)) * 100}%), conic-gradient(#ff0000 0deg, #ffff00 60deg, #00ff00 120deg, #00ffff 180deg, #0000ff 240deg, #ff00ff 300deg, #ff0000 360deg)`,
         }}
       >
         <span

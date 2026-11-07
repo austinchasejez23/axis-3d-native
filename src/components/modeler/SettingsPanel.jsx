@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Gauge, Boxes, Zap } from 'lucide-react';
+import { Gauge, Boxes, Zap, Lightbulb } from 'lucide-react';
 import { useTheme, theme } from '@/lib/theme';
 import ColorPicker from './ColorPicker';
 import { setRenderBoostManual } from '@/lib/renderBoost';
@@ -119,6 +119,12 @@ export default function SettingsPanel({ onGestures, onSnapping }) {
         <LabelToggleRow label="Edit boost" icon={Zap} enabled={t.hideDetailWhileEditing} onToggle={(v) => theme.set({ hideDetailWhileEditing: v })} highlightColor={t.highlightColor} uiColor={t.uiColor} />
         <LabelToggleRow label="Render boost" icon={Gauge} enabled={t.renderBoostEnabled} onToggle={setRenderBoostManual} highlightColor={t.highlightColor} uiColor={t.uiColor} />
         <LabelToggleRow label="Focus render boost" icon={Boxes} enabled={t.focusRenderBoostEnabled} onToggle={(v) => theme.set({ focusRenderBoostEnabled: v })} highlightColor={t.highlightColor} uiColor={t.uiColor} />
+      </div>
+      <div className="flex items-center gap-2 mt-2 mb-0.5">
+        <span className="text-white/60 text-[10px] font-semibold uppercase">Help</span>
+      </div>
+      <div className="divide-y divide-white/10">
+        <LabelToggleRow label="Hints" icon={Lightbulb} enabled={t.hintsEnabled} onToggle={(v) => theme.set({ hintsEnabled: v })} highlightColor={t.highlightColor} uiColor={t.uiColor} />
       </div>
       {(onGestures || onSnapping) && (
         <>

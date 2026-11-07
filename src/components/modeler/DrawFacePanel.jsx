@@ -3,6 +3,7 @@ import { Axis3D } from 'lucide-react';
 import DrawFaceHeader from '@/components/modeler/DrawFaceHeader';
 import { useTheme } from '@/lib/theme';
 import ModelingPanel from '@/components/modeler/ModelingPanel';
+import { blockedButton } from '@/lib/unavailable';
 
 // Axis the Draw face stroke follows: the face is drawn on the plane
 // perpendicular to the selected world axis.
@@ -42,8 +43,8 @@ export default function DrawFacePanel({ axis, onAxis, onCancel, onApply, manager
           <button type="button" aria-label="Draw face straight edge" aria-pressed={straighten} onClick={toggleStraighten}
             className="modeling-value !bg-transparent flex h-8 min-w-0 flex-col items-center justify-center rounded-lg px-0 text-[12px] font-semibold leading-none active:scale-95"
             style={{ color: straighten ? highlightColor : uiColor, borderColor: straighten ? highlightColor : undefined }}><span className="relative top-px">Straight</span><span className="relative top-px">Edge</span></button>
-          <button type="button" aria-label="Draw face align" aria-pressed={align} disabled={!straighten} onClick={toggleAlign}
-            className="modeling-value !bg-transparent h-8 min-w-0 rounded-lg px-0 text-[13px] font-semibold active:scale-95 disabled:opacity-40"
+          <button type="button" aria-label="Draw face align" aria-pressed={align} {...blockedButton(!straighten, 'Turn on Straight Edge to use Align', toggleAlign)}
+            className="modeling-value !bg-transparent h-8 min-w-0 rounded-lg px-0 text-[13px] font-semibold active:scale-95 aria-disabled:opacity-40"
             style={{ color: align ? highlightColor : uiColor, borderColor: align ? highlightColor : undefined }}>Align</button>
         </div>
       </div>

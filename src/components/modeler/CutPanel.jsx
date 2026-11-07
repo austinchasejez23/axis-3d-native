@@ -8,6 +8,7 @@ function CenterCutIcon({ className }) {
 import { useTheme } from '@/lib/theme';
 import ModelingPanel from '@/components/modeler/ModelingPanel';
 import { CutLoopIcon, DrawCutIcon } from '@/lib/toolIcons';
+import { blockedButton } from '@/lib/unavailable';
 
 function StraightCutIcon({ className }) {
   return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -27,6 +28,7 @@ export default function CutPanel({ cut, onCut, onDeleteLast, onCancel, onCenterS
   const draw = cut.kind === 'draw';
   const title = draw ? 'Draw Cut' : 'Cut Loop';
   const Icon = draw ? DrawCutIcon : CutLoopIcon;
+  const cutReason = !draw ? 'Tap an edge to place the cut loop' : cut.pointCount < 2 ? 'Place at least two points to cut' : 'The cut can\'t cross itself';
   return (
     <ModelingPanel label={`${title} controls`} keypadOpen={false}>
       <div className="py-2">
@@ -39,7 +41,7 @@ export default function CutPanel({ cut, onCut, onDeleteLast, onCancel, onCenterS
             <button type="button" onClick={onCancel} aria-label={`Cancel ${title}`} className="modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95" style={{ color: uiColor }}>
               <X className="h-6 w-6" strokeWidth={2.5} />
             </button>
-            <button type="button" onClick={onCut} disabled={!cut.ready} aria-label={`Apply ${title}`} className="modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95 disabled:opacity-40" style={{ color: highlightColor, borderColor: highlightColor }}> 
+            <button type="button" {...blockedButton(!cut.ready, cutReason, onCut)} aria-label={`Apply ${title}`} className="modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95 aria-disabled:opacity-40" style={{ color: highlightColor, borderColor: highlightColor }}> 
               <Check className="h-6 w-6" strokeWidth={2.5} />
             </button>
           </div>
@@ -51,15 +53,15 @@ export default function CutPanel({ cut, onCut, onDeleteLast, onCancel, onCenterS
             { label: 'Straight', Icon: StraightCutIcon, action: () => onPathMode?.('straight'), selected: cut.pathMode === 'straight' },
             { label: 'Follow', Icon: FollowCutIcon, action: () => onPathMode?.('follow'), selected: cut.pathMode !== 'straight' },
           ].map(({ label, Icon: ButtonIcon, action, selected, disabled }) => (
-            <button key={label} type="button" onClick={action} disabled={disabled} aria-label={label} aria-pressed={selected} className="flex min-w-0 flex-col items-center justify-center gap-0 rounded-md py-0.5 disabled:opacity-35" style={{ color: selected ? highlightColor : uiColor }}>
+            <button key={label} type="button" {...blockedButton(!!disabled, cutReason, action)} aria-label={label} aria-pressed={selected} className="flex min-w-0 flex-col items-center justify-center gap-0 rounded-md py-0.5 aria-disabled:opacity-35" style={{ color: selected ? highlightColor : uiColor }}>
               <ButtonIcon className="h-5 w-5" strokeWidth={2} />
               <span className="text-[11px] font-semibold">{label}</span>
             </button>
           ))}
         </div>}
         {draw && <div className="modeling-value grid grid-cols-2 gap-1 rounded-lg px-2 py-1">
-          <button type="button" aria-label="Delete last point" onClick={onDeleteLast} disabled={!cut.pointCount}
-            className="flex h-8 items-center justify-center gap-1 rounded-md disabled:opacity-35" style={{ color: uiColor }}>
+          <button type="button" aria-label="Delete last point" {...blockedButton(!cut.pointCount, 'No points to delete', onDeleteLast)}
+            className="flex h-8 items-center justify-center gap-1 rounded-md aria-disabled:opacity-35" style={{ color: uiColor }}>
             <Trash2 className="h-5 w-5" strokeWidth={2} />
             <span className="text-[12px] font-semibold">Delete Last</span>
           </button>

@@ -38,6 +38,7 @@ export function getToolRequirementNotice(manager, toolId) {
     return `Select one or more faces to ${toolId}`;
   }
   if (mode === 'edge' && EDGE_TOOLS.has(toolId) && (!selection.meshId || count < 1)) {
+    if (toolId === 'create_face_border') return 'Select one or more edges to create a face from';
     return `Select one or more edges to ${toolId.replace(/_/g, ' ')}`;
   }
   if (mode === 'vertex') {

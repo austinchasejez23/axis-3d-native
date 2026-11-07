@@ -5,6 +5,7 @@ import ColorSwatchGrid from './ColorSwatchGrid';
 import PaintToolButtons from './PaintToolButtons';
 import InlineSlider from './InlineSlider';
 import SurfaceSliderRow from './SurfaceSliderRow';
+import { blockedButton } from '@/lib/unavailable';
 
 const WHEEL = 118;
 
@@ -23,7 +24,8 @@ export default function ColorTabContent({
   const onPress = (id, label) => {
     window.dispatchEvent(new CustomEvent('axis-paint-label', { detail: { label } }));
   };
-  const actionBtn = 'modeling-value flex h-8 min-w-0 items-center justify-center rounded-lg px-1 text-[13px] font-semibold active:scale-95 disabled:opacity-35 disabled:active:scale-100';
+  const actionBtn = 'modeling-value flex h-8 min-w-0 items-center justify-center rounded-lg px-1 text-[13px] font-semibold active:scale-95 aria-disabled:opacity-35 aria-disabled:active:scale-100';
+  const strokeReason = strokesBlocked ? 'Brush and Spray can\'t paint vertices' : 'Size and Hardness are for Brush and Spray';
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-start gap-2">
@@ -38,8 +40,7 @@ export default function ColorTabContent({
           <div className="grid grid-cols-2 gap-1.5">
             <button
               type="button"
-              onClick={onApply}
-              disabled={!canApply}
+              {...blockedButton(!canApply, 'Select geometry to apply paint to', onApply)}
               aria-label="Apply paint to the selection"
               className={actionBtn}
               aria-pressed={!!applied}
@@ -49,8 +50,7 @@ export default function ColorTabContent({
             </button>
             <button
               type="button"
-              onClick={onUndo}
-              disabled={!canUndo}
+              {...blockedButton(!canUndo, 'No paint to undo', onUndo)}
               aria-label="Undo paint"
               className={actionBtn}
               style={{ color: uiColor }}
@@ -73,9 +73,9 @@ export default function ColorTabContent({
       </div>
       {showSliders && (
         <SurfaceSliderRow scrollPadTop>
-          <InlineSlider label="Size" value={size} min={4} max={100} onChange={onSize} onActiveChange={onSizeActive} disabled={!strokeActive} />
+          <InlineSlider label="Size" value={size} min={4} max={100} onChange={onSize} onActiveChange={onSizeActive} disabled={!strokeActive} disabledReason={strokeReason} />
           <InlineSlider label="Opacity" value={opacity} min={1} max={100} onChange={onOpacity} />
-          <InlineSlider label="Hardness" value={smoothness} min={0} max={100} onChange={onSmoothness} disabled={!strokeActive} />
+          <InlineSlider label="Hardness" value={smoothness} min={0} max={100} onChange={onSmoothness} disabled={!strokeActive} disabledReason={strokeReason} />
         </SurfaceSliderRow>
       )}
     </div>

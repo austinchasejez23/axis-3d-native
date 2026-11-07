@@ -7,6 +7,7 @@ const SESSIONS = 10;
 const EXISTING_USER_KEY = 'gestura_wireframe_default_v3';
 
 let active = false;
+let newUser = false;
 try {
   const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
   const state = saved && Number.isFinite(saved.sessions)
@@ -14,12 +15,16 @@ try {
     : { sessions: 0, newUser: !localStorage.getItem(EXISTING_USER_KEY) };
   state.sessions += 1;
   localStorage.setItem(KEY, JSON.stringify(state));
-  active = !!state.newUser && state.sessions <= SESSIONS;
+  newUser = !!state.newUser;
+  active = newUser && state.sessions <= SESSIONS;
 } catch {
   active = false;
 }
 
 export const helpHintActive = () => active;
+
+// A brand-new install, as opposed to someone who used the app before.
+export const isNewUser = () => newUser;
 
 // Once the user opens Help, the flashing stops for the rest of the session.
 export const stopHelpHint = () => { active = false; };

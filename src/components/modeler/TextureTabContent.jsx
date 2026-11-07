@@ -89,7 +89,7 @@ export default function TextureTabContent({ meshId, managerRef, opacity, onOpaci
         {chip('Merge', mergeColor, applyMerge)}
         {chip('Seamless', mirror, applyMirror)}
         {chip('Wrap', wrapOpen, () => setWrapOpen((v) => !v))}
-        <SheetActionButton label="Apply" ariaLabel="Apply texture changes" onClick={onApply} disabled={!canApply} primary />
+        <SheetActionButton label="Apply" ariaLabel="Apply texture changes" onClick={onApply} disabled={!canApply} disabledReason="Select an object to apply the texture to" primary />
         {wrapOpen && (
           <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 z-10">
             <WrapModePicker mode={uvMode} onMode={(m) => { applyUvMode(m); setWrapOpen(false); }} />

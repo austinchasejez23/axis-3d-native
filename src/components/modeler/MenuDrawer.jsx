@@ -28,6 +28,10 @@ function DrawerRow({ icon: Icon, label, color, onClick, chevron = false, compact
   );
 }
 
+// The menu and every sub-menu draw this much larger than their base sizes:
+// labels, icons, controls and spacing all scale together.
+const MENU_ZOOM = 1.15;
+
 const TITLES = {
   file: 'File',
   viewport: 'Viewport',
@@ -127,9 +131,11 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
       const menu = cascadeLayoutRef.current.getBoundingClientRect();
       // Position the Grid settings panel at the actual Grid button's height,
       // and keep its slightly wider controls within the phone viewport.
+      // Screen distances are divided by the menu's zoom, since the panel's
+      // own lengths are scaled by it.
       setGridAnchor({
-        top: Math.max(0, button.top - menu.top),
-        width: Math.max(128, Math.min(208, window.innerWidth - menu.right - 12)),
+        top: Math.max(0, (button.top - menu.top) / MENU_ZOOM),
+        width: Math.max(128, Math.min(208, (window.innerWidth - menu.right - 12) / MENU_ZOOM)),
       });
     }
     setViewportCascade((current) => current === id ? null : id);
@@ -309,10 +315,10 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
         {/* Every screen renders in this one panel, anchored in the same spot,
             so a sub-menu replaces the menu it came from instead of stacking
             sideways off the screen. */}
-        <div ref={cascadeLayoutRef} className="relative flex items-start gap-1">
+        <div ref={cascadeLayoutRef} className="relative flex items-start gap-1" style={{ zoom: MENU_ZOOM }}>
           <div
-            className="relative w-fit rounded-lg border flex flex-col pointer-events-auto max-h-[calc(100vh-6.75rem)] overflow-y-auto axis-menu-scroll"
-            style={panelStyle}
+            className="relative w-fit rounded-lg border flex flex-col pointer-events-auto overflow-y-auto axis-menu-scroll"
+            style={{ ...panelStyle, maxHeight: `calc((100vh - 6.75rem) / ${MENU_ZOOM})` }}
           >
             {screen !== 'root' && (
               <MenuScreenHeader

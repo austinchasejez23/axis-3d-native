@@ -1,6 +1,7 @@
 import { Axis3d, Check, Undo2, X } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
 import ModelingPanel from '@/components/modeler/ModelingPanel';
+import { blockedButton } from '@/lib/unavailable';
 
 // Opened by double-tapping Orientation reset. Undo brings back the
 // orientation the last reset removed from the selected geometry, keeping
@@ -27,8 +28,8 @@ export default function OrientationPanel({ canUndo, onUndo, onCancel, onApply })
         </div>
         <div className="modeling-value flex items-center gap-2 rounded-lg px-2.5 py-2">
           <span className="min-w-0 flex-1 truncate text-[13px] font-semibold" style={{ color: uiColor }}>Undo orientation reset</span>
-          <button type="button" onClick={onUndo} disabled={!canUndo} aria-label="Undo orientation reset"
-            className="modeling-value flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold active:scale-95 disabled:opacity-35"
+          <button type="button" {...blockedButton(!canUndo, 'No orientation reset to undo', onUndo)} aria-label="Undo orientation reset"
+            className="modeling-value flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold active:scale-95 aria-disabled:opacity-35"
             style={{ color: highlightColor, borderColor: highlightColor }}>
             <Undo2 className="h-4 w-4 shrink-0" strokeWidth={2.2} />
             Undo

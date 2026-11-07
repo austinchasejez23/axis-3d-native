@@ -39,6 +39,7 @@ import ToolAnnouncement from '@/components/modeler/ToolAnnouncement';
 import PaintToolFlash from '@/components/modeler/PaintToolFlash';
 import MultiSelectLabel from '@/components/modeler/MultiSelectLabel';
 import GraphicsErrorBanner from '@/components/modeler/GraphicsErrorBanner';
+import HintsController from '@/components/modeler/HintsController';
 import TriangleCounter from '@/components/modeler/TriangleCounter';
 import ViewGizmo from '@/components/modeler/ViewGizmo';
 import SelectionPatternPanel from '@/components/modeler/SelectionPatternPanel';
@@ -50,6 +51,7 @@ import { listProjects, saveProject, loadProject, generateProjectId } from '@/lib
 import { beginBevelPreview, updateBevelPreview, commitBevelPreview, cancelBevelPreview } from '@/lib/meshTools';
 import { TOOLS } from '@/lib/tools';
 import { getToolRequirementNotice } from '@/lib/toolRequirements';
+import { UNAVAILABLE_EVENT, notifyUnavailable } from '@/lib/unavailable';
 import { useProAccess } from '@/lib/ProAccessContext';
 import { FREE_PROJECT_LIMIT, FREE_TRIANGLE_LIMIT, PRO_TOOL_IDS, TRIANGLE_GROWTH_TOOLS, totalTriangles } from '@/lib/proAccess';
 import { toolMemory } from '@/lib/toolMemory';
@@ -63,6 +65,8 @@ import useKeyboardViewport from '@/hooks/use-keyboard-viewport';
 
 // Boolean tools that open their own panel.
 const BOOLEAN_OPERATION_IDS = new Set(['subtract', 'union', 'intersect']);
+// Tools that start working on the canvas instead of changing geometry at once.
+const INTERACTIVE_TOOL_IDS = new Set(['extrude', 'cut_loop', 'draw_cut', 'draw_face', 'add_vertex']);
 
 export default function Modeler() {
   const navigate = useNavigate();
@@ -468,13 +472,21 @@ export default function Modeler() {
   const handleRedo = useCallback(() => {
     setModeToolsOpen(false);
     setToolsOpen(false);
-    managerRef.current?.redo();
+    if (managerRef.current && !managerRef.current.redo()) notifyUnavailable('Nothing left to redo');
   }, []);
 
   const stopMeasure = useCallback(() => {
     setMeasureMode(false);
     managerRef.current?.setMeasureMode(false);
     window.dispatchEvent(new CustomEvent('axis-tool-closed', { detail: { label: 'Measure' } }));
+  }, []);
+  const angleModeRef = useRef(false);
+  angleModeRef.current = angleMode;
+  const measureModeRef = useRef(false);
+  measureModeRef.current = measureMode;
+  const stopAngle = useCallback(() => {
+    if (angleModeRef.current) window.dispatchEvent(new CustomEvent('axis-tool-closed', { detail: { label: 'Protractor' } }));
+    setAngleMode(false);
   }, []);
 
   // Every panel entry goes through this dismissal, in the same React update
@@ -505,7 +517,17 @@ export default function Modeler() {
     if (keep !== 'radial_array') cancelOpenRadialArray();
     if (!BOOLEAN_OPERATION_IDS.has(keep)) closeOpenBoolean();
     if (keep !== 'measure') stopMeasure();
-  }, [cancelOpenAddVertex, cancelOpenBevel, cancelOpenRadialArray, closeOpenBoolean, stopMeasure, closeMaterials, closeSculpt]);
+    if (keep !== 'protractor') stopAngle();
+  }, [cancelOpenAddVertex, cancelOpenBevel, cancelOpenRadialArray, closeOpenBoolean, stopMeasure, stopAngle, closeMaterials, closeSculpt]);
+
+  // Measure and Protractor are used with the general tools panel open; closing
+  // that panel, by any route, turns them off, so no tool stays active outside
+  // its own panel.
+  useEffect(() => {
+    if (toolsOpen) return;
+    if (measureModeRef.current) stopMeasure();
+    if (angleModeRef.current) stopAngle();
+  }, [toolsOpen, stopMeasure, stopAngle]);
 
   // Undo closes whatever panel or tool bar is open. A panel holding an edit
   // that was never applied (Bevel, Radial array, Add vertex) is cancelled,
@@ -517,7 +539,7 @@ export default function Modeler() {
     setHelpOpen(false);
     setModeToolsOpen(false);
     setToolsOpen(false);
-    if (!cancelled) managerRef.current?.undo();
+    if (!cancelled && managerRef.current && !managerRef.current.undo()) notifyUnavailable('Nothing left to undo');
   }, [cancelOpenAddVertex, cancelOpenBevel, cancelOpenRadialArray, dismissActiveTool, transformDrawerOpen]);
   undoActionRef.current = handleUndo;
 
@@ -546,7 +568,10 @@ export default function Modeler() {
     setLightingOpen(false);
     if (materialsOpen && selectionMode !== mode) {
       // Material / Texture: vertex, edge and face are not selectable.
-      if (surfaceSection !== 'paint') return;
+      if (surfaceSection !== 'paint') {
+        notifyUnavailable(`${surfaceSection === 'texture' ? 'Texture' : 'Material'} works on whole objects only`);
+        return;
+      }
       // Discard the old selection's preview before changing modes.
       managerRef.current?.cancelPaintPreview();
       managerRef.current?.pushUndo();
@@ -621,6 +646,13 @@ export default function Modeler() {
       setTimeout(() => setToolPrompt((current) => current?.text === text ? null : current), 3500),
     ];
   }, []);
+
+  // Controls that can't act right now send their reason here.
+  useEffect(() => {
+    const onUnavailable = (event) => showToolPrompt(event.detail?.text);
+    window.addEventListener(UNAVAILABLE_EVENT, onUnavailable);
+    return () => window.removeEventListener(UNAVAILABLE_EVENT, onUnavailable);
+  }, [showToolPrompt]);
 
   useEffect(() => {
     const showRenderBoostNotice = () => {
@@ -747,16 +779,23 @@ export default function Modeler() {
         const selectedEdges = selected?.indices.map((index) => edges[index]).filter(Boolean) || [];
         const separate = selectedEdges.length === 2 && ![selectedEdges[0].v1, selectedEdges[0].v2].some((id) => id === selectedEdges[1].v1 || id === selectedEdges[1].v2);
         if (!separate) {
-          showToolPrompt('Bridge requires two separate edges on one combined object');
+          showToolPrompt('Select two edges that don\'t touch, on the same object, to bridge them');
           return;
         }
       }
     }
     const limitSnapshot = !isPro && TRIANGLE_GROWTH_TOOLS.has(toolId) ? manager?.captureSnapshot() : null;
+    const editBefore = manager?.editVersion || 0;
+    if (manager) manager.toolNotice = null;
     manager?.executeTool(toolId);
     // Dissolve reports why it could not merge (open boundary, non-planar result,
     // ...); Delete reports a vertex it refused because it is a face corner.
-    if ((toolId === 'dissolve' || toolId === 'delete') && manager?.toolNotice) showToolPrompt(manager.toolNotice);
+    // Any other tool that changed nothing says so instead of doing nothing.
+    if (manager?.toolNotice) showToolPrompt(manager.toolNotice);
+    else if (manager && !INTERACTIVE_TOOL_IDS.has(toolId) && (manager.editVersion || 0) === editBefore) {
+      const label = TOOLS[selectionMode]?.pages.flat().find((tool) => tool.id === toolId)?.label || 'This tool';
+      showToolPrompt(`${label} can't be applied to this selection`);
+    }
     if (!isPro && totalTriangles(manager) > FREE_TRIANGLE_LIMIT) {
       if (limitSnapshot) manager.restoreSnapshot(limitSnapshot);
       openUpgrade(`Free scenes are limited to ${FREE_TRIANGLE_LIMIT.toLocaleString()} triangles.`);
@@ -958,7 +997,7 @@ export default function Modeler() {
   }, [selectedMeshId, showToolPrompt]);
 
   const handleToggleMultiSelect = useCallback(() => {
-    if (materialsOpen && surfaceSection === 'texture') return;
+    if (materialsOpen && surfaceSection === 'texture') { notifyUnavailable('Multi-select isn\'t available in Texture'); return; }
     if (multiSelect) managerRef.current?.exitMultiSelect();
     else managerRef.current?.enterMultiSelect();
     setToolsOpen(false);
@@ -1041,6 +1080,9 @@ export default function Modeler() {
             setFreeTransformPanelOpen(false);
             return true;
           }
+          // Measure and Protractor are used on the canvas with their panel open:
+          // an empty tap only clears the selection.
+          if (toolsOpen && (measureMode || angleMode)) return false;
           // Snapping settings close only through their own close controls.
           if (toolsOpen || modeToolsOpen) {
             setToolsOpen(false);
@@ -1124,12 +1166,12 @@ export default function Modeler() {
         }
       />
       </div>
-      <div ref={hudPillRef} className="w-fit max-w-full overflow-hidden rounded-xl" style={{ background: 'rgba(9,13,22,0.26)', border: '1px solid rgba(255,255,255,0.07)', visibility: hudCovered ? 'hidden' : undefined }}>
+      <div ref={hudPillRef} data-hint="transform-values" className="w-fit max-w-full overflow-hidden rounded-xl" style={{ background: 'rgba(9,13,22,0.26)', border: '1px solid rgba(255,255,255,0.07)', visibility: hudCovered ? 'hidden' : undefined }}>
       <PositionHud
         hud={hud}
         onOpenTransform={(target) => {
           const meshId = managerRef.current?.selection.meshId || selectedMeshId;
-          if (!meshId) return;
+          if (!meshId) { showToolPrompt('Select geometry to edit its transform values'); return; }
           dismissActiveTool();
           setToolsOpen(false);
           setModeToolsOpen(false);
@@ -1174,6 +1216,14 @@ export default function Modeler() {
       </div>
       <ViewGizmo managerRef={managerRef} coverRef={gizmoRef} hidden={gizmoCovered} />
       </>)}
+
+      <HintsController
+        selectionMode={selectionMode}
+        modeToolsOpen={modeToolsOpen}
+        toolGridOpen={modeToolsOpen || toolsOpen}
+        idle={!anyPanelOpen}
+        hasSelection={!!selectedMeshId}
+      />
 
       {modeToolsOpen && (
         <ModeToolGrid

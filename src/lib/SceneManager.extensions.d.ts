@@ -342,6 +342,7 @@ declare module './SceneManager.js' {
     radialArraySelectPreview(): any;
     /** Implemented by sceneSelection.js */
     raycastMeshes(ndcX: number, ndcY: number): import('three').Intersection[];
+    lockedObjectAt(clientX: number, clientY: number): boolean;
     /** Implemented by sceneSelection.js */
     raycastTap(clientX: number, clientY: number): import('three').Intersection[];
     /** Implemented by sceneOrientation.js */

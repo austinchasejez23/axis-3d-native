@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { edgeKey } from './meshTopology';
+import { notifyUnavailable } from './unavailable';
 
 // Selection methods for SceneManager, extracted so SceneManager.js stays under
 // the edit size limit and selection logic lives in one focused module. All
@@ -227,6 +228,19 @@ export function applySceneSelection(SceneManager) {
     return { x, y };
   };
 
+  // Is a visible, locked object straight under this screen point?
+  P.lockedObjectAt = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
+    const locked = [];
+    for (const [id, obj] of this.threeObjects) {
+      if (obj.mesh.visible && this.getMesh(id)?.locked) locked.push(obj.mesh);
+    }
+    if (!locked.length) return false;
+    const { x, y } = this.screenToNDC(clientX, clientY);
+    this.pointer.set(x, y);
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    return this.raycaster.intersectObjects(locked, false).length > 0;
+  };
+
   P.raycastMeshes = /** @this {import('./SceneManager.js').SceneManager} */ function (ndcX, ndcY) {
     this.pointer.set(ndcX, ndcY);
     this.raycaster.setFromCamera(this.pointer, this.camera);
@@ -426,6 +440,8 @@ export function applySceneSelection(SceneManager) {
       }
     }
     if (!selected) {
+      // A tap on a locked object says why nothing was selected.
+      if (this.lockedObjectAt(clientX, clientY)) notifyUnavailable('That object is locked, so it can\'t be selected');
       // Clean tap on empty canvas acts as a back button: if a panel/tool/menu
       // consumed it, keep the current selection intact.
       const handled = this.cb.onEmptyTap?.();

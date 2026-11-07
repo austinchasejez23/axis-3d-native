@@ -2,6 +2,7 @@ import { Check, X, Trash2 } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
 import ModelingPanel from '@/components/modeler/ModelingPanel';
 import { AddVertexIcon } from '@/lib/toolIcons';
+import { blockedButton } from '@/lib/unavailable';
 
 // Match the Cut Loop Center icon to make midpoint mode recognizable.
 function CenterEdgeIcon({ className }) {
@@ -28,7 +29,7 @@ export default function AddVertexPanel({ state, onConfirm, onCancel, onDeleteLas
             <button type="button" onClick={onCancel} aria-label="Cancel add vertex" className="modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95" style={{ color: uiColor }}>
               <X className="h-6 w-6" strokeWidth={2.5} />
             </button>
-            <button type="button" onClick={onConfirm} disabled={!active} aria-label="Apply add vertex" className="modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95 disabled:opacity-40" style={{ color: highlightColor, borderColor: highlightColor }}>
+            <button type="button" {...blockedButton(!active, 'Tap an edge to add a vertex', onConfirm)} aria-label="Apply add vertex" className="modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95 aria-disabled:opacity-40" style={{ color: highlightColor, borderColor: highlightColor }}>
               <Check className="h-6 w-6" strokeWidth={2.5} />
             </button>
           </div>
@@ -51,11 +52,10 @@ export default function AddVertexPanel({ state, onConfirm, onCancel, onDeleteLas
           </button>
           <button
             type="button"
-            onClick={onDeleteLast}
-            disabled={!active}
+            {...blockedButton(!active, 'No vertices to delete', onDeleteLast)}
             aria-label="Delete last vertex"
             title="Delete last vertex"
-            className="flex h-10 min-w-[74px] shrink-0 flex-col items-center justify-center gap-0 rounded-md px-1 disabled:opacity-35 active:scale-95"
+            className="flex h-10 min-w-[74px] shrink-0 flex-col items-center justify-center gap-0 rounded-md px-1 aria-disabled:opacity-35 active:scale-95"
             style={{ color: uiColor }}
           >
             <Trash2 className="h-5 w-5" strokeWidth={2} />

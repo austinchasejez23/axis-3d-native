@@ -6,6 +6,7 @@ import { useTheme } from '@/lib/theme';
 import HorizontalChevronStepper from './HorizontalChevronStepper';
 import { toolMemory } from '@/lib/toolMemory';
 import ModelingPanel from '@/components/modeler/ModelingPanel';
+import { blockedButton } from '@/lib/unavailable';
 
 // The default is a conventional equal-width bevel. Smooth rounds its
 // multi-segment profile; Sweep restores the original section-bend behavior.
@@ -49,7 +50,7 @@ export default function BevelPanel({ onPreview, onApply, onCancel, isPro, onProL
             <BevelIcon className="h-5 w-5 shrink-0" strokeWidth={1.75} />
             <h2 className="text-[16px] font-bold tracking-tight leading-none">Bevel</h2>
           </div>
-          <button type="button" onClick={toggleSmooth} disabled={sweep} aria-pressed={smooth && !sweep} className="modeling-value flex h-8 w-[3.75rem] shrink-0 items-center justify-center rounded-lg text-[13px] font-semibold active:scale-95" style={toggleStyle(smooth && !sweep, sweep)}>Smooth</button>
+          <button type="button" {...blockedButton(sweep, 'Smooth isn\'t available with Sweep', toggleSmooth)} aria-pressed={smooth && !sweep} className="modeling-value flex h-8 w-[3.75rem] shrink-0 items-center justify-center rounded-lg text-[13px] font-semibold active:scale-95" style={toggleStyle(smooth && !sweep, sweep)}>Smooth</button>
           <button type="button" onClick={toggleSweep} aria-pressed={sweep} className="modeling-value relative flex h-8 w-[3.75rem] shrink-0 items-center justify-center rounded-lg text-[13px] font-semibold active:scale-95" style={{ ...toggleStyle(sweep), color: !isPro ? '#fbbf24' : toggleStyle(sweep).color, opacity: !isPro ? 0.62 : 1 }}>Sweep{!isPro && <span className="absolute -right-1 -top-1 rounded bg-amber-400 px-1 text-[8px] font-bold leading-4 text-black">PRO</span>}</button>
           <div className="ml-2 flex shrink-0 items-center gap-3">
             <button type="button" onClick={onCancel} aria-label="Cancel bevel" className="modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95" style={{ color: uiColor }}><X className="h-6 w-6" strokeWidth={2.5} /></button>

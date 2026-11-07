@@ -1,6 +1,7 @@
 import { PaintBucket, Paintbrush, SprayCan, Pipette, Plus, Ban } from 'lucide-react';
 import { useTheme, theme } from '@/lib/theme';
 import LoopingScroller from './LoopingScroller';
+import { notifyUnavailable } from '@/lib/unavailable';
 
 const GREY = 'rgba(150,150,150,0.55)';
 
@@ -33,7 +34,7 @@ export default function PaintToolButtons({ color, paintTool, strokesBlocked, onP
           return (
             <button
               key={it.id}
-              onClick={it.disabled ? undefined : () => { onPress?.(it.id, it.flash || it.label); it.onClick(); }}
+              onClick={it.disabled ? () => notifyUnavailable(`${it.label} can't paint vertices`) : () => { onPress?.(it.id, it.flash || it.label); it.onClick(); }}
               // aria-disabled, not disabled: a disabled button swallows the touch,
               // so a swipe starting on a grey tool would not move the strip.
               aria-disabled={it.disabled || undefined}

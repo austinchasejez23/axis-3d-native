@@ -35,10 +35,12 @@ export default function GeneralToolGrid({
     { id: 'materials', label: 'Materials', icon: Palette, onClick: () => { onActivateTool?.('material'); onMaterial?.(); onClose?.(); } },
     { id: 'sculpt', label: 'Sculpt', icon: Hand, locked: !isPro, onClick: () => !isPro ? onProLock?.('Sculpt requires AXIS 3D Pro.') : run('sculpt', onSculpt) },
     { id: 'free_transform', label: 'Free Transform', icon: Move3D, active: freeTransform, onClick: () => run('free_transform', onToggleFreeTransform) },
-    { id: 'protractor', label: 'Protractor', icon: ProtractorIcon, active: angleMode, onClick: () => run('protractor', onToggleAngle) },
-    { id: 'measure', label: 'Measure', icon: MeasureIcon, active: measureMode, onClick: () => run('measure', onToggleMeasure, false) },
+    // Protractor and Measure keep this panel open while they are in use;
+    // turning one off closes it, and closing the panel turns them off.
+    { id: 'protractor', label: 'Protractor', icon: ProtractorIcon, active: angleMode, onClick: () => run('protractor', onToggleAngle, angleMode) },
+    { id: 'measure', label: 'Measure', icon: MeasureIcon, active: measureMode, onClick: () => run('measure', onToggleMeasure, measureMode) },
     { id: 'convert', label: 'Convert', icon: ArrowLeftRight, active: convertOpen, onClick: () => { onActivateTool?.('convert'); setConvertOpen((v) => !v); } },
-    { id: 'display', label: anyHidden ? 'Display hidden' : 'Display selected', icon: anyHidden ? Eye : EyeOff, onClick: () => run('display', onDisplaySelected, false) },
+    { id: 'display', label: anyHidden ? 'Display hidden' : 'Display selected', icon: anyHidden ? Eye : EyeOff, onClick: () => run('display', onDisplaySelected) },
 
   ];
   const byId = Object.fromEntries(items.map((item) => [item.id, item]));

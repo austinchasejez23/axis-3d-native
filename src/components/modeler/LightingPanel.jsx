@@ -6,6 +6,7 @@ import { MAX_LIGHT_RANGE } from '@/lib/sceneLights';
 import ModelingPanel from '@/components/modeler/ModelingPanel';
 import InlineSlider from '@/components/modeler/InlineSlider';
 import RoundColorPicker from '@/components/modeler/RoundColorPicker';
+import { blockedButton } from '@/lib/unavailable';
 
 // Range runs from 1 to the longest range on a ratio scale, so short ranges
 // for small models and long ones for full-size models are both easy to set.
@@ -73,7 +74,7 @@ export default function LightingPanel({ state, managerRef, onClose }) {
   const spot = light.type === 'spot';
   const hue = Math.round(hexToHsv(light.color).h);
   const actionBtn = 'modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95';
-  const rowBtn = 'modeling-value flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-lg px-1 text-[12px] font-semibold active:scale-95 disabled:opacity-35';
+  const rowBtn = 'modeling-value flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-lg px-1 text-[12px] font-semibold active:scale-95 aria-disabled:opacity-35';
   const lightCount = state.lights.length;
 
   return (
@@ -131,14 +132,14 @@ export default function LightingPanel({ state, managerRef, onClose }) {
           <InlineSlider grow compact label="Range" value={rangeToSlider(light.range)} display={light.range.toFixed(1)} min={0} max={100} step={0.1}
             onChange={(value) => change({ range: sliderToRange(value) })} onActiveChange={begin} />
           <InlineSlider grow compact label={spot ? 'Cone' : 'Radius'} value={light.radius} display={spot ? `${Math.round(light.radius)}°` : light.radius.toFixed(1)}
-            min={spot ? 5 : 0.1} max={spot ? 85 : 5} step={spot ? 1 : 0.1} disabled={light.type === 'directional'}
+            min={spot ? 5 : 0.1} max={spot ? 85 : 5} step={spot ? 1 : 0.1} disabled={light.type === 'directional'} disabledReason="Directional light has no radius"
             onChange={(radius) => change({ radius })} onActiveChange={begin} />
           {/* While Default lighting is on, Shadow and Shadows set Default's own
               shadows instead of switching Default off. */}
           <InlineSlider grow compact label="Shadow"
             value={Math.round((defaultLightingEnabled ? (shadowIntensity ?? 0.6) : light.shadowIntensity) * 100)}
             display={`${Math.round((defaultLightingEnabled ? (shadowIntensity ?? 0.6) : light.shadowIntensity) * 100)}%`} min={0} max={100}
-            disabled={defaultLightingEnabled ? !shadowsEnabled : !light.shadows}
+            disabled={defaultLightingEnabled ? !shadowsEnabled : !light.shadows} disabledReason="Turn on Shadows to set shadow strength"
             onChange={(value) => (defaultLightingEnabled ? theme.set({ shadowIntensity: value / 100 }) : change({ shadowIntensity: value / 100 }))}
             onActiveChange={defaultLightingEnabled ? undefined : begin} />
           <InlineSlider grow compact hue label="Hue" value={hue} display={`${hue}°`} min={0} max={360}
@@ -157,7 +158,7 @@ export default function LightingPanel({ state, managerRef, onClose }) {
           <button type="button" onClick={() => manager?.duplicateSelectedSceneLight()} aria-label="Duplicate light" className={rowBtn} style={{ color: uiColor }}>
             <span className="truncate">Duplicate</span>
           </button>
-          <button type="button" disabled={lightCount <= 1} onClick={() => manager?.deleteSelectedSceneLight()} aria-label="Delete light" className={rowBtn} style={{ color: uiColor }}>
+          <button type="button" {...blockedButton(lightCount <= 1, 'The scene needs at least one light', () => manager?.deleteSelectedSceneLight())} aria-label="Delete light" className={rowBtn} style={{ color: uiColor }}>
             <span className="truncate">Delete</span>
           </button>
           <button type="button" onClick={() => theme.set({ defaultLightingEnabled: !defaultLightingEnabled })}
