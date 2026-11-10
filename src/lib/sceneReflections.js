@@ -195,10 +195,12 @@ export function applySceneReflections(SceneManagerClass) {
       const obj = this.threeObjects.get(meshId);
       if (!mesh || !obj) continue;
       rig.cam.position.copy(mesh.position);
-      // Hide the reflective object so it does not reflect itself.
+      // Hide the reflective object so it does not reflect itself, then put back
+      // whatever it was: a hidden object (Display selected) must stay hidden.
+      const wasVisible = obj.mesh.visible;
       obj.mesh.visible = false;
       rig.cam.update(this.renderer, this.scene);
-      obj.mesh.visible = true;
+      obj.mesh.visible = wasVisible;
       // PMREM-process the cube so roughness selects a blurred mip.
       // Keep the render target itself so its framebuffer/texture resources can
       // be disposed on the next refresh instead of leaking GPU memory.
