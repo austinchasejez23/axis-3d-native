@@ -371,6 +371,103 @@ function pack(islands) {
   }));
 }
 
+// Unfold pieces into one connected layout, like a paper net: a piece that
+// touches another across a cut edge is turned flat beside it along that edge
+// (top first, sides around it). A piece that would land on top of another stays
+// loose instead. Returns the groups of piece indexes and the folded edges.
+function joinIslands(mesh, flat, edgeFaces, userSeams) {
+  const count = flat.length;
+  const joined = new Set();
+  if (count < 2 || count > 400) return { nets: flat.map((_, i) => [i]), joined };
+  const clusterOf = new Array(mesh.faces.length);
+  flat.forEach((island, i) => island.faces.forEach((fi) => { clusterOf[fi] = i; }));
+  const links = Array.from({ length: count }, () => new Map());
+  for (const [key, list] of edgeFaces) {
+    if (list.length !== 2 || userSeams.has(key)) continue;
+    const a = clusterOf[list[0]], b = clusterOf[list[1]];
+    if (a === b) continue;
+    const [v1, v2] = key.split(',').map(Number);
+    const len = mesh.getVertexVector(v1).distanceTo(mesh.getVertexVector(v2));
+    const cur = links[a].get(b);
+    if (!cur || len > cur.len) {
+      const link = { key, len, v1, v2 };
+      links[a].set(b, link);
+      links[b].set(a, link);
+    }
+  }
+  const info = flat.map((island) => {
+    const n = new THREE.Vector3();
+    let area = 0;
+    for (const fi of island.faces) {
+      const a = mesh.getFaceArea ? mesh.getFaceArea(fi) : 1;
+      area += a;
+      n.add(mesh.getFaceNormal(fi).clone().multiplyScalar(a));
+    }
+    return { area, up: n.lengthSq() > 0 ? n.normalize().y : 0 };
+  });
+  const totalArea = info.reduce((sum, it) => sum + it.area, 0);
+  const eps = 0.002 * Math.sqrt(Math.max(totalArea, 1e-9));
+  const order = [...info.keys()].sort((p, q) => (Math.abs(info[q].area - info[p].area) > 1e-6 * Math.max(info[q].area, info[p].area) ? info[q].area - info[p].area : info[q].up - info[p].up));
+  const box = (pts) => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    return [x0, y0, x1, y1];
+  };
+  const hit = (a, b) => a[0] < b[2] - eps && b[0] < a[2] - eps && a[1] < b[3] - eps && b[1] < a[3] - eps;
+  const cornerPoints = (i, fi) => mesh.faces[fi].map((_, k) => flat[i].points[flat[i].surface.corner.get(`${fi}:${k}`)]);
+  const pointOf = (i, fi, vid) => flat[i].points[flat[i].surface.corner.get(`${fi}:${mesh.faces[fi].indexOf(vid)}`)];
+  const centroid = (pts) => [pts.reduce((sum, q) => sum + q[0], 0) / pts.length, pts.reduce((sum, q) => sum + q[1], 0) / pts.length];
+
+  // The child's points turned and moved so its copy of the shared edge sits on the parent's.
+  const alignAcross = (parent, child, link) => {
+    const list = edgeFaces.get(link.key);
+    const pf = list.find((fi) => clusterOf[fi] === parent);
+    const cf = list.find((fi) => clusterOf[fi] === child);
+    const a1 = pointOf(parent, pf, link.v1), a2 = pointOf(parent, pf, link.v2);
+    const b1 = pointOf(child, cf, link.v1), b2 = pointOf(child, cf, link.v2);
+    const da = [a2[0] - a1[0], a2[1] - a1[1]], db = [b2[0] - b1[0], b2[1] - b1[1]];
+    if (Math.hypot(da[0], da[1]) < 1e-9 || Math.hypot(db[0], db[1]) < 1e-9) return null;
+    const turn = Math.atan2(da[1], da[0]) - Math.atan2(db[1], db[0]);
+    const c = Math.cos(turn), sn = Math.sin(turn);
+    const from = [(b1[0] + b2[0]) / 2, (b1[1] + b2[1]) / 2];
+    const to = [(a1[0] + a2[0]) / 2, (a1[1] + a2[1]) / 2];
+    const move = ([x, y]) => { const dx = x - from[0], dy = y - from[1]; return [to[0] + c * dx - sn * dy, to[1] + sn * dx + c * dy]; };
+    const side = (q) => da[0] * (q[1] - a1[1]) - da[1] * (q[0] - a1[0]);
+    if (side(centroid(cornerPoints(parent, pf))) * side(move(centroid(cornerPoints(child, cf)))) >= 0) return null;
+    return flat[child].points.map(move);
+  };
+
+  const placed = new Array(count).fill(false);
+  const boxes = new Array(count);
+  const nets = [];
+  for (const root of order) {
+    if (placed[root]) continue;
+    placed[root] = true;
+    boxes[root] = box(flat[root].points);
+    const net = [root];
+    const queue = [root];
+    while (queue.length) {
+      const parent = queue.shift();
+      const neighbours = [...links[parent].entries()].filter(([j]) => !placed[j]).sort((p, q) => q[1].len - p[1].len);
+      for (const [child, link] of neighbours) {
+        if (placed[child]) continue;
+        const moved = alignAcross(parent, child, link);
+        if (!moved) continue;
+        const b = box(moved);
+        if (net.some((j) => j !== parent && hit(boxes[j], b))) continue;
+        flat[child].points = moved;
+        boxes[child] = b;
+        placed[child] = true;
+        net.push(child);
+        queue.push(child);
+        joined.add(link.key);
+      }
+    }
+    nets.push(net);
+  }
+  return { nets, joined };
+}
+
 export function computeUnwrap(mesh, { angle = DEFAULT_CUT_ANGLE } = {}) {
   const edgeFaces = buildEdgeFaces(mesh);
   const seams = seamSet(mesh, edgeFaces, angle);
@@ -384,18 +481,22 @@ export function computeUnwrap(mesh, { angle = DEFAULT_CUT_ANGLE } = {}) {
     }
     flat.push({ faces, surface, points: flatten(mesh, faces, surface) });
   }
-  const packed = pack(flat);
+  const { nets, joined } = joinIslands(mesh, flat, edgeFaces, new Set((mesh.uvSeams || []).map((e) => edgeKey(e.v1, e.v2))));
+  const packed = pack(nets.map((net) => ({ points: net.flatMap((i) => flat[i].points) })));
   const faceUv = new Array(mesh.faces.length);
-  flat.forEach((island, i) => {
-    const place = packed.find((p) => p.index === i).map;
-    for (const fi of island.faces) {
-      faceUv[fi] = mesh.faces[fi].map((_, k) => place(island.points[island.surface.corner.get(`${fi}:${k}`)]));
+  nets.forEach((net, n) => {
+    const place = packed.find((p) => p.index === n).map;
+    for (const i of net) {
+      const island = flat[i];
+      for (const fi of island.faces) {
+        faceUv[fi] = mesh.faces[fi].map((_, k) => place(island.points[island.surface.corner.get(`${fi}:${k}`)]));
+      }
     }
   });
-  // Where the surface was cut open, for showing on the model.
+  // Where the surface was cut open, for showing on the model (folds are not cuts).
   const cuts = [];
-  for (const key of seams) if ((edgeFaces.get(key) || []).length) cuts.push(key.split(',').map(Number));
-  return { faceCount: mesh.faces.length, angle, faces: faceUv, islands: flat.map((island) => island.faces), seams: cuts };
+  for (const key of seams) if ((edgeFaces.get(key) || []).length && !joined.has(key)) cuts.push(key.split(',').map(Number));
+  return { faceCount: mesh.faces.length, angle, faces: faceUv, islands: nets.map((net) => net.flatMap((i) => flat[i].faces)), seams: cuts };
 }
 
 // Pack the islands again as they are now (their own sizes and turns kept), so
