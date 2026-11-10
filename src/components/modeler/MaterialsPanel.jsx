@@ -156,6 +156,9 @@ export default function MaterialsPanel({
   // highlighted only while the current selection and color still match it;
   // picking another color or selecting something else clears the highlight.
   const lastApplyRef = useRef(null);
+  // Set by Remove paint: the selection, color and tool it was pressed with. The
+  // checkmark must not fill again straight after, or the paint comes back.
+  const removedRef = useRef(null);
   const selectionKey = () => {
     const manager = managerRef.current;
     if (!manager) return '';
@@ -180,12 +183,13 @@ export default function MaterialsPanel({
 
   // Apply: commit pending strokes and, with Fill, colour the selection. Paint
   // never lands any other way, and the sheet stays open.
-  const applyPaint = () => {
+  const applyPaint = (options) => {
     const manager = managerRef.current;
     // Brush and spray strokes apply with nothing selected.
     if (!manager || (!manager.selection.meshId && !manager.hasPendingPaint?.())) return;
     recordApplied(() => manager.commitPendingPaint?.());
-    if (paintTool === 'fill') recordApplied(() => onFill?.());
+    if (paintTool === 'fill' && !options?.skipFill) recordApplied(() => onFill?.());
+    removedRef.current = null;
     lastApplyRef.current = { key: selectionKey(), color: activeColor };
     bumpPaint();
   };
@@ -239,7 +243,9 @@ export default function MaterialsPanel({
     const manager = managerRef.current;
     if (manager) {
       if (tab === 'paint') {
-        if (manager.selection.meshId) applyPaint();
+        const removed = removedRef.current;
+        const justRemoved = !!removed && removed.key === selectionKey() && removed.color === activeColor && removed.tool === paintTool;
+        if (manager.selection.meshId) applyPaint({ skipFill: justRemoved });
         else manager.commitPendingPaint?.();
       } else {
         keepSurfaceChanges();
@@ -351,7 +357,12 @@ export default function MaterialsPanel({
                   // Remove paint wipes the layer, so unapplied strokes go first
                   // and the pending record stays in step with the pixels.
                   managerRef.current?.cancelPendingPaint?.();
-                  if (managerRef.current?.clearPaint()) toast.success('Paint removed');
+                  if (managerRef.current?.clearPaint()) {
+                    removedRef.current = { key: selectionKey(), color: activeColor, tool: paintTool };
+                    lastApplyRef.current = null;
+                    bumpPaint();
+                    toast.success('Paint removed');
+                  }
                   else toast.error('Select an object first');
                 }}
               />
