@@ -4,6 +4,12 @@ import { useTheme } from '@/lib/theme';
 import { transformIsland, islandBounds, repackLayout, DEFAULT_CUT_ANGLE, NO_CUT_ANGLE } from '@/lib/uvUnwrap';
 import InlineSlider from './InlineSlider';
 
+const HINTS = {
+  move: 'Drag a piece. It moves one direction at a time.',
+  rotate: 'Drag around a piece to turn it.',
+  scale: 'Drag away from a piece to grow it, toward it to shrink it.',
+};
+
 function insidePolygon(point, corners) {
   let inside = false;
   for (let i = 0, j = corners.length - 1; i < corners.length; j = i++) {
@@ -14,19 +20,19 @@ function insidePolygon(point, corners) {
 }
 
 // UV panel: the object's flattened pieces laid out on the image square.
-// Tap a piece to pick it; drag to move it; pinch to resize and twist it.
+// Tap a piece to pick it, then Move, Rotate or Scale it: one action at a time,
+// with one finger. Move goes along one direction (across or up and down) per drag.
 // "Cut angle" decides where the surface is opened (red lines on the model).
 export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
   const { uiColor, highlightColor } = useTheme();
   const canvasRef = useRef(null);
   const [data, setData] = useState(() => managerRef.current?.getUnwrapData(meshId) || null);
   const [selected, setSelected] = useState(0);
+  const [mode, setMode] = useState('move');
   const [angle, setAngle] = useState(() => {
     const a = managerRef.current?.getUnwrapData(meshId)?.angle;
     return a == null ? DEFAULT_CUT_ANGLE : a;
   });
-  const dataRef = useRef(data);
-  dataRef.current = data;
   const pointers = useRef(new Map());
   const gesture = useRef(null);
   const frame = useRef(0);
@@ -135,59 +141,48 @@ export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
     }
     return -1;
   };
-  const pair = () => {
-    const [a, b] = [...pointers.current.values()];
-    return { mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], dist: Math.hypot(a[0] - b[0], a[1] - b[1]), turn: Math.atan2(b[1] - a[1], b[0] - a[0]) };
-  };
-
-  // Every move is measured from where the gesture (or the second finger)
-  // started, so fast drags never lose distance.
-  const rebase = (g) => {
-    const base = dataRef.current;
-    const b = islandBounds(base, g.index);
-    g.base = base;
-    g.center = [b.cu, b.cv];
-    g.start = pointers.current.size >= 2 ? pair() : { mid: [...pointers.current.values()][0], dist: 1, turn: 0 };
-  };
   const onPointerDown = (event) => {
-    if (!data) return;
+    if (!data || pointers.current.size > 0) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    pointers.current.set(event.pointerId, uvAt(event));
-    if (pointers.current.size === 1) {
-      const hit = pick(pointers.current.get(event.pointerId));
-      if (hit >= 0) setSelected(hit);
-      gesture.current = { index: hit >= 0 ? hit : selected, recorded: false, moved: false };
-      rebase(gesture.current);
-    } else if (gesture.current) {
-      rebase(gesture.current);
-    }
+    const point = uvAt(event);
+    pointers.current.set(event.pointerId, point);
+    const hit = pick(point);
+    if (hit >= 0) setSelected(hit);
+    const index = hit >= 0 ? hit : selected;
+    const b = islandBounds(data, index);
+    gesture.current = { index, base: data, center: [b.cu, b.cv], start: point, axis: null, recorded: false, moved: false };
   };
+  // One finger, one action. Every change is measured from where the drag began.
   const onPointerMove = (event) => {
     const g = gesture.current;
     if (!g || !pointers.current.has(event.pointerId)) return;
-    pointers.current.set(event.pointerId, uvAt(event));
-    const two = pointers.current.size >= 2;
-    const now = two ? pair() : { mid: [...pointers.current.values()][0], dist: 1, turn: 0 };
-    const du = now.mid[0] - g.start.mid[0], dv = now.mid[1] - g.start.mid[1];
-    if (!g.moved && !two && Math.hypot(du, dv) * size < 4) return;
+    const point = uvAt(event);
+    pointers.current.set(event.pointerId, point);
+    const dx = point[0] - g.start[0], dy = point[1] - g.start[1];
+    if (!g.moved && Math.hypot(dx, dy) * size < 5) return;
     g.moved = true;
-    const ratio = two && g.start.dist > 1e-6 ? Math.min(8, Math.max(0.125, now.dist / g.start.dist)) : 1;
-    const turn = two ? now.turn - g.start.turn : 0;
-    const c = Math.cos(turn), s = Math.sin(turn);
     const [cu, cv] = g.center;
+    let map;
+    if (mode === 'move') {
+      if (!g.axis) g.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+      const mx = g.axis === 'x' ? dx : 0, my = g.axis === 'y' ? dy : 0;
+      map = ([u, v]) => [u + mx, v + my];
+    } else if (mode === 'rotate') {
+      const turn = Math.atan2(point[1] - cv, point[0] - cu) - Math.atan2(g.start[1] - cv, g.start[0] - cu);
+      const c = Math.cos(turn), s = Math.sin(turn);
+      map = ([u, v]) => [cu + c * (u - cu) - s * (v - cv), cv + s * (u - cu) + c * (v - cv)];
+    } else {
+      const from = Math.hypot(g.start[0] - cu, g.start[1] - cv);
+      const ratio = from > 1e-4 ? Math.min(8, Math.max(0.125, Math.hypot(point[0] - cu, point[1] - cv) / from)) : 1;
+      map = ([u, v]) => [cu + (u - cu) * ratio, cv + (v - cv) * ratio];
+    }
     const first = !g.recorded;
     g.recorded = true;
-    commit(transformIsland(g.base, g.index, ([u, v]) => {
-      const x = (u - cu) * ratio, y = (v - cv) * ratio;
-      return [cu + c * x - s * y + du, cv + s * x + c * y + dv];
-    }), first);
+    commit(transformIsland(g.base, g.index, map), first);
   };
   const onPointerUp = (event) => {
     pointers.current.delete(event.pointerId);
-    const g = gesture.current;
-    if (!g) return;
     if (pointers.current.size === 0) gesture.current = null;
-    else rebase(g);
   };
 
   const flip = () => {
@@ -216,7 +211,7 @@ export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
     >
       <div className="modeling-sheet mx-auto w-fit max-w-full rounded-2xl p-2">
         <div style={{ width: size }}>
-          <p className="mb-1 text-[12px] leading-tight" style={{ color: uiColor }}>Drag a piece to move it. Pinch to resize and turn.</p>
+          <p className="mb-1 text-[12px] leading-tight" style={{ color: uiColor }}>{HINTS[mode]}</p>
           <canvas
             ref={canvasRef}
             aria-label="UV layout"
@@ -234,9 +229,11 @@ export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
             />
           </div>
           <div className="mt-1.5 flex items-center gap-1.5">
-            {chip('Unwrap', () => runUnwrap(angle))}
-            {chip('Pack', pack)}
+            {chip('Move', () => setMode('move'), mode === 'move')}
+            {chip('Rotate', () => setMode('rotate'), mode === 'rotate')}
+            {chip('Scale', () => setMode('scale'), mode === 'scale')}
             {chip('Flip', flip)}
+            {chip('Pack', pack)}
             {chip('Done', onClose, true)}
           </div>
         </div>
