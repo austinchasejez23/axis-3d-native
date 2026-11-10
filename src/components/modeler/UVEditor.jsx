@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Minus, Plus, RotateCw } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
 import { transformIsland, islandBounds, repackLayout, DEFAULT_CUT_ANGLE, NO_CUT_ANGLE } from '@/lib/uvUnwrap';
 import InlineSlider from './InlineSlider';
@@ -14,7 +15,8 @@ function insidePolygon(point, corners) {
 }
 
 // UV panel: the object's flattened pieces laid out on the image square.
-// Tap a piece to pick it; drag to move it; pinch to resize and twist it.
+// Tap a piece to pick it; drag to move it; pinch to resize it. The buttons
+// below give exact steps: smaller, larger, turn a quarter, flip.
 // "Cut angle" decides where the surface is opened (red lines on the model).
 export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
   const { uiColor, highlightColor } = useTheme();
@@ -33,7 +35,7 @@ export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
   const pending = useRef(null);
   const timer = useRef(0);
   const undone = useRef(false);
-  const size = useMemo(() => Math.round(Math.min(window.innerWidth - 36, window.innerHeight * 0.3)), []);
+  const size = useMemo(() => Math.round(Math.min(window.innerWidth - 36, window.innerHeight * 0.36)), []);
 
   const recordOnce = () => {
     if (undone.current) return false;
@@ -172,14 +174,12 @@ export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
     if (!g.moved && !two && Math.hypot(du, dv) * size < 4) return;
     g.moved = true;
     const ratio = two && g.start.dist > 1e-6 ? Math.min(8, Math.max(0.125, now.dist / g.start.dist)) : 1;
-    const turn = two ? -(now.turn - g.start.turn) : 0;
-    const c = Math.cos(turn), s = Math.sin(turn);
     const [cu, cv] = g.center;
     const first = !g.recorded;
     g.recorded = true;
     commit(transformIsland(g.base, g.index, ([u, v]) => {
       const x = (u - cu) * ratio, y = (v - cv) * ratio;
-      return [cu + c * x - s * y + du, cv + s * x + c * y + dv];
+      return [cu + x + du, cv + y + dv];
     }), first);
   };
   const onPointerUp = (event) => {
@@ -190,16 +190,20 @@ export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
     else rebase(g);
   };
 
-  const flip = () => {
+  const apply = (fn) => {
     if (!data) return;
     const b = islandBounds(data, selected);
-    commit(transformIsland(data, selected, ([u, v]) => [2 * b.cu - u, v]), true);
+    commit(transformIsland(data, selected, (uv) => fn(uv, b)), true);
   };
+  const smaller = () => apply(([u, v], b) => [b.cu + (u - b.cu) * 0.85, b.cv + (v - b.cv) * 0.85]);
+  const larger = () => apply(([u, v], b) => [b.cu + (u - b.cu) * 1.15, b.cv + (v - b.cv) * 1.15]);
+  const turn = () => apply(([u, v], b) => [b.cu + (v - b.cv), b.cv - (u - b.cu)]);
+  const flip = () => apply(([u, v], b) => [2 * b.cu - u, v]);
   const pack = () => { if (data) commit(repackLayout(data), true); };
 
-  const chip = (label, onClick, active = false) => (
+  const chip = (label, onClick, active = false, name = undefined) => (
     <button
-      key={label} type="button" onClick={onClick}
+      key={name || label} type="button" aria-label={name} onClick={onClick}
       className="modeling-value flex h-9 min-w-0 flex-1 items-center justify-center rounded-lg px-1 text-[13px] font-medium active:scale-95"
       style={{ color: active ? highlightColor : uiColor, borderColor: active ? highlightColor : undefined }}
     >
@@ -216,7 +220,7 @@ export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
     >
       <div className="modeling-sheet mx-auto w-fit max-w-full rounded-2xl p-2">
         <div style={{ width: size }}>
-          <p className="mb-1 text-[12px] leading-tight" style={{ color: uiColor }}>Drag a piece to move it. Pinch to resize and turn.</p>
+          <p className="mb-1 text-[12px] leading-tight" style={{ color: uiColor }}>Drag a piece to move it. Pinch to resize it.</p>
           <canvas
             ref={canvasRef}
             aria-label="UV layout"
@@ -234,9 +238,11 @@ export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
             />
           </div>
           <div className="mt-1.5 flex items-center gap-1.5">
-            {chip('Unwrap', () => runUnwrap(angle))}
-            {chip('Pack', pack)}
+            {chip(<Minus className="h-5 w-5" strokeWidth={2} />, smaller, false, 'Smaller')}
+            {chip(<Plus className="h-5 w-5" strokeWidth={2} />, larger, false, 'Larger')}
+            {chip(<RotateCw className="h-5 w-5" strokeWidth={2} />, turn, false, 'Turn')}
             {chip('Flip', flip)}
+            {chip('Pack', pack)}
             {chip('Done', onClose, true)}
           </div>
         </div>
