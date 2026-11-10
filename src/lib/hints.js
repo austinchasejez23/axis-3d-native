@@ -1,8 +1,8 @@
 // Getting-started hints: small talk boxes that point at a control. Each one
-// keeps coming back (a few times at most) until the user has used what it
-// points at, then never again. Settings → Hints turns them all off.
+// shows once, the first time it applies, and not at all if the user has
+// already used what it points at. Settings → Hints turns them all off.
 const KEY = 'axis3d.hints.v1';
-const MAX_SHOWS = 3;
+const MAX_SHOWS = 1;
 
 export const HINTS = {
   modeTools: 'Tap again for tools',
@@ -13,7 +13,7 @@ export const HINTS = {
   library: 'Tap to add a shape',
   twistPinch: 'Twist two fingers to rotate, pinch to scale',
   multiSelect: 'Touch and hold to select more',
-  menu: 'Grid, wireframe and colors are in Menu > Viewport',
+  menu: 'Grid, wireframe and colors are in Viewport',
 };
 
 function read() {
@@ -31,8 +31,7 @@ const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } c
 // Still worth showing: not used yet and not shown too often.
 export const hintPending = (id) => !state.done[id] && (state.shows[id] || 0) < MAX_SHOWS;
 export const hintDone = (id) => !!state.done[id];
-// How many times a hint has shown, so hints take turns instead of waiting on
-// one another.
+// How many times a hint has shown.
 export const hintShows = (id) => state.shows[id] || 0;
 
 export function countHintShown(id) {

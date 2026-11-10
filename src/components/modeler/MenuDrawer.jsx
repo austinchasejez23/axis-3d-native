@@ -14,9 +14,10 @@ import { listProjects, projectNameTaken } from '@/lib/storage';
 
 // Unified slim row: icon + label, no fill, tight padding. Width is driven by
 // content (no fixed width), so the drawer is only as wide as its text.
-function DrawerRow({ icon: Icon, label, color, onClick, chevron = false, compactRight = false }) {
+function DrawerRow({ icon: Icon, label, color, onClick, chevron = false, compactRight = false, hint = undefined }) {
   return (
     <button
+      data-hint={hint}
       onClick={onClick}
       className={`w-full h-12 flex items-center gap-3 pl-3 ${compactRight ? 'pr-1.5' : 'pr-3'} active:scale-95 transition-transform`}
       style={{ color }}
@@ -158,7 +159,7 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
             <div className="h-px mx-2" style={{ background: borderCol }} />
             <DrawerRow icon={FileText} label="File" color={uiColor} onClick={() => push('file')} chevron />
             <div className="h-px mx-2" style={{ background: borderCol }} />
-            <DrawerRow icon={Monitor} label="Viewport" color={uiColor} onClick={() => push('viewport')} chevron />
+            <DrawerRow icon={Monitor} label="Viewport" color={uiColor} onClick={() => push('viewport')} chevron hint="menu-viewport" />
             <DrawerRow icon={Sun} label="Lighting" color={uiColor} onClick={() => { closeAll(); onLighting?.(); }} />
             <DrawerRow icon={BookOpen} label="Guides" color={uiColor} onClick={() => onGuide?.()} />
             <div className="h-px mx-2" style={{ background: borderCol }} />
