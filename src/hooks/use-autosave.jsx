@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import { saveProject, listProjects } from '@/lib/storage';
+import { saveProject, listProjects, uniqueProjectName } from '@/lib/storage';
 import { createAutosaveWriteQueue } from '@/lib/autosaveWriteQueue';
 import { isAccountDeletionActive } from '@/lib/accountDeletionState';
 import { theme } from '@/lib/theme';
@@ -57,7 +57,7 @@ export default function useAutoSave(managerRef, projectName, onSaved, { isPro = 
       if (isAccountDeletionActive()) return;
       const mgr = managerRef.current;
       if (!mgr || mgr.meshes.length === 0) return;
-      mgr.projectName = projectName || 'Untitled';
+      mgr.projectName = projectName || uniqueProjectName('Untitled', mgr.projectId);
       const signature = sceneSignature(mgr);
 
       // Opening or creating a project establishes its untouched baseline. It

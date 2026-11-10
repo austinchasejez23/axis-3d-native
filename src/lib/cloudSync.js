@@ -1,4 +1,4 @@
-import { listProjects, saveProject, generateProjectId } from './storage';
+import { listProjects, saveProject, generateProjectId, uniqueProjectName } from './storage';
 import { getMeshes } from './projectStore';
 import { cloudRequest, getCloudIdentity } from './supabaseTest';
 import { BACKUP_MAX_BYTES, serializeBackup, deserializeBackup } from './backupEnvelope';
@@ -74,7 +74,8 @@ export async function restoreCloudBackup(record, maxProjects) {
   const name = String(project.name || record.name || 'Restored model').slice(0, 255);
   const scene = project.scene;
   await saveProject({
-    id: generateProjectId(), name: name + ' (restored)',
+    // A restored project never takes a name another local project already has.
+    id: generateProjectId(), name: uniqueProjectName(name + ' (restored)'),
     meshes: scene.meshes, lights: Array.isArray(scene.lights) ? scene.lights : [],
     settings: scene.settings || null,
     thumbnail: typeof project.thumbnail === 'string' && project.thumbnail.length < 300000 && /^data:image\/(?:png|jpeg|webp);base64,/i.test(project.thumbnail) ? project.thumbnail : null,

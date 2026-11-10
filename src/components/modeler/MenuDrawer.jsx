@@ -10,7 +10,7 @@ import SnapCascade from './SnapCascade';
 import GesturePanel from './GesturePanel';
 import MenuScreenHeader from './MenuScreenHeader';
 import { theme } from '@/lib/theme';
-import { listProjects } from '@/lib/storage';
+import { listProjects, projectNameTaken } from '@/lib/storage';
 
 // Unified slim row: icon + label, no fill, tight padding. Width is driven by
 // content (no fixed width), so the drawer is only as wide as its text.
@@ -58,6 +58,10 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
   const cascadeLayoutRef = useRef(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [name, setName] = useState(projectName);
+  // A name another project already has is never applied; the field says why
+  // and goes back to the current name when it loses focus.
+  const [nameTaken, setNameTaken] = useState(false);
+  useEffect(() => { setName(projectName); setNameTaken(false); }, [projectName]);
   const fileInputRef = useRef(null);
   // Reopening the menu normally starts at the main list, never back inside
   // whatever screen (e.g. Lighting) was open last time it closed — unless
@@ -169,11 +173,19 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
           <div className="pb-1">
             <input
               value={name}
-              onChange={(e) => { setName(e.target.value); onRename(e.target.value); }}
+              onChange={(e) => {
+                const next = e.target.value;
+                setName(next);
+                const taken = !!next.trim() && projectNameTaken(next, currentProjectId);
+                setNameTaken(taken);
+                if (!taken) onRename(next);
+              }}
+              onBlur={() => { if (nameTaken) { setName(projectName); setNameTaken(false); } }}
               placeholder="Project name"
               className="block w-24 h-9 mx-2.5 mt-2 px-2.5 rounded-md bg-white/10 text-white text-[13px] outline-none"
-              style={{ caretColor: highlightColor }}
+              style={{ caretColor: highlightColor, boxShadow: nameTaken ? 'inset 0 0 0 1px #f87171' : undefined }}
             />
+            {nameTaken && <p className="mx-2.5 mt-1 text-[11px] leading-tight text-red-400 whitespace-nowrap">Name already used</p>}
             <DrawerRow compactRight icon={FilePlus} label="New" color={uiColor} onClick={onNewProject} />
             <DrawerRow compactRight icon={Save} label="Save" color={uiColor} onClick={onSaveProject} />
             <div className="relative w-full h-11" onClick={() => { if (!isPro) onProLock?.('Model import requires AXIS 3D Pro.'); }}>

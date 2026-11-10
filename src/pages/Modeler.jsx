@@ -47,7 +47,7 @@ import SelectionPatternPanel from '@/components/modeler/SelectionPatternPanel';
 import { EditableMesh } from '@/lib/EditableMesh';
 import { getFaceBridgeGroups } from '@/lib/bridgeTools';
 import { exportOBJ, exportFBX, downloadFile } from '@/lib/exporters';
-import { listProjects, saveProject, loadProject, generateProjectId } from '@/lib/storage';
+import { listProjects, saveProject, loadProject, generateProjectId, projectNameTaken, uniqueProjectName } from '@/lib/storage';
 import { beginBevelPreview, updateBevelPreview, commitBevelPreview, cancelBevelPreview } from '@/lib/meshTools';
 import { TOOLS } from '@/lib/tools';
 import { getToolRequirementNotice } from '@/lib/toolRequirements';
@@ -318,7 +318,8 @@ export default function Modeler() {
       resetRenderBoostAuto();
       if (mgr.grid) mgr.grid.visible = theme.gridVisible;
       mgr.projectId = generateProjectId();
-      mgr.projectName = 'Untitled';
+      mgr.projectName = uniqueProjectName('Untitled', mgr.projectId);
+      setProjectName(mgr.projectName);
       mgr.addPrimitive('cube', 12);
       mgr._newProjectStartingView = true;
       mgr.frameScene(7.8);
@@ -931,8 +932,8 @@ export default function Modeler() {
       resetRenderBoostAuto();
       if (managerRef.current.grid) managerRef.current.grid.visible = theme.gridVisible;
       managerRef.current.projectId = generateProjectId();
-      managerRef.current.projectName = 'Untitled';
-      setProjectName('Untitled');
+      managerRef.current.projectName = uniqueProjectName('Untitled', managerRef.current.projectId);
+      setProjectName(managerRef.current.projectName);
       setMenuOpen(false);
     }
   }, [isPro, openUpgrade]);
@@ -942,6 +943,10 @@ export default function Modeler() {
     const exists = listProjects().some((project) => project.id === managerRef.current.projectId);
     if (!isPro && !exists && listProjects().length >= FREE_PROJECT_LIMIT) {
       openUpgrade(`Free accounts can keep up to ${FREE_PROJECT_LIMIT} projects.`);
+      return;
+    }
+    if (projectNameTaken(projectName, managerRef.current.projectId)) {
+      toast.error(`A project named "${projectName.trim()}" already exists. Rename this one in Menu > File to save it.`);
       return;
     }
     managerRef.current.projectName = projectName;

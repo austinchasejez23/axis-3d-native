@@ -28,6 +28,21 @@ function writeIndex(entries, keepId) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(lean.map((p) => ({ ...p, thumbnail: null }))));
 }
 
+// Project names are unique (case and surrounding spaces ignored). `exceptId`
+// is the project being saved or renamed, which may keep its own name.
+const sameName = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
+export function projectNameTaken(name, exceptId = null) {
+  return listProjects().some((project) => project.id !== exceptId && sameName(project.name, name));
+}
+// `base`, or `base 2`, `base 3`… — the first name no other project has.
+export function uniqueProjectName(base, exceptId = null) {
+  const root = (base || 'Untitled').trim() || 'Untitled';
+  if (!projectNameTaken(root, exceptId)) return root;
+  let n = 2;
+  while (projectNameTaken(`${root} ${n}`, exceptId)) n += 1;
+  return `${root} ${n}`;
+}
+
 export function saveProject(project) {
   return trackAccountWrite(() => persistProject(project));
 }
@@ -111,7 +126,7 @@ export async function duplicateProject(id) {
     ...original,
     meshes: undefined,
     id: generateProjectId(),
-    name: `${original.name} copy`,
+    name: uniqueProjectName(`${original.name} copy`),
     locked: false,
     updatedAt: Date.now(),
   };
