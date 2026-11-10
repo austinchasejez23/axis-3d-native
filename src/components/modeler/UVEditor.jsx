@@ -25,13 +25,15 @@ export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
     const a = managerRef.current?.getUnwrapData(meshId)?.angle;
     return a == null ? DEFAULT_CUT_ANGLE : a;
   });
+  const dataRef = useRef(data);
+  dataRef.current = data;
   const pointers = useRef(new Map());
   const gesture = useRef(null);
   const frame = useRef(0);
   const pending = useRef(null);
   const timer = useRef(0);
   const undone = useRef(false);
-  const size = useMemo(() => Math.round(Math.min(window.innerWidth - 36, window.innerHeight * 0.34)), []);
+  const size = useMemo(() => Math.round(Math.min(window.innerWidth - 36, window.innerHeight * 0.3)), []);
 
   const recordOnce = () => {
     if (undone.current) return false;
@@ -138,50 +140,54 @@ export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
     return { mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], dist: Math.hypot(a[0] - b[0], a[1] - b[1]), turn: Math.atan2(b[1] - a[1], b[0] - a[0]) };
   };
 
+  // Every move is measured from where the gesture (or the second finger)
+  // started, so fast drags never lose distance.
+  const rebase = (g) => {
+    const base = dataRef.current;
+    const b = islandBounds(base, g.index);
+    g.base = base;
+    g.center = [b.cu, b.cv];
+    g.start = pointers.current.size >= 2 ? pair() : { mid: [...pointers.current.values()][0], dist: 1, turn: 0 };
+  };
   const onPointerDown = (event) => {
     if (!data) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    const point = uvAt(event);
-    pointers.current.set(event.pointerId, point);
+    pointers.current.set(event.pointerId, uvAt(event));
     if (pointers.current.size === 1) {
-      const hit = pick(point);
+      const hit = pick(pointers.current.get(event.pointerId));
       if (hit >= 0) setSelected(hit);
-      gesture.current = { index: hit >= 0 ? hit : selected, moved: false, recorded: false, picked: hit >= 0, last: null };
-    } else if (pointers.current.size === 2 && gesture.current) {
-      gesture.current.last = pair();
+      gesture.current = { index: hit >= 0 ? hit : selected, recorded: false, moved: false };
+      rebase(gesture.current);
+    } else if (gesture.current) {
+      rebase(gesture.current);
     }
   };
   const onPointerMove = (event) => {
     const g = gesture.current;
-    if (!g || !g.picked || !pointers.current.has(event.pointerId)) return;
-    const previous = pointers.current.get(event.pointerId);
-    const point = uvAt(event);
-    pointers.current.set(event.pointerId, point);
-    const start = () => { const first = !g.recorded; g.recorded = true; g.moved = true; return first; };
-    if (pointers.current.size >= 2 && g.last) {
-      const now = pair();
-      const ratio = g.last.dist > 1e-6 ? now.dist / g.last.dist : 1;
-      const turn = -(now.turn - g.last.turn);
-      const du = now.mid[0] - g.last.mid[0], dv = now.mid[1] - g.last.mid[1];
-      const b = islandBounds(data, g.index);
-      const c = Math.cos(turn), s = Math.sin(turn);
-      g.last = now;
-      commit(transformIsland(data, g.index, ([u, v]) => {
-        const x = (u - b.cu) * ratio, y = (v - b.cv) * ratio;
-        return [b.cu + c * x - s * y + du, b.cv + s * x + c * y + dv];
-      }), start());
-      return;
-    }
-    if (pointers.current.size !== 1) return;
-    const du = point[0] - previous[0], dv = point[1] - previous[1];
-    if (!g.moved && Math.hypot(du, dv) * size < 3) { pointers.current.set(event.pointerId, previous); return; }
-    commit(transformIsland(data, g.index, ([u, v]) => [u + du, v + dv]), start());
+    if (!g || !pointers.current.has(event.pointerId)) return;
+    pointers.current.set(event.pointerId, uvAt(event));
+    const two = pointers.current.size >= 2;
+    const now = two ? pair() : { mid: [...pointers.current.values()][0], dist: 1, turn: 0 };
+    const du = now.mid[0] - g.start.mid[0], dv = now.mid[1] - g.start.mid[1];
+    if (!g.moved && !two && Math.hypot(du, dv) * size < 4) return;
+    g.moved = true;
+    const ratio = two && g.start.dist > 1e-6 ? Math.min(8, Math.max(0.125, now.dist / g.start.dist)) : 1;
+    const turn = two ? -(now.turn - g.start.turn) : 0;
+    const c = Math.cos(turn), s = Math.sin(turn);
+    const [cu, cv] = g.center;
+    const first = !g.recorded;
+    g.recorded = true;
+    commit(transformIsland(g.base, g.index, ([u, v]) => {
+      const x = (u - cu) * ratio, y = (v - cv) * ratio;
+      return [cu + c * x - s * y + du, cv + s * x + c * y + dv];
+    }), first);
   };
   const onPointerUp = (event) => {
     pointers.current.delete(event.pointerId);
     const g = gesture.current;
-    if (g && pointers.current.size === 1) g.last = null;
+    if (!g) return;
     if (pointers.current.size === 0) gesture.current = null;
+    else rebase(g);
   };
 
   const flip = () => {
@@ -224,7 +230,7 @@ export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
           <div className="mt-1.5">
             <InlineSlider
               label="Cut angle" value={angle} display={angle >= NO_CUT_ANGLE ? 'Off' : `${angle}°`}
-              min={10} max={NO_CUT_ANGLE} step={1} onChange={changeAngle}
+              min={10} max={NO_CUT_ANGLE} step={1} grow onChange={changeAngle}
             />
           </div>
           <div className="mt-1.5 flex items-center gap-1.5">
