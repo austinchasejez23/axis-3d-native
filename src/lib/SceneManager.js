@@ -453,6 +453,7 @@ export class SceneManager {
     if (this.triangleLimit && projectedTriangles > this.triangleLimit) { this.cb.onTriangleLimit?.(); return null; }
     this.meshes.push(editableMesh);
     this.buildThreeMesh(editableMesh);
+    this.restoreMeshTexture?.(editableMesh);
   }
 
   buildThreeMesh(mesh) {

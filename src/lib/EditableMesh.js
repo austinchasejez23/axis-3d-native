@@ -44,6 +44,8 @@ export class EditableMesh {
     this.material = null;
     this.mapTexture = null;     // runtime THREE.Texture (session only)
     this.textureUrl = null;     // runtime image URL (session only)
+    this.textureData = null;    // saved copy of an uploaded image (data URL, see getTextureData)
+    this.textureSrc = null;     // saved address of a library texture
     this.referenceUrl = null;   // persistent, uploaded image for a reference plane
     this.textureTransform = { scale: 0.25, rotation: 0, mirror: false };
     this.uvMode = 'box';        // texture projection: box | planar | cylindrical | spherical | unwrap
@@ -81,6 +83,26 @@ export class EditableMesh {
     this._vertexMapCount = -1;
   }
 
+  // The texture image as a small saved copy (longest side 1024, JPEG), made once
+  // and kept, so an uploaded texture is stored with the project.
+  getTextureData() {
+    if (!this.mapTexture) return null;
+    if (this.textureData) return this.textureData;
+    const image = this.mapTexture.image;
+    const w = image?.naturalWidth || image?.width;
+    const h = image?.naturalHeight || image?.height;
+    if (!w || !h || typeof document === 'undefined') return null;
+    try {
+      const k = Math.min(1, 1024 / Math.max(w, h));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(w * k));
+      canvas.height = Math.max(1, Math.round(h * k));
+      canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+      this.textureData = canvas.toDataURL('image/jpeg', 0.88);
+    } catch { this.textureData = null; }
+    return this.textureData;
+  }
+
   resetSurfaceAppearance() {
     if (this.mapTexture) this.mapTexture.dispose();
     this.color = 0xaeb4bc;
@@ -90,6 +112,8 @@ export class EditableMesh {
     this.material = null;
     this.mapTexture = null;
     this.textureUrl = null;
+    this.textureData = null;
+    this.textureSrc = null;
     this.textureTransform = { scale: 0.25, rotation: 0, mirror: false };
     this.uvMode = 'box';
     this.uvSeams = [];
@@ -852,6 +876,8 @@ export class EditableMesh {
     m.material = this.material ? { ...this.material } : null;
     m.mapTexture = this.mapTexture || null;
     m.textureUrl = this.textureUrl || null;
+    m.textureData = this.textureData || null;
+    m.textureSrc = this.textureSrc || null;
     m.referenceUrl = this.referenceUrl || null;
     m.textureTransform = { ...this.textureTransform };
     m.uvMode = this.uvMode || 'box';
@@ -900,6 +926,9 @@ export class EditableMesh {
       clearCoatIntensity: this.clearCoatIntensity,
       material: this.material ? { ...this.material } : null,
       referenceUrl: this.referenceUrl || null,
+      textureData: this.textureSrc ? null : this.getTextureData(),
+      textureSrc: this.textureSrc || null,
+      textureTransform: { ...this.textureTransform },
       uvMode: this.uvMode || 'box',
       uvSeams: (this.uvSeams || []).map((e) => ({ ...e })),
       uvUnwrap: this.uvUnwrap || null,
@@ -948,6 +977,9 @@ export class EditableMesh {
     m.clearCoatIntensity = data.clearCoatIntensity ?? 0.5;
     m.material = data.material || null;
     m.referenceUrl = data.referenceUrl || null;
+    m.textureData = data.textureData || null;
+    m.textureSrc = data.textureSrc || null;
+    if (data.textureTransform) m.textureTransform = { scale: 0.25, rotation: 0, mirror: false, ...data.textureTransform };
     m.uvMode = data.uvMode || 'box';
     m.uvSeams = (data.uvSeams || []).map((e) => ({ ...e }));
     m.uvUnwrap = data.uvUnwrap || null;

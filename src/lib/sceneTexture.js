@@ -4,8 +4,9 @@ import { computeUnwrap, unwrapIsValid } from './uvUnwrap';
 // Texture application for selected objects. A local image file is loaded into
 // a RepeatWrapping THREE.Texture and assigned to the mesh's material map; the
 // mesh's box-projected UVs (see EditableMesh.toBufferGeometry) make a seamless
-// image wrap across the whole surface. Textures are session-only (not saved
-// with the project) to avoid bloating local storage with base64 image data.
+// image wrap across the whole surface. The image is saved with the project
+// (a library texture by its address, an uploaded one as a small JPEG copy) and
+// put back when the project opens.
 
 export function applySceneTexture(SceneManagerClass) {
   SceneManagerClass.prototype.applyTextureToSelection = function (file) {
@@ -43,6 +44,8 @@ export function applySceneTexture(SceneManagerClass) {
           if (mesh.mapTexture) mesh.mapTexture.dispose();
           mesh.mapTexture = copy;
           mesh.textureUrl = objectUrl ? url : null;
+          mesh.textureData = null;
+          mesh.textureSrc = objectUrl ? null : url;
           this.updateObjectMaterial(id);
           this.rebuildThreeMesh(id);
         }
@@ -54,6 +57,32 @@ export function applySceneTexture(SceneManagerClass) {
       }
     );
     return true;
+  };
+
+  // A mesh that came from a saved project has its image stored as data or an
+  // address; load it back into a texture with the saved transform.
+  SceneManagerClass.prototype.restoreMeshTexture = function (mesh) {
+    const source = mesh.textureData || mesh.textureSrc;
+    if (mesh.mapTexture || !source) return;
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
+    loader.load(source, (tex) => {
+      if (mesh.mapTexture || this.getMesh(mesh.id) !== mesh) return;
+      const t = mesh.textureTransform || { scale: 0.25, rotation: 0, mirror: false };
+      const wrap = t.mirror ? 1002 : THREE.RepeatWrapping;
+      tex.wrapS = wrap;
+      tex.wrapT = wrap;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      tex.center.set(0.5, 0.5);
+      tex.rotation = t.rotation || 0;
+      tex.repeat.set(t.scale || 1, t.scale || 1);
+      tex.needsUpdate = true;
+      mesh.mapTexture = tex;
+      this.updateObjectMaterial(mesh.id);
+      this.rebuildThreeMesh(mesh.id);
+      this.updateHighlights();
+    });
   };
 
   // UV tool: switch how UVs are projected onto the selected object(s) and
@@ -189,6 +218,8 @@ export function applySceneTexture(SceneManagerClass) {
       if (!mesh) continue;
       if (mesh.mapTexture) { mesh.mapTexture.dispose(); mesh.mapTexture = null; }
       if (mesh.textureUrl) { URL.revokeObjectURL(mesh.textureUrl); mesh.textureUrl = null; }
+      mesh.textureData = null;
+      mesh.textureSrc = null;
       this.updateObjectMaterial(id);
       this.rebuildThreeMesh(id);
     }
