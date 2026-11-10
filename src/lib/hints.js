@@ -8,6 +8,12 @@ export const HINTS = {
   modeTools: 'Tap again for tools',
   expandTools: 'Tap to expand tools',
   transform: 'Tap to edit transform values',
+  arrangeTools: 'Touch and hold a tool to move or hide it',
+  doubleTap: 'Double-tap for settings',
+  library: 'Tap to add a shape',
+  twistPinch: 'Twist two fingers to rotate, pinch to scale',
+  multiSelect: 'Touch and hold to select more',
+  menu: 'Grid, wireframe and colors are in Menu > Viewport',
 };
 
 function read() {

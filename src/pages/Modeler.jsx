@@ -1271,11 +1271,17 @@ export default function Modeler() {
       </>)}
 
       <HintsController
+        managerRef={managerRef}
         selectionMode={selectionMode}
         modeToolsOpen={modeToolsOpen}
         toolGridOpen={modeToolsOpen || toolsOpen}
         idle={!anyPanelOpen}
         hasSelection={!!selectedMeshId}
+        action={hud.action}
+        multiSelect={multiSelect}
+        settingsOpen={snapPanelOpen || precisionPanelOpen || freeTransformPanelOpen}
+        libraryOpen={libraryOpen}
+        menuOpen={menuOpen}
       />
 
       {modeToolsOpen && (

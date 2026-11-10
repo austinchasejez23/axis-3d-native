@@ -9,7 +9,8 @@ const EDGE = 6;
 const POINTER = 10;
 
 // A small talk box whose point touches the control it is about (`target` is a
-// CSS selector). It fades in, pulses slightly and fades away after about 8
+// CSS selector, or a function returning a screen rectangle, such as the
+// selection's place on the model). It fades in, pulses slightly and fades away after about 8
 // seconds. Tapping it or the control closes it at once.
 export default function HintBubble({ target, text, side = 'top', onClose }) {
   const { highlightColor } = useTheme();
@@ -23,6 +24,11 @@ export default function HintBubble({ target, text, side = 'top', onClose }) {
     const fade = setTimeout(() => setLeaving(true), SHOW_MS - FADE_MS);
     const done = setTimeout(() => closeRef.current?.('timeout'), SHOW_MS);
     const onPointer = (event) => {
+      if (typeof target === 'function') {
+        const r = target();
+        if (r && event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom) closeRef.current?.('target');
+        return;
+      }
       const node = document.querySelector(target);
       if (node && node.contains(event.target)) closeRef.current?.('target');
     };
@@ -35,9 +41,8 @@ export default function HintBubble({ target, text, side = 'top', onClose }) {
   useLayoutEffect(() => {
     let frame = 0, missing = 0;
     const tick = () => {
-      const node = document.querySelector(target);
       const box = boxRef.current;
-      const rect = node?.getBoundingClientRect();
+      const rect = typeof target === 'function' ? target() : document.querySelector(target)?.getBoundingClientRect();
       if (!rect || !rect.width || !rect.height) {
         missing += 1;
         if (missing > 3) { closeRef.current?.('gone'); return; }
