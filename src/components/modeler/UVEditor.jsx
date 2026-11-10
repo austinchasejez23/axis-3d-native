@@ -4,12 +4,6 @@ import { useTheme } from '@/lib/theme';
 import { transformIsland, islandBounds, repackLayout, DEFAULT_CUT_ANGLE, NO_CUT_ANGLE } from '@/lib/uvUnwrap';
 import InlineSlider from './InlineSlider';
 
-const HINTS = {
-  move: 'Drag a piece. It moves one direction at a time.',
-  rotate: 'Drag around a piece to turn it.',
-  scale: 'Drag away from a piece to grow it, toward it to shrink it.',
-};
-
 function insidePolygon(point, corners) {
   let inside = false;
   for (let i = 0, j = corners.length - 1; i < corners.length; j = i++) {
@@ -20,19 +14,21 @@ function insidePolygon(point, corners) {
 }
 
 // UV panel: the object's flattened pieces laid out on the image square.
-// Tap a piece to pick it, then Move, Rotate or Scale it: one action at a time,
-// with one finger. Move goes along one direction (across or up and down) per drag.
+// Same gestures as the model: one finger drags a piece along one direction
+// (across or up and down); two fingers twist to turn it or pinch to resize it.
+// Each gesture locks to the first action it starts and does only that.
 // "Cut angle" decides where the surface is opened (red lines on the model).
 export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
   const { uiColor, highlightColor } = useTheme();
   const canvasRef = useRef(null);
   const [data, setData] = useState(() => managerRef.current?.getUnwrapData(meshId) || null);
   const [selected, setSelected] = useState(0);
-  const [mode, setMode] = useState('move');
   const [angle, setAngle] = useState(() => {
     const a = managerRef.current?.getUnwrapData(meshId)?.angle;
     return a == null ? DEFAULT_CUT_ANGLE : a;
   });
+  const dataRef = useRef(data);
+  dataRef.current = data;
   const pointers = useRef(new Map());
   const gesture = useRef(null);
   const frame = useRef(0);
@@ -141,40 +137,68 @@ export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
     }
     return -1;
   };
-  const onPointerDown = (event) => {
-    if (!data || pointers.current.size > 0) return;
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    const point = uvAt(event);
-    pointers.current.set(event.pointerId, point);
-    const hit = pick(point);
-    if (hit >= 0) setSelected(hit);
-    const index = hit >= 0 ? hit : selected;
-    const b = islandBounds(data, index);
-    gesture.current = { index, base: data, center: [b.cu, b.cv], start: point, axis: null, recorded: false, moved: false };
+  const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  const pair = () => {
+    const [a, b] = [...pointers.current.values()];
+    return { dist: Math.hypot(a[0] - b[0], a[1] - b[1]), turn: Math.atan2(b[1] - a[1], b[0] - a[0]) };
   };
-  // One finger, one action. Every change is measured from where the drag began.
+  // Every change is measured from where the gesture began.
+  const begin = (g) => {
+    const b = islandBounds(dataRef.current, g.index);
+    g.base = dataRef.current;
+    g.center = [b.cu, b.cv];
+    g.start = pointers.current.size >= 2 ? pair() : pointers.current.get(g.finger);
+  };
+  const onPointerDown = (event) => {
+    if (!data) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    pointers.current.set(event.pointerId, uvAt(event));
+    if (pointers.current.size === 1) {
+      const hit = pick(pointers.current.get(event.pointerId));
+      if (hit >= 0) setSelected(hit);
+      gesture.current = { index: hit >= 0 ? hit : selected, finger: event.pointerId, action: null, recorded: false };
+      begin(gesture.current);
+    } else if (pointers.current.size === 2 && gesture.current && !gesture.current.action) {
+      // A second finger before a drag has started: a two-finger gesture.
+      gesture.current.action = 'pending';
+      begin(gesture.current);
+    }
+  };
   const onPointerMove = (event) => {
     const g = gesture.current;
     if (!g || !pointers.current.has(event.pointerId)) return;
-    const point = uvAt(event);
-    pointers.current.set(event.pointerId, point);
-    const dx = point[0] - g.start[0], dy = point[1] - g.start[1];
-    if (!g.moved && Math.hypot(dx, dy) * size < 5) return;
-    g.moved = true;
+    pointers.current.set(event.pointerId, uvAt(event));
     const [cu, cv] = g.center;
     let map;
-    if (mode === 'move') {
-      if (!g.axis) g.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
-      const mx = g.axis === 'x' ? dx : 0, my = g.axis === 'y' ? dy : 0;
-      map = ([u, v]) => [u + mx, v + my];
-    } else if (mode === 'rotate') {
-      const turn = Math.atan2(point[1] - cv, point[0] - cu) - Math.atan2(g.start[1] - cv, g.start[0] - cu);
-      const c = Math.cos(turn), s = Math.sin(turn);
-      map = ([u, v]) => [cu + c * (u - cu) - s * (v - cv), cv + s * (u - cu) + c * (v - cv)];
+    if (g.action === null || g.action === 'move') {
+      // One finger: move along one direction only.
+      if (event.pointerId !== g.finger) return;
+      const p = pointers.current.get(g.finger);
+      const dx = p[0] - g.start[0], dy = p[1] - g.start[1];
+      if (!g.action) {
+        if (Math.hypot(dx, dy) * size < 5) return;
+        g.action = 'move';
+        g.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+      }
+      map = g.axis === 'x' ? ([u, v]) => [u + dx, v] : ([u, v]) => [u, v + dy];
     } else {
-      const from = Math.hypot(g.start[0] - cu, g.start[1] - cv);
-      const ratio = from > 1e-4 ? Math.min(8, Math.max(0.125, Math.hypot(point[0] - cu, point[1] - cv) / from)) : 1;
-      map = ([u, v]) => [cu + (u - cu) * ratio, cv + (v - cv) * ratio];
+      if (pointers.current.size < 2) return;
+      const now = pair();
+      const turn = wrap(now.turn - g.start.turn);
+      if (g.action === 'pending') {
+        // Twist or pinch, whichever starts first, and only that.
+        const pinchPx = Math.abs(now.dist - g.start.dist) * size;
+        const twistPx = Math.abs(turn) * (g.start.dist / 2) * size;
+        if (Math.max(pinchPx, twistPx) < 8) return;
+        g.action = twistPx > pinchPx ? 'rotate' : 'scale';
+      }
+      if (g.action === 'rotate') {
+        const c = Math.cos(turn), s = Math.sin(turn);
+        map = ([u, v]) => [cu + c * (u - cu) - s * (v - cv), cv + s * (u - cu) + c * (v - cv)];
+      } else {
+        const ratio = g.start.dist > 1e-6 ? Math.min(8, Math.max(0.125, now.dist / g.start.dist)) : 1;
+        map = ([u, v]) => [cu + (u - cu) * ratio, cv + (v - cv) * ratio];
+      }
     }
     const first = !g.recorded;
     g.recorded = true;
@@ -182,7 +206,10 @@ export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
   };
   const onPointerUp = (event) => {
     pointers.current.delete(event.pointerId);
-    if (pointers.current.size === 0) gesture.current = null;
+    const g = gesture.current;
+    if (pointers.current.size === 0) { gesture.current = null; return; }
+    // Lifting a finger ends the gesture; the other finger does nothing until all lift.
+    if (g && (g.action !== null || event.pointerId === g.finger)) gesture.current = null;
   };
 
   const flip = () => {
@@ -211,7 +238,7 @@ export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
     >
       <div className="modeling-sheet mx-auto w-fit max-w-full rounded-2xl p-2">
         <div style={{ width: size }}>
-          <p className="mb-1 text-[12px] leading-tight" style={{ color: uiColor }}>{HINTS[mode]}</p>
+          <p className="mb-1 text-[12px] leading-tight" style={{ color: uiColor }}>Drag to move. Twist to turn, pinch to resize.</p>
           <canvas
             ref={canvasRef}
             aria-label="UV layout"
@@ -229,11 +256,9 @@ export default function UVEditor({ meshId, managerRef, onChange, onClose }) {
             />
           </div>
           <div className="mt-1.5 flex items-center gap-1.5">
-            {chip('Move', () => setMode('move'), mode === 'move')}
-            {chip('Rotate', () => setMode('rotate'), mode === 'rotate')}
-            {chip('Scale', () => setMode('scale'), mode === 'scale')}
-            {chip('Flip', flip)}
+            {chip('Unwrap', () => runUnwrap(angle))}
             {chip('Pack', pack)}
+            {chip('Flip', flip)}
             {chip('Done', onClose, true)}
           </div>
         </div>
