@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { computeUnwrap, unwrapIsValid } from './uvUnwrap';
 
 // Texture application for selected objects. A local image file is loaded into
 // a RepeatWrapping THREE.Texture and assigned to the mesh's material map; the
@@ -70,6 +71,44 @@ export function applySceneTexture(SceneManagerClass) {
     this.updateHighlights();
     return true;
   };
+
+  // Unwrap: cut the selected object(s) along their seams, flatten and pack
+  // them, and map the image 1:1 onto that layout.
+  SceneManagerClass.prototype.unwrapSelection = function () {
+    const ids = this.targetMeshIds();
+    if (ids.length === 0) return false;
+    this.pushUndo();
+    for (const id of ids) {
+      const mesh = this.getMesh(id);
+      if (!mesh) continue;
+      mesh.uvUnwrap = computeUnwrap(mesh);
+      mesh.uvMode = 'unwrap';
+      mesh.textureTransform = { ...(mesh.textureTransform || { rotation: 0 }), scale: 1 };
+      if (mesh.mapTexture) { mesh.mapTexture.repeat.set(1, 1); mesh.mapTexture.needsUpdate = true; }
+      this.rebuildThreeMesh(id);
+    }
+    this.updateHighlights();
+    return true;
+  };
+
+  // The unwrapped layout of one object, or null when it has none (or its
+  // shape changed since).
+  SceneManagerClass.prototype.getUnwrapData = function (meshId) {
+    const mesh = this.getMesh(meshId);
+    return mesh && unwrapIsValid(mesh) ? mesh.uvUnwrap : null;
+  };
+
+  // UV editor: replace the layout and show it. Undo is recorded once by the
+  // editor (beginUnwrapEdit) before the first change.
+  SceneManagerClass.prototype.setUnwrapData = function (meshId, data) {
+    const mesh = this.getMesh(meshId);
+    if (!mesh) return false;
+    mesh.uvUnwrap = data;
+    mesh.uvMode = 'unwrap';
+    this.rebuildThreeMesh(meshId);
+    return true;
+  };
+  SceneManagerClass.prototype.beginUnwrapEdit = function () { this.pushUndo(); };
 
   SceneManagerClass.prototype.setTextureScale = function (meshId, scale) {
     const mesh = this.getMesh(meshId);

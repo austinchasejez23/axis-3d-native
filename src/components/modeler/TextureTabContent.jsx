@@ -8,6 +8,7 @@ import SurfaceSliderRow from './SurfaceSliderRow';
 import InlineSlider from './InlineSlider';
 import WrapModePicker from './WrapModePicker';
 import SheetActionButton from './SheetActionButton';
+import UVEditor from './UVEditor';
 
 // Texture tab, top to bottom: None, Add (upload) and every texture preset as
 // round thumbnails; Merge, Seamless, Wrap and Apply; then Scale / Rotation /
@@ -23,6 +24,7 @@ export default function TextureTabContent({ meshId, managerRef, opacity, onOpaci
   const [uvMode, setUvMode] = useState('box');
   const [wrapOpen, setWrapOpen] = useState(false);
   const [activeUrl, setActiveUrl] = useState(null);
+  const [editorOpen, setEditorOpen] = useState(false);
 
   useEffect(() => {
     const mesh = managerRef.current?.getMesh(meshId);
@@ -36,7 +38,19 @@ export default function TextureTabContent({ meshId, managerRef, opacity, onOpaci
 
   const applyScale = (v) => { setScale(v); managerRef.current?.setTextureScale(meshId, v); onChange?.(); };
   const applyRotation = (deg) => { setRotation(deg); managerRef.current?.setTextureRotation(meshId, (deg * Math.PI) / 180); onChange?.(); };
-  const applyUvMode = (m) => { setUvMode(m); managerRef.current?.setUVMode(m); onChange?.(); };
+  const applyUvMode = (m) => {
+    if (m === 'unwrap') {
+      if (!managerRef.current?.unwrapSelection()) { toast.error('Select an object first'); return; }
+      setScale(1);
+      setUvMode('unwrap');
+      onChange?.();
+      toast.success('Unwrapped');
+      return;
+    }
+    setUvMode(m);
+    managerRef.current?.setUVMode(m);
+    onChange?.();
+  };
   const applyMirror = () => { const on = !mirror; setMirror(on); managerRef.current?.setTextureMirror(meshId, on); onChange?.(); };
   const applyMerge = () => { const on = !mergeColor; setMergeColor(on); managerRef.current?.setTextureMergeColor(on); onChange?.(); };
   const changeOpacity = (v) => { onOpacity(v); onChange?.(); };
@@ -92,9 +106,15 @@ export default function TextureTabContent({ meshId, managerRef, opacity, onOpaci
         <SheetActionButton label="Apply" ariaLabel="Apply texture changes" onClick={onApply} disabled={!canApply} disabledReason="Select an object to apply the texture to" primary />
         {wrapOpen && (
           <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 z-10">
-            <WrapModePicker mode={uvMode} onMode={(m) => { applyUvMode(m); setWrapOpen(false); }} />
+            <WrapModePicker
+              mode={uvMode}
+              onMode={(m) => { applyUvMode(m); setWrapOpen(false); }}
+              editorEnabled={uvMode === 'unwrap'}
+              onEditor={() => { setWrapOpen(false); setEditorOpen(true); }}
+            />
           </div>
         )}
+        {editorOpen && <UVEditor meshId={meshId} managerRef={managerRef} onChange={onChange} onClose={() => setEditorOpen(false)} />}
       </div>
       <SurfaceSliderRow scrollPadTop>
         <InlineSlider label="Scale" value={scale} display={scale.toFixed(2)} min={0.1} max={8} step={0.05} onChange={applyScale} />

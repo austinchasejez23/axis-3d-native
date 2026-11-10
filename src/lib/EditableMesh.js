@@ -46,7 +46,9 @@ export class EditableMesh {
     this.textureUrl = null;     // runtime image URL (session only)
     this.referenceUrl = null;   // persistent, uploaded image for a reference plane
     this.textureTransform = { scale: 0.25, rotation: 0, mirror: false };
-    this.uvMode = 'box';        // texture projection: box | planar | cylindrical | spherical
+    this.uvMode = 'box';        // texture projection: box | planar | cylindrical | spherical | unwrap
+    this.uvSeams = [];          // edges marked as seams for Unwrap ({ v1, v2 })
+    this.uvUnwrap = null;       // unwrapped layout (see uvUnwrap.js); used when uvMode is 'unwrap'
     this.reflectionEnabled = false;     // real-time scene reflections on/off
     this.reflectionIntensity = 0.6;    // 0–1, controls reflected-env visibility
     this.reflectionRoughness = 0.1;    // 0–1, controls reflection clarity/blur
@@ -90,6 +92,8 @@ export class EditableMesh {
     this.textureUrl = null;
     this.textureTransform = { scale: 0.25, rotation: 0, mirror: false };
     this.uvMode = 'box';
+    this.uvSeams = [];
+    this.uvUnwrap = null;
     this.reflectionEnabled = false;
     this.reflectionIntensity = 0.6;
     this.reflectionRoughness = 0.1;
@@ -685,11 +689,22 @@ export class EditableMesh {
         y: Math.max(1e-6, bmax.y - bmin.y),
         z: Math.max(1e-6, bmax.z - bmin.z),
         };
-        const mode = this.uvMode || 'box';
+        const unwrapped = this.uvMode === 'unwrap' && this.uvUnwrap && this.uvUnwrap.faceCount === this.faces.length ? this.uvUnwrap.faces : null;
+        const mode = unwrapped ? 'unwrap' : (this.uvMode === 'unwrap' ? 'box' : (this.uvMode || 'box'));
         const cx = (bmin.x + bmax.x) / 2, cy = (bmin.y + bmax.y) / 2, cz = (bmin.z + bmax.z) / 2;
         const TWO_PI = Math.PI * 2;
         for (let fi = 0; fi < this.faces.length; fi++) {
         const face = this.faces[fi];
+        if (unwrapped) {
+          const corners = unwrapped[fi];
+          for (const tri of this.getFaceTriangleIndices(fi)) {
+            for (const vi of tri) {
+              const uv = corners?.[vi] || [0, 0];
+              uvs.push(uv[0], uv[1]);
+            }
+          }
+          continue;
+        }
         let ua, va;
         if (mode === 'box') {
           const n = this.getFaceNormal(fi);
@@ -840,6 +855,8 @@ export class EditableMesh {
     m.referenceUrl = this.referenceUrl || null;
     m.textureTransform = { ...this.textureTransform };
     m.uvMode = this.uvMode || 'box';
+    m.uvSeams = (this.uvSeams || []).map((e) => ({ ...e }));
+    m.uvUnwrap = this.uvUnwrap ? { ...this.uvUnwrap, faces: this.uvUnwrap.faces.map((corners) => corners?.map((uv) => [...uv])), islands: this.uvUnwrap.islands.map((island) => [...island]) } : null;
     m.reflectionEnabled = this.reflectionEnabled;
     m.reflectionIntensity = this.reflectionIntensity;
     m.reflectionRoughness = this.reflectionRoughness;
@@ -884,6 +901,8 @@ export class EditableMesh {
       material: this.material ? { ...this.material } : null,
       referenceUrl: this.referenceUrl || null,
       uvMode: this.uvMode || 'box',
+      uvSeams: (this.uvSeams || []).map((e) => ({ ...e })),
+      uvUnwrap: this.uvUnwrap || null,
       reflectionEnabled: this.reflectionEnabled,
       reflectionIntensity: this.reflectionIntensity,
       reflectionRoughness: this.reflectionRoughness,
@@ -930,6 +949,8 @@ export class EditableMesh {
     m.material = data.material || null;
     m.referenceUrl = data.referenceUrl || null;
     m.uvMode = data.uvMode || 'box';
+    m.uvSeams = (data.uvSeams || []).map((e) => ({ ...e }));
+    m.uvUnwrap = data.uvUnwrap || null;
     m.reflectionEnabled = data.reflectionEnabled || false;
     m.reflectionIntensity = data.reflectionIntensity ?? 0.6;
     m.reflectionRoughness = data.reflectionRoughness ?? 0.1;

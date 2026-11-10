@@ -89,7 +89,7 @@ export const DEFAULT_LAYOUTS = {
   ],
   edge: [
     ...stack(),
-    ['split', 'select_ring', 'draw_cut', 'bridge', 'dissolve', null],
+    ['split', 'select_ring', 'draw_cut', 'bridge', 'dissolve', 'seam'],
     ['cut_loop', 'select_loop', 'create_face_border', 'extrude', 'bevel', 'delete'],
   ],
   vertex: [
@@ -196,6 +196,7 @@ export function loadToolLayout(mode) {
     const previousShape = JSON.stringify(rows);
     if (mode === 'face' || mode === 'edge' || mode === 'vertex') placeMissing(rows, mode, 'dissolve');
     if (mode === 'vertex') placeMissing(rows, mode, 'bevel');
+    if (mode === 'edge') placeMissing(rows, mode, 'seam');
     if (matchesDefault(rows, mode)) {
       const hidden = Array.isArray(all[mode].hidden) ? all[mode].hidden.filter((id) => allIds(rows).includes(id)) : [];
       // Upgrade untouched defaults only; keep manually customized layouts.

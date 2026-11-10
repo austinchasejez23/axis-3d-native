@@ -380,6 +380,18 @@ export function DissolveIcon(props) {
   );
 }
 
+export function SeamIcon(props) {
+  const hl = useHl();
+  return (
+    <Svg {...props}>
+      {/* Cube with a dashed cut line down one edge: a UV seam. */}
+      <path d="M12 3 L20 7.5 V16.5 L12 21 L4 16.5 V7.5 Z" />
+      <path d="M4 7.5 L12 12 L20 7.5" />
+      <path d="M12 12 V21" stroke={hl} strokeDasharray="2 2.2" strokeWidth="2.4" />
+    </Svg>
+  );
+}
+
 export function SelectRingIcon(props) {
   const hl = useHl();
   return (

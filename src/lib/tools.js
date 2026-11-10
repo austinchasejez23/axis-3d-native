@@ -6,7 +6,7 @@ import {
   CreateFaceBorderIcon, SplitIcon, DrawCutIcon, BevelIcon, EdgeBridgeIcon, FaceBridgeIcon,
   SelectRingIcon, SelectLoopIcon, CutLoopIcon,
   CreateFaceVerticesIcon, AddVertexIcon, ConnectIcon, TargetMergeIcon, MergeIcon,
-  VertexBevelIcon, DissolveIcon,
+  VertexBevelIcon, DissolveIcon, SeamIcon,
 } from '@/lib/toolIcons';
 
 export const TOOLS = {
@@ -51,6 +51,7 @@ export const TOOLS = {
       { id: 'select_ring', label: 'Select ring', icon: SelectRingIcon },
       { id: 'select_loop', label: 'Select loop', icon: SelectLoopIcon },
       { id: 'cut_loop', label: 'Cut loop', icon: CutLoopIcon },
+      { id: 'seam', label: 'Seam', icon: SeamIcon },
       { id: 'dissolve', label: 'Dissolve', icon: DissolveIcon },
       { id: 'delete', label: 'Delete', icon: DeleteIcon },
     ]],

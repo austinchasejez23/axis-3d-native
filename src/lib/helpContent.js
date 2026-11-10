@@ -127,6 +127,7 @@ const desc = {
     select_loop: `Selects a continuous loop of edges. ${SP}: skip and offset.`,
     cut_loop: `Adds an edge loop around the object. ${SP}: cut, center, straight and follow.`,
     dissolve: 'Removes the selected edges and merges the faces on either side of each into one face.',
+    seam: 'Marks the selected edges as UV seams, where Unwrap cuts the surface open. Tap again on seam edges to clear them.',
     delete: 'Deletes the selected edges.',
   },
   vertex: {
