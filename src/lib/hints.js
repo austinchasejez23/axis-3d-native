@@ -31,6 +31,9 @@ const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } c
 // Still worth showing: not used yet and not shown too often.
 export const hintPending = (id) => !state.done[id] && (state.shows[id] || 0) < MAX_SHOWS;
 export const hintDone = (id) => !!state.done[id];
+// How many times a hint has shown, so hints take turns instead of waiting on
+// one another.
+export const hintShows = (id) => state.shows[id] || 0;
 
 export function countHintShown(id) {
   state = { ...state, shows: { ...state.shows, [id]: (state.shows[id] || 0) + 1 } };

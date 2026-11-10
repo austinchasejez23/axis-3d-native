@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTheme } from '@/lib/theme';
-import { HINTS, hintPending, hintDone, countHintShown, completeHint } from '@/lib/hints';
+import { HINTS, hintPending, hintShows, countHintShown, completeHint } from '@/lib/hints';
 import HintBubble from './HintBubble';
 
 const CHEVRON = '[aria-label="Expand hidden tools"]';
@@ -22,13 +22,17 @@ const visible = (target) => {
   const rect = rectOf(target);
   return !!rect && rect.width > 0 && rect.height > 0;
 };
+// No hint waits for another to be followed: of the hints that could show now,
+// the one shown least so far goes first.
+const leastShown = (list) => list.filter((h) => hintPending(h.id)).sort((a, b) => hintShows(a.id) - hintShows(b.id));
 
 // Decides which getting-started hint shows, one at a time. Each teaches
 // something that isn't obvious from the screen, at the moment it is useful,
-// and never comes back once the user has done it:
+// and never comes back once the user has done it. None depends on another
+// having been followed:
 //  1. after a mode is picked: "Tap again for tools" at that mode's button;
-//  2. once tools have been opened: "Tap to expand tools" at the chevron;
-//  3. tools open again: "Touch and hold a tool to move or hide it";
+//  2 and 3. tools open: "Tap to expand tools" at the chevron (when there are
+//     hidden tools) and "Touch and hold a tool to move or hide it", in turn;
 //  4. after tapping Snapping, Resistance or Free Transform: "Double-tap for settings";
 //  5. nothing in the scene: "Tap to add a shape" at Library;
 //  6. some time later, one by one: transform values at the HUD; twist and
@@ -146,15 +150,17 @@ export default function HintsController({ managerRef, selectionMode, modeToolsOp
     if (hintRef.current?.id === 'modeTools') close('target');
   }, [modeToolsOpen, close]);
 
-  // 2 and 3. Tools are open (after hint 1 is learned): the chevron first, then,
-  // once that is learned or there is no chevron, holding a tool.
+  // 2 and 3. Tools are open: the chevron and holding a tool take turns.
   useEffect(() => {
-    if (!toolGridOpen || !hintDone('modeTools')) return undefined;
+    if (!toolGridOpen) return undefined;
     const timer = setInterval(() => {
       if (!live.current.toolGridOpen || hintRef.current) return;
-      if (hintPending('expandTools') && visible(CHEVRON)) { show('expandTools', CHEVRON, 'right'); return; }
       if (performance.now() - lastEnded.current < 1500) return;
-      show('arrangeTools', TOOL_CELL, 'top');
+      const options = leastShown([
+        { id: 'expandTools', target: CHEVRON, side: 'right' },
+        { id: 'arrangeTools', target: TOOL_CELL, side: 'top' },
+      ]);
+      for (const h of options) if (show(h.id, h.target, h.side)) return;
     }, 500);
     return () => clearInterval(timer);
   }, [toolGridOpen, show]);
@@ -172,15 +178,13 @@ export default function HintsController({ managerRef, selectionMode, modeToolsOp
         return;
       }
       if (now - startedAt.current < TIMED_AFTER_START_MS || now - lastEnded.current < TIMED_AFTER_HINT_MS) return;
-      const timed = [
+      const timed = leastShown([
         { id: 'transform', target: TRANSFORM, side: 'bottom', selection: true },
         { id: 'twistPinch', target: selectionRect, side: 'top', selection: true },
         { id: 'multiSelect', target: selectionRect, side: 'top', selection: true },
         { id: 'menu', target: MENU, side: 'bottom' },
-      ];
-      for (const h of timed) {
-        if ((!h.selection || c.hasSelection) && show(h.id, h.target, h.side)) return;
-      }
+      ].filter((h) => !h.selection || c.hasSelection));
+      for (const h of timed) if (show(h.id, h.target, h.side)) return;
     }, 1500);
     return () => clearInterval(timer);
   }, [show, selectionRect, managerRef]);
