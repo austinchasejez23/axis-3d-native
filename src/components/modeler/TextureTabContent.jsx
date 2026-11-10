@@ -11,7 +11,7 @@ import SheetActionButton from './SheetActionButton';
 import UVEditor from './UVEditor';
 
 // Texture tab, top to bottom: None, Add (upload) and every texture preset as
-// round thumbnails; Merge, Seamless, Wrap and Apply; then Scale / Rotation /
+// round thumbnails; Merge, Seamless, Wrap, UV and Apply; then Scale / Rotation /
 // Opacity sliders along the bottom of the sheet. `onChange` tells the sheet
 // something changed, so Apply and the checkmark know there is work to keep.
 export default function TextureTabContent({ meshId, managerRef, opacity, onOpacity, onChange, onApply, canApply }) {
@@ -39,14 +39,6 @@ export default function TextureTabContent({ meshId, managerRef, opacity, onOpaci
   const applyScale = (v) => { setScale(v); managerRef.current?.setTextureScale(meshId, v); onChange?.(); };
   const applyRotation = (deg) => { setRotation(deg); managerRef.current?.setTextureRotation(meshId, (deg * Math.PI) / 180); onChange?.(); };
   const applyUvMode = (m) => {
-    if (m === 'unwrap') {
-      if (!managerRef.current?.unwrapSelection()) { toast.error('Select an object first'); return; }
-      setScale(1);
-      setUvMode('unwrap');
-      onChange?.();
-      toast.success('Unwrapped');
-      return;
-    }
     setUvMode(m);
     managerRef.current?.setUVMode(m);
     onChange?.();
@@ -103,18 +95,24 @@ export default function TextureTabContent({ meshId, managerRef, opacity, onOpaci
         {chip('Merge', mergeColor, applyMerge)}
         {chip('Seamless', mirror, applyMirror)}
         {chip('Wrap', wrapOpen, () => setWrapOpen((v) => !v))}
+        {chip('UV', editorOpen, () => { setWrapOpen(false); setEditorOpen((v) => !v); })}
         <SheetActionButton label="Apply" ariaLabel="Apply texture changes" onClick={onApply} disabled={!canApply} disabledReason="Select an object to apply the texture to" primary />
         {wrapOpen && (
           <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 z-10">
             <WrapModePicker
               mode={uvMode}
               onMode={(m) => { applyUvMode(m); setWrapOpen(false); }}
-              editorEnabled={uvMode === 'unwrap'}
-              onEditor={() => { setWrapOpen(false); setEditorOpen(true); }}
             />
           </div>
         )}
-        {editorOpen && <UVEditor meshId={meshId} managerRef={managerRef} onChange={onChange} onClose={() => setEditorOpen(false)} />}
+        {editorOpen && (
+          <UVEditor
+            meshId={meshId}
+            managerRef={managerRef}
+            onChange={() => { setUvMode('unwrap'); setScale(1); onChange?.(); }}
+            onClose={() => setEditorOpen(false)}
+          />
+        )}
       </div>
       <SurfaceSliderRow scrollPadTop>
         <InlineSlider label="Scale" value={scale} display={scale.toFixed(2)} min={0.1} max={8} step={0.05} onChange={applyScale} />

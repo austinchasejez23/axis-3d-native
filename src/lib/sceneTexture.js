@@ -74,21 +74,55 @@ export function applySceneTexture(SceneManagerClass) {
 
   // Unwrap: cut the selected object(s) along their seams, flatten and pack
   // them, and map the image 1:1 onto that layout.
-  SceneManagerClass.prototype.unwrapSelection = function () {
+  SceneManagerClass.prototype.unwrapSelection = function ({ angle, recordUndo = true } = {}) {
     const ids = this.targetMeshIds();
     if (ids.length === 0) return false;
-    this.pushUndo();
+    if (recordUndo) this.pushUndo();
     for (const id of ids) {
       const mesh = this.getMesh(id);
       if (!mesh) continue;
-      mesh.uvUnwrap = computeUnwrap(mesh);
+      mesh.uvUnwrap = computeUnwrap(mesh, angle == null ? undefined : { angle });
       mesh.uvMode = 'unwrap';
       mesh.textureTransform = { ...(mesh.textureTransform || { rotation: 0 }), scale: 1 };
       if (mesh.mapTexture) { mesh.mapTexture.repeat.set(1, 1); mesh.mapTexture.needsUpdate = true; }
       this.rebuildThreeMesh(id);
     }
+    this._refreshSeamOverlay();
     this.updateHighlights();
     return true;
+  };
+
+  // Show where the surface is cut open (red lines on the model) while the UV
+  // panel is open. Pass null to hide them.
+  SceneManagerClass.prototype.setSeamOverlay = function (meshId) {
+    this._seamOverlayMeshId = meshId || null;
+    this._refreshSeamOverlay();
+  };
+  SceneManagerClass.prototype._refreshSeamOverlay = function () {
+    if (this._seamOverlay) {
+      this._seamOverlay.parent?.remove(this._seamOverlay);
+      this._seamOverlay.geometry.dispose();
+      this._seamOverlay.material.dispose();
+      this._seamOverlay = null;
+    }
+    const id = this._seamOverlayMeshId;
+    const mesh = id ? this.getMesh(id) : null;
+    const holder = id ? this.threeObjects?.get(id)?.mesh : null;
+    if (!mesh || !holder) return;
+    const pairs = [...(mesh.uvUnwrap?.seams || []), ...(mesh.uvSeams || []).map((e) => [e.v1, e.v2])];
+    const positions = [];
+    for (const [a, b] of pairs) {
+      const va = mesh.getVertex(a), vb = mesh.getVertex(b);
+      if (va && vb) positions.push(va.x, va.y, va.z, vb.x, vb.y, vb.z);
+    }
+    if (!positions.length) return;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    const lines = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: 0xff3b30, depthTest: false, transparent: true, toneMapped: false }));
+    lines.renderOrder = 999;
+    lines.raycast = () => {};
+    holder.add(lines);
+    this._seamOverlay = lines;
   };
 
   // The unwrapped layout of one object, or null when it has none (or its
@@ -106,6 +140,7 @@ export function applySceneTexture(SceneManagerClass) {
     mesh.uvUnwrap = data;
     mesh.uvMode = 'unwrap';
     this.rebuildThreeMesh(meshId);
+    this._refreshSeamOverlay();
     return true;
   };
   SceneManagerClass.prototype.beginUnwrapEdit = function () { this.pushUndo(); };

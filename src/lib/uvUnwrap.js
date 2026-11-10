@@ -7,7 +7,8 @@ import * as THREE from 'three';
 // Result: mesh.uvUnwrap = { faceCount, faces: [[[u, v] per corner] per face], islands: [[face index]] }
 
 const edgeKey = (a, b) => (a < b ? `${a},${b}` : `${b},${a}`);
-const AUTO_SEAM_DEGREES = 60;
+export const DEFAULT_CUT_ANGLE = 60;
+export const NO_CUT_ANGLE = 180;
 const round = (n) => Math.round(n * 100000) / 100000;
 
 function faceEdgeKeys(face) {
@@ -28,11 +29,11 @@ function buildEdgeFaces(mesh) {
   return map;
 }
 
-// Seams the user marked, or sharp edges when none were marked.
-function seamSet(mesh, edgeFaces) {
+// Seams the user marked, plus every edge sharper than the cut angle.
+function seamSet(mesh, edgeFaces, angle) {
   const seams = new Set((mesh.uvSeams || []).map((e) => edgeKey(e.v1, e.v2)));
-  if (seams.size) return seams;
-  const cos = Math.cos((AUTO_SEAM_DEGREES * Math.PI) / 180);
+  if (angle >= NO_CUT_ANGLE) return seams;
+  const cos = Math.cos((angle * Math.PI) / 180);
   for (const [key, list] of edgeFaces) {
     if (list.length !== 2) continue;
     if (mesh.getFaceNormal(list[0]).dot(mesh.getFaceNormal(list[1])) < cos) seams.add(key);
@@ -370,9 +371,9 @@ function pack(islands) {
   }));
 }
 
-export function computeUnwrap(mesh) {
+export function computeUnwrap(mesh, { angle = DEFAULT_CUT_ANGLE } = {}) {
   const edgeFaces = buildEdgeFaces(mesh);
-  const seams = seamSet(mesh, edgeFaces);
+  const seams = seamSet(mesh, edgeFaces, angle);
   const islandFaces = findIslands(mesh, edgeFaces, seams);
   const flat = [];
   for (const faces of islandFaces) {
@@ -391,7 +392,23 @@ export function computeUnwrap(mesh) {
       faceUv[fi] = mesh.faces[fi].map((_, k) => place(island.points[island.surface.corner.get(`${fi}:${k}`)]));
     }
   });
-  return { faceCount: mesh.faces.length, faces: faceUv, islands: flat.map((island) => island.faces) };
+  // Where the surface was cut open, for showing on the model.
+  const cuts = [];
+  for (const key of seams) if ((edgeFaces.get(key) || []).length) cuts.push(key.split(',').map(Number));
+  return { faceCount: mesh.faces.length, angle, faces: faceUv, islands: flat.map((island) => island.faces), seams: cuts };
+}
+
+// Pack the islands again as they are now (their own sizes and turns kept), so
+// pieces moved around or enlarged by hand fit the square without overlapping.
+export function repackLayout(data) {
+  const islands = data.islands.map((faces) => ({ points: faces.flatMap((fi) => data.faces[fi] || []) }));
+  const packed = pack(islands);
+  const out = data.faces.map((corners) => corners?.map((uv) => [uv[0], uv[1]]));
+  data.islands.forEach((faces, i) => {
+    const place = packed.find((p) => p.index === i).map;
+    for (const fi of faces) out[fi] = out[fi].map((uv) => place(uv));
+  });
+  return { ...data, faces: out };
 }
 
 export function unwrapIsValid(mesh) {
