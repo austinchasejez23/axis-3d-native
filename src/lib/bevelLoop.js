@@ -360,12 +360,16 @@ export function bevelLoopEdges(sm, options = {}) {
   // loop. Face-region classification can reverse A/B on individual facets even
   // though they all belong to the same two straight sections; that reversal made
   // the shared-axis vectors cancel and incorrectly fell back to separate edge
-  // fillets. Match every pair to the first pair before calculating the sweep.
+  // fillets. Match every pair to the one before it before calculating the
+  // sweep. Comparing with the FIRST pair failed across a round cap: halfway
+  // round, that cap's direction is reversed, the comparison tied, and rounding
+  // error swapped the rim's sides there, so the bevel crossed over and opened
+  // a wedge. Neighbouring pairs always point nearly the same way.
   if (perEdge.length > 1) {
-    const refA = perEdge[0].dA;
-    const refB = perEdge[0].dB;
     for (let i = 1; i < perEdge.length; i++) {
       const pe = perEdge[i];
+      const refA = perEdge[i - 1].dA;
+      const refB = perEdge[i - 1].dB;
       const direct = pe.dA.dot(refA) + pe.dB.dot(refB);
       const swapped = pe.dA.dot(refB) + pe.dB.dot(refA);
       if (swapped > direct) {
@@ -430,7 +434,11 @@ export function bevelLoopEdges(sm, options = {}) {
     if (!closed) return null;
     let hint = new THREE.Vector3();
     for (const pe of perEdge) hint.add(pe[key]);
-    if (hint.lengthSq() < 1e-12) return null;
+    // The side's own directions have to point one common way. On a flat cap
+    // (a cylinder's top) they point inward all around and cancel; the leftover
+    // rounding error then picked the wall below as the cap's "leg", so both
+    // sides of the rim bevel ran down the wall and the rim was not rounded.
+    if (hint.length() < perEdge.length * 0.05) return null;
     hint.normalize();
     // Pick each vertex's wall edge, then re-pick against the average of those
     // picks: on a triangulated wall a diagonal can look closer to the rough
@@ -441,11 +449,15 @@ export function bevelLoopEdges(sm, options = {}) {
       for (let i = 0; i < N; i++) {
         const pv = V3(mesh.getVertex(order[i]));
         let best = null, bestDot = -Infinity, bestDir = null;
+        // A leg edge runs across this side's own faces, so it leaves the loop
+        // edges in the same direction those faces do.
+        const own = [perEdge[(i - 1 + N) % N][key], perEdge[i % perEdge.length][key]];
         for (const w of neighbors.get(order[i]) || []) {
           if (loopVertexSet.has(w)) continue;
           const d = V3(mesh.getVertex(w)).sub(pv);
           if (d.lengthSq() < 1e-14) continue;
           d.normalize();
+          if (own.some((o) => d.dot(o) < 0.05)) continue;
           const dot = d.dot(hint);
           if (dot > bestDot) { bestDot = dot; best = w; bestDir = d; }
         }
@@ -750,6 +762,7 @@ export function bevelLoopEdges(sm, options = {}) {
   const loopSet = new Set(order);
   const legAxis = (faceIdxs) => {
     const d = new THREE.Vector3();
+    let count = 0;
     for (const fi of new Set(faceIdxs)) {
       const f = mesh.faces[fi];
       const loopVs = f.filter((v) => loopSet.has(v));
@@ -763,10 +776,11 @@ export function bevelLoopEdges(sm, options = {}) {
           if (dist < bd) { bd = dist; best = v; }
         }
         const dir = pw.sub(V3(mesh.getVertex(best)));
-        if (dir.lengthSq() > 1e-12) d.add(dir.normalize());
+        if (dir.lengthSq() > 1e-12) { d.add(dir.normalize()); count++; }
       }
     }
-    return d.lengthSq() > 1e-12 ? d.normalize() : null;
+    // Directions that cancel (a cap's spokes to its centre) are not a leg.
+    return count > 0 && d.length() > count * 0.25 ? d.normalize() : null;
   };
 
   // The pipe/prism bend sweep only makes sense for a CLOSED transverse loop —
