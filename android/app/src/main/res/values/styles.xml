@@ -13,14 +13,13 @@
         <item name="android:background">@color/axisBackground</item>
     </style>
 
-    <!-- The launch window, shown before the web view paints anything. Black,
-         like everything that loads after it (the web view and the splash
-         video), with the glowing cube on its own: no tile around it and no
-         grey screens in between. -->
+    <!-- The launch window, shown before the web view paints anything. Plain
+         black, like everything that loads after it (the web view and the
+         splash video): no icon and no grey screens in between. -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@color/axisBackground</item>
         <item name="windowSplashScreenBackground">@color/axisBackground</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_blank</item>
         <item name="android:statusBarColor">@color/axisBackground</item>
         <item name="android:navigationBarColor">@color/axisBackground</item>
         <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
