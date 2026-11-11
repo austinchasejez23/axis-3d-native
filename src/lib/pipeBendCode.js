@@ -18,8 +18,10 @@ import * as THREE from 'three';
  * perEdge: [{ dA, dB }] directions leaving the loop on each side.
  * corners: [{ vv }] original loop vertices, in loop order.
  * radius:  TRUE centerline bend radius.
+ * straightLegs: both legs are already proven straight (every loop vertex has
+ *          a wall edge along one common axis), so the facet check is skipped.
  */
-export function createPipeBendSweep({ perEdge, corners, radius, legA, legB }) {
+export function createPipeBendSweep({ perEdge, corners, radius, legA, legB, straightLegs = false }) {
   if (!perEdge?.length || !corners?.length) return null;
 
   // --- 1. Common leg axes ------------------------------------------------
@@ -44,8 +46,12 @@ export function createPipeBendSweep({ perEdge, corners, radius, legA, legB }) {
   // silently disabled the radial sweep and fell back to per-vertex fillets
   // (evenly spaced rings). 45° tolerance keeps real pipes on the sweep path
   // while still rejecting irregular creases.
-  for (const e of perEdge) {
-    if (e.dA.dot(dA) < 0.7 || e.dB.dot(dB) < 0.7) return null;
+  // A sharp bend tilts the facets by more than that; proven-straight legs
+  // don't need the check.
+  if (!straightLegs) {
+    for (const e of perEdge) {
+      if (e.dA.dot(dA) < 0.7 || e.dB.dot(dB) < 0.7) return null;
+    }
   }
 
   // --- 2. Turn angle and bend plane -------------------------------------

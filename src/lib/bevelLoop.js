@@ -258,6 +258,8 @@ export function bevelProfile(v, pA, pB) {
   };
 }
 
+const absorbDepthOf = (options) => options._absorbDepth || 0;
+
 export function bevelLoopEdges(sm, options = {}) {
   const sel = sm.selection;
   if (!sel.meshId || sel.type !== 'edge' || sel.indices.length === 0) return;
@@ -772,24 +774,96 @@ export function bevelLoopEdges(sm, options = {}) {
   // open chain (above all a single selected edge) it swings the loop vertices
   // around an invented bend center and shreds the geometry. An open chain is
   // always a plain per-vertex fillet.
-  let tubeSweep = sweep && closed
-    ? createPipeBendSweep({
-      perEdge,
-      corners,
-      radius: r,
-      legA: legAxis(sides.map((s) => s.a)),
-      legB: legAxis(sides.map((s) => s.b)),
-    })
-    : null;
-  // A normal bevel across a bent tube rounds the bend the same way: the tube's
-  // section is carried around the corner, starting the entered distance down
-  // each leg. Moving every point along its own small arc instead kept the
-  // stretched corner section all the way round, so the bend just got wider.
-  if (!tubeSweep && rigidLegs?.dA && rigidLegs?.dB) {
-    const legA = rigidLegs.dA.axis, legB = rigidLegs.dB.axis;
-    const omega = Math.PI - Math.acos(THREE.MathUtils.clamp(legA.dot(legB), -1, 1));
-    if (omega > 1e-3 && omega < Math.PI - 1e-3) {
-      tubeSweep = createPipeBendSweep({ perEdge, corners, radius: r / Math.tan(omega / 2), legA, legB });
+  const sweepLegA = sweep && closed ? legAxis(sides.map((s) => s.a)) : null;
+  const sweepLegB = sweep && closed ? legAxis(sides.map((s) => s.b)) : null;
+  // On a sharp bend (a turn past about 90°) each wall facet's own direction
+  // tilts by up to half the turn, so the pipe sweep's facet check failed and
+  // Sweep fell back to separate corner fillets that crumpled the tube. When
+  // both legs are proven straight tubes, the bend is swept around their axes.
+  const straightA = sweep && closed ? straightLeg('dA') : null;
+  const straightB = sweep && closed ? straightLeg('dB') : null;
+  const makeTubeSweep = (radius) => {
+    let made = sweep && closed
+      ? createPipeBendSweep({ perEdge, corners, radius, legA: sweepLegA, legB: sweepLegB })
+      : null;
+    if (!made && straightA && straightB) {
+      made = createPipeBendSweep({ perEdge, corners, radius, legA: straightA.axis, legB: straightB.axis, straightLegs: true });
+    }
+    // A normal bevel across a bent tube rounds the bend the same way: the tube's
+    // section is carried around the corner, starting the entered distance down
+    // each leg. Moving every point along its own small arc instead kept the
+    // stretched corner section all the way round, so the bend just got wider.
+    if (!made && rigidLegs?.dA && rigidLegs?.dB) {
+      const legA = rigidLegs.dA.axis, legB = rigidLegs.dB.axis;
+      const omega = Math.PI - Math.acos(THREE.MathUtils.clamp(legA.dot(legB), -1, 1));
+      if (omega > 1e-3 && omega < Math.PI - 1e-3) {
+        made = createPipeBendSweep({ perEdge, corners, radius: radius / Math.tan(omega / 2), legA, legB });
+      }
+    }
+    return made;
+  };
+  let tubeSweep = makeTubeSweep(r);
+
+  // The bend has to start and end on the straight part of each leg. Beyond the
+  // last ring of a straight leg the tube ends or turns again (another bend);
+  // a bend reaching that far was built against the wrong leg and crumpled the
+  // tube. Measure how far each leg runs straight, and refuse a radius whose
+  // bend does not fit, saying the largest one that does — the same rule as
+  // every other bevel: never a different size than the one entered.
+  if (tubeSweep && !absorbDepthOf(options)) {
+    const straightRun = (key) => {
+      const first = straightLeg(key);
+      if (!first) return null;
+      const { axis } = first;
+      let back = new Set(order);
+      let ring = first.ring;
+      for (let step = 0; step < 4096; step++) {
+        const here = new Set(ring);
+        const next = [];
+        for (let i = 0; i < N; i++) {
+          const pv = V3(mesh.getVertex(ring[i]));
+          let best = null, bestDot = 0.995;
+          for (const w of neighbors.get(ring[i]) || []) {
+            if (back.has(w) || here.has(w)) continue;
+            const d = V3(mesh.getVertex(w)).sub(pv);
+            if (d.lengthSq() < 1e-14) continue;
+            const dot = d.normalize().dot(axis);
+            if (dot > bestDot) { bestDot = dot; best = w; }
+          }
+          if (best == null) break;
+          next.push(best);
+        }
+        if (next.length !== N || new Set(next).size !== N) break;
+        back = here;
+        ring = next;
+      }
+      return { axis, room: order.map((vid, i) => V3(mesh.getVertex(ring[i])).sub(V3(mesh.getVertex(vid))).dot(axis)) };
+    };
+    const runA = straightRun('dA');
+    const runB = straightRun('dB');
+    const fits = (bend) => {
+      if (!bend) return false;
+      for (const [run, t] of [[runA, 0], [runB, 1]]) {
+        if (!run) continue;
+        for (let i = 0; i < N; i++) {
+          const end = bend(i, t);
+          if (!end) return false;
+          if (end.clone().sub(corners[i].vv).dot(run.axis) > run.room[i] * 0.97) return false;
+        }
+      }
+      return true;
+    };
+    if (!fits(tubeSweep)) {
+      let lo = 0, hi = r;
+      for (let k = 0; k < 40; k++) {
+        const mid = (lo + hi) / 2;
+        if (fits(makeTubeSweep(mid))) lo = mid; else hi = mid;
+      }
+      const show = (v) => (Math.round(v * 1000) / 1000).toFixed(3);
+      sm.bevelNotice = lo > 1e-3
+        ? `Radius ${show(r)} is too big for this bend. Up to ${show(lo)} fits.`
+        : 'There is no room for this bend on the straight tube.';
+      return;
     }
   }
 
