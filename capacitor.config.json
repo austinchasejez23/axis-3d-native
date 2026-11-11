@@ -2,12 +2,12 @@
   "appId": "com.base6a5340f43f8fd031c5921680.app",
   "appName": "AXIS 3D",
   "webDir": "dist",
-  "backgroundColor": "#1c1c1c",
+  "backgroundColor": "#000000",
   "server": {
     "androidScheme": "https"
   },
   "android": {
-    "backgroundColor": "#1c1c1c",
+    "backgroundColor": "#000000",
     "allowMixedContent": false,
     "webContentsDebuggingEnabled": false
   }
