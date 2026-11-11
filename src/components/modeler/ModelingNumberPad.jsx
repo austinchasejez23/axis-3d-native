@@ -26,7 +26,7 @@ export default function ModelingNumberPad({ open, onKey, onClose = undefined, de
   }, [open, decimal, signed]);
   if (!open) return null;
   return createPortal(
-    <div ref={padRef}
+    <div ref={padRef} data-modeling-keypad
       className="fixed bottom-0 left-0 right-0 z-[90] modeling-sheet"
       onPointerDown={(event) => event.stopPropagation()}
       onPointerUp={(event) => event.stopPropagation()}

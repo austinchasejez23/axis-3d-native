@@ -160,6 +160,23 @@ export default function Modeler() {
   useEffect(() => { if (!precision) setPrecisionPanelOpen(false); }, [precision]);
   useEffect(() => { if (managerRef.current) managerRef.current.precisionFactor = precision ? 1 - precisionIntensity / 100 : 1; }, [precision, precisionIntensity]);
   const [selectionPattern, setSelectionPattern] = useState(null);
+  // Select Loop / Select Ring close on any touch outside their panel (or its
+  // keypad), tap or gesture. A tap that closed one does nothing else.
+  const selectionPatternRef = useRef(null);
+  selectionPatternRef.current = selectionPattern;
+  const patternClosedByTouchRef = useRef(false);
+  useEffect(() => {
+    const onDown = (event) => {
+      patternClosedByTouchRef.current = false;
+      if (!selectionPatternRef.current) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest('[data-selection-pattern-panel], [data-modeling-keypad]')) return;
+      patternClosedByTouchRef.current = true;
+      setSelectionPattern(null);
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    return () => document.removeEventListener('pointerdown', onDown, true);
+  }, []);
   const [selectedMeshId, setSelectedMeshId] = useState(null);
   const [measurementsOn, setMeasurementsOn] = useState(() => theme.measurementsOn);
   const [angleMode, setAngleMode] = useState(false);
@@ -834,7 +851,10 @@ export default function Modeler() {
     manager.enterMultiSelect();
   }, [booleanPanel, showToolPrompt]);
 
-  // Taps pick objects while a Boolean panel is open.
+  // Taps pick objects while a Boolean panel is open; an empty tap keeps them.
+  useEffect(() => {
+    if (managerRef.current) managerRef.current.keepMultiSelectOnEmptyTap = !!booleanPanel;
+  }, [booleanPanel]);
   useEffect(() => {
     if (booleanPanel && !multiSelect) managerRef.current?.enterMultiSelect();
   }, [booleanPanel, multiSelect]);
@@ -1134,6 +1154,7 @@ export default function Modeler() {
         onAddVertexChange={setAddVertex}
         onLightsChange={setLightingState}
         onEmptyTap={() => {
+          if (patternClosedByTouchRef.current) { patternClosedByTouchRef.current = false; return true; }
           if (freeTransformPanelOpen) {
             setFreeTransformPanelOpen(false);
             return true;

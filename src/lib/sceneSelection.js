@@ -101,6 +101,18 @@ export function applySceneSelection(SceneManager) {
     this.updateStats();
   };
 
+  // Compact description of what is selected, to tell whether a gesture
+  // changed the selection.
+  P.selectionKey = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+    const sel = this.selection || {};
+    return `${sel.meshId || ''}|${sel.type || ''}|${(sel.indices || []).join(',')}|${(this.selectedMeshIds || []).join(',')}`;
+  };
+
+  P.hasAnySelection = /** @this {import('./SceneManager.js').SceneManager} */ function () {
+    const sel = this.selection || {};
+    return (this.selectedMeshIds?.length || 0) > 0 || (!!sel.meshId && (sel.type === 'object' || (sel.indices?.length || 0) > 0));
+  };
+
   P.enterMultiSelect = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (this.extrudeDrag?.kind === 'edge') return;
     this.multiSelect = true;

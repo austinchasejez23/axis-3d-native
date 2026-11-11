@@ -11,6 +11,7 @@ export default function SelectionPatternPanel({ label, skip, offset, onChange, o
   const Icon = label === 'Select Ring' ? SelectRingIcon : SelectLoopIcon;
   const keypad = (name) => ({ keypadOpen: activeKeypad === name, onKeypadOpen: (open = true) => setActiveKeypad(open ? name : null) });
   return (
+    <div data-selection-pattern-panel className="contents">
     <ModelingPanel label={`${label} controls`} keypadOpen={!!activeKeypad}>
       <div className="py-2">
         <div className="mb-2 flex items-center gap-1.5">
@@ -35,5 +36,6 @@ export default function SelectionPatternPanel({ label, skip, offset, onChange, o
         </div>
       </div>
     </ModelingPanel>
+    </div>
   );
 }

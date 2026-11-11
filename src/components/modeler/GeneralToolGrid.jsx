@@ -23,6 +23,13 @@ export default function GeneralToolGrid({
   const referenceInputRef = useRef(null);
   const arrange = useToolArrange('general');
   useEffect(() => { arrange.clearSelected(); }, [clearSelectionToken]);
+  // Selecting something on the model closes this panel, unless the open tool
+  // works by selecting geometry (Protractor, Measure, Convert).
+  useEffect(() => {
+    const onSelect = () => { if (!(angleMode || measureMode || convertOpen)) onClose?.(); };
+    window.addEventListener('axis-user-selection', onSelect);
+    return () => window.removeEventListener('axis-user-selection', onSelect);
+  }, [angleMode, measureMode, convertOpen, onClose]);
   const run = (id, fn, close = true) => {
     onActivateTool?.(id);
     if (id !== 'multi') onExitMultiSelect?.();

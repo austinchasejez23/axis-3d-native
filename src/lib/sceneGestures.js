@@ -73,10 +73,26 @@ export function applySceneGestures(SceneManager) {
   P.setupEvents = /** @this {import("./SceneManager").SceneManager} */ function () {
     const el = this.renderer.domElement;
     el.style.touchAction = 'none';
-    el.addEventListener('pointerdown', (e) => this.onPointerDown(e));
+    // A selection made by touch (tap, toggle, paint or frame) is announced
+    // once every finger is up, so open panels can respond to it.
+    const touching = new Set();
+    el.addEventListener('pointerdown', (e) => {
+      if (e.isPrimary) touching.clear();
+      if (touching.size === 0) this._selectionAtGestureStart = this.selectionKey();
+      touching.add(e.pointerId);
+      this.onPointerDown(e);
+    });
     el.addEventListener('pointermove', (e) => this.onPointerMove(e));
-    el.addEventListener('pointerup', (e) => this.onPointerUp(e));
-    el.addEventListener('pointercancel', (e) => this.onPointerUp(e));
+    const release = (e) => {
+      this.onPointerUp(e);
+      if (!touching.delete(e.pointerId) || touching.size > 0) return;
+      const before = this._selectionAtGestureStart;
+      this._selectionAtGestureStart = null;
+      if (before == null || this.selectionKey() === before || !this.hasAnySelection()) return;
+      window.dispatchEvent(new CustomEvent('axis-user-selection'));
+    };
+    el.addEventListener('pointerup', release);
+    el.addEventListener('pointercancel', release);
     el.addEventListener('lostpointercapture', (e) => {
       if (this.cameraGesture) this.onPointerUp(e);
     });
@@ -1034,6 +1050,9 @@ export function applySceneGestures(SceneManager) {
         const tapHitsGeometry = this.raycastTap(e.clientX, e.clientY).length > 0;
         const panelHandled = !tapHitsGeometry && this.cb.onEmptyTap?.();
         if (panelHandled) {
+          // In multi-select a tap that selects nothing also ends multi-select,
+          // even when it closed a panel. Boolean picking keeps its objects.
+          if (this.multiSelect && !this.keepMultiSelectOnEmptyTap) { this.exitMultiSelect(); this.clearSelection(); }
           this.activeAction = 'idle';
           this.activeAxis = null;
           this.gesture = null;
@@ -1078,10 +1097,10 @@ export function applySceneGestures(SceneManager) {
           let hit = false;
           if (this.selectionMode === 'object') hit = this.toggleObjectAtScreenPoint(e.clientX, e.clientY);
           else hit = this.toggleSelectionAtScreenPoint(e.clientX, e.clientY);
-          // Only a tap on empty canvas ends multi-select and clears it. A tap
-          // on an object that finds nothing there to toggle leaves the
-          // selection as it is.
-          if (!hit && !tapHitsGeometry) { this.exitMultiSelect(); this.clearSelection(); }
+          // Any tap that selects or deselects nothing ends multi-select and
+          // clears it, on empty canvas or on a part of a model with nothing
+          // there to toggle.
+          if (!hit) { this.exitMultiSelect(); this.clearSelection(); }
           else if (hit && this.selectionMode === 'object') {
             this.selection = { meshId: this.selectedMeshIds[0] || null, type: 'object', indices: [] };
             this.updateHighlights();
