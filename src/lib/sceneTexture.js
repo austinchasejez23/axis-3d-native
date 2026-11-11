@@ -107,22 +107,71 @@ export function applySceneTexture(SceneManagerClass) {
     const ids = this.targetMeshIds();
     if (ids.length === 0) return false;
     if (recordUndo) this.pushUndo();
-    for (const id of ids) {
-      const mesh = this.getMesh(id);
-      if (!mesh) continue;
-      mesh.uvUnwrap = computeUnwrap(mesh, angle == null ? undefined : { angle });
-      mesh.uvMode = 'unwrap';
-      mesh.textureTransform = { ...(mesh.textureTransform || { rotation: 0 }), scale: 1 };
-      if (mesh.mapTexture) { mesh.mapTexture.repeat.set(1, 1); mesh.mapTexture.needsUpdate = true; }
-      this.rebuildThreeMesh(id);
-    }
+    for (const id of ids) this.unwrapMesh(id, { angle, recordUndo: false });
+    return true;
+  };
+  // Unwrap one object by id (the UV editor works on its object even while the
+  // view is in Edge mode for marking seams, when nothing is selected).
+  SceneManagerClass.prototype.unwrapMesh = function (meshId, { angle, recordUndo = true } = {}) {
+    const mesh = this.getMesh(meshId);
+    if (!mesh) return false;
+    if (recordUndo) this.pushUndo();
+    mesh.uvUnwrap = computeUnwrap(mesh, angle == null ? undefined : { angle });
+    mesh.uvMode = 'unwrap';
+    mesh.textureTransform = { ...(mesh.textureTransform || { rotation: 0 }), scale: 1 };
+    if (mesh.mapTexture) { mesh.mapTexture.repeat.set(1, 1); mesh.mapTexture.needsUpdate = true; }
+    this.rebuildThreeMesh(meshId);
     this._refreshSeamOverlay();
     this.updateHighlights();
     return true;
   };
 
-  // Show where the surface is cut open (red lines on the model) while the UV
-  // panel is open. Pass null to hide them.
+  // Mark an edge (index in mesh.getEdges()) as a seam, or clear it.
+  SceneManagerClass.prototype.toggleMeshSeam = function (meshId, edgeIndex) {
+    const mesh = this.getMesh(meshId);
+    const edge = mesh?.getEdges()[edgeIndex];
+    if (!edge) return false;
+    const key = (a, b) => (a < b ? `${a},${b}` : `${b},${a}`);
+    const k = key(edge.v1, edge.v2);
+    const seams = mesh.uvSeams || [];
+    mesh.uvSeams = seams.some((e) => key(e.v1, e.v2) === k)
+      ? seams.filter((e) => key(e.v1, e.v2) !== k)
+      : [...seams, { v1: edge.v1, v2: edge.v2 }];
+    this.editVersion = (this.editVersion || 0) + 1;
+    return true;
+  };
+
+  // Everything the UV editor changes, so its X can put it all back.
+  SceneManagerClass.prototype.captureUvState = function (meshId) {
+    const mesh = this.getMesh(meshId);
+    if (!mesh) return null;
+    return {
+      uvMode: mesh.uvMode,
+      uvSeams: (mesh.uvSeams || []).map((e) => ({ ...e })),
+      uvUnwrap: mesh.uvUnwrap ? { ...mesh.uvUnwrap, faces: mesh.uvUnwrap.faces.map((c) => c?.map((uv) => [...uv])), islands: mesh.uvUnwrap.islands.map((i) => [...i]) } : null,
+      textureTransform: { ...(mesh.textureTransform || {}) },
+    };
+  };
+  SceneManagerClass.prototype.restoreUvState = function (meshId, state) {
+    const mesh = this.getMesh(meshId);
+    if (!mesh || !state) return false;
+    mesh.uvMode = state.uvMode;
+    mesh.uvSeams = state.uvSeams.map((e) => ({ ...e }));
+    mesh.uvUnwrap = state.uvUnwrap;
+    mesh.textureTransform = { ...state.textureTransform };
+    if (mesh.mapTexture) {
+      const s = mesh.textureTransform.scale || 1;
+      mesh.mapTexture.repeat.set(s, s);
+      mesh.mapTexture.needsUpdate = true;
+    }
+    this.rebuildThreeMesh(meshId);
+    this._refreshSeamOverlay();
+    this.updateHighlights();
+    return true;
+  };
+
+  // Show where the surface is cut open while the UV panel is open: seams the
+  // user marked in red, cuts made by the cut angle in amber. Pass null to hide.
   SceneManagerClass.prototype.setSeamOverlay = function (meshId) {
     this._seamOverlayMeshId = meshId || null;
     this._refreshSeamOverlay();
@@ -138,16 +187,27 @@ export function applySceneTexture(SceneManagerClass) {
     const mesh = id ? this.getMesh(id) : null;
     const holder = id ? this.threeObjects?.get(id)?.mesh : null;
     if (!mesh || !holder) return;
-    const pairs = [...(mesh.uvUnwrap?.seams || []), ...(mesh.uvSeams || []).map((e) => [e.v1, e.v2])];
+    const key = (a, b) => (a < b ? `${a},${b}` : `${b},${a}`);
+    const marked = new Set((mesh.uvSeams || []).map((e) => key(e.v1, e.v2)));
+    const pairs = [
+      ...(mesh.uvSeams || []).map((e) => [e.v1, e.v2, true]),
+      ...(mesh.uvUnwrap?.seams || []).filter(([a, b]) => !marked.has(key(a, b))).map(([a, b]) => [a, b, false]),
+    ];
     const positions = [];
-    for (const [a, b] of pairs) {
+    const colors = [];
+    const red = new THREE.Color(0xff3b30), amber = new THREE.Color(0xffb020);
+    for (const [a, b, mine] of pairs) {
       const va = mesh.getVertex(a), vb = mesh.getVertex(b);
-      if (va && vb) positions.push(va.x, va.y, va.z, vb.x, vb.y, vb.z);
+      if (!va || !vb) continue;
+      positions.push(va.x, va.y, va.z, vb.x, vb.y, vb.z);
+      const c = mine ? red : amber;
+      colors.push(c.r, c.g, c.b, c.r, c.g, c.b);
     }
     if (!positions.length) return;
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    const lines = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: 0xff3b30, depthTest: false, transparent: true, toneMapped: false }));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    const lines = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false, transparent: true, toneMapped: false }));
     lines.renderOrder = 999;
     lines.raycast = () => {};
     holder.add(lines);

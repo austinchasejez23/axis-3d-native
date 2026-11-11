@@ -430,6 +430,13 @@ export function applySceneSelection(SceneManager) {
   P.selectAtScreenPoint = /** @this {import('./SceneManager.js').SceneManager} */ function (clientX, clientY) {
     const { x, y } = this.screenToNDC(clientX, clientY);
     const mode = this.selectionMode;
+    // A tool that takes edge taps itself (marking UV seams) gets the edge under
+    // the finger; nothing is selected or deselected.
+    if (this.edgeTapHandler) {
+      const hit = this.findClosestEdge(x, y);
+      if (hit) this.edgeTapHandler(hit);
+      return !!hit;
+    }
     // A live topology preview must be cancelled before a new edge is selected.
     // Re-run the edge hit after that callback because cancelling restores the
     // original mesh and therefore its original edge indices.

@@ -7,7 +7,7 @@ const OBJECT_TOOLS = new Set([
 const FACE_TOOLS = new Set(['detach', 'clone', 'extrude', 'delete']);
 const EDGE_TOOLS = new Set([
   'create_face_border', 'split', 'bevel', 'extrude',
-  'select_ring', 'select_loop', 'dissolve', 'seam', 'delete',
+  'select_ring', 'select_loop', 'dissolve', 'delete',
 ]);
 
 export function getToolRequirementNotice(manager, toolId) {

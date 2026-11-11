@@ -4,7 +4,6 @@ import { createPrimitive, createPrimitiveSegments } from './primitives';
 import { generateProjectId } from './storage';
 import { makeShadowFloor } from './shadowFloor';
 import { dissolveSelection, deleteVerticesKeepingGeometry } from './dissolveTools';
-import { toggleSeamsOnSelection } from './uvUnwrap';
 import { toggleSmoothShading, separateMesh as separateMeshTool, createFaceFromVertices, targetMergeVertices, connectVertices, detachFaces, cloneFaces, splitEdge, bevelEdge, selectLoop, selectRing, createFaceFromBorder } from './meshTools';
 import { theme } from './theme';
 import { createMaterial as buildMaterial, applyShadows as applyShadowsFn, applyShine as applyShineFn, applyWireframe as applyWireframeFn, updateObjectMaterial as updateObjectMaterialFn } from './materials';
@@ -1847,7 +1846,6 @@ export class SceneManager {
       case 'add_vertex': this.clearSelection(); this.enterAddVertexMode(); break;
       case 'bevel': bevelEdge(this); break;
       case 'dissolve': dissolveSelection(this); break;
-      case 'seam': toggleSeamsOnSelection(this); break;
       case 'select_loop': selectLoop(this, options); break;
       case 'select_ring': selectRing(this, options); break;
       case 'create_face_border': createFaceFromBorder(this); break;

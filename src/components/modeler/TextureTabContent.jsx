@@ -109,7 +109,7 @@ export default function TextureTabContent({ meshId, managerRef, opacity, onOpaci
           <UVEditor
             meshId={meshId}
             managerRef={managerRef}
-            onChange={() => { setUvMode('unwrap'); setScale(1); onChange?.(); }}
+            onChange={(state) => { if (state) { setUvMode(state.uvMode); setScale(state.scale); } onChange?.(); }}
             onClose={() => setEditorOpen(false)}
           />
         )}

@@ -84,19 +84,39 @@ export const DEFAULT_LAYOUTS = {
   ],
   face: [
     ...stack(),
-    ['dissolve', null, null, null, null, null],
+    [null, null, null, null, null, 'dissolve'],
     ['bridge', 'draw_face', 'detach', 'clone', 'extrude', 'delete'],
   ],
   edge: [
     ...stack(),
-    ['split', 'select_ring', 'draw_cut', 'bridge', 'dissolve', 'seam'],
+    ['split', 'select_ring', 'draw_cut', 'bridge', null, 'dissolve'],
     ['cut_loop', 'select_loop', 'create_face_border', 'extrude', 'bevel', 'delete'],
   ],
   vertex: [
     ...stack(),
-    ['bevel', 'dissolve', null, null, null, null],
+    ['bevel', null, null, null, null, 'dissolve'],
     ['add_vertex', 'create_face', 'connect', 'target_merge', 'merge', 'delete'],
   ],
+};
+
+// Earlier defaults that are moved to the current default when a saved grid is
+// still exactly one of them (nothing rearranged by the user).
+const EARLIER_DEFAULTS = {
+  face: [[
+    ...stack(),
+    ['dissolve', null, null, null, null, null],
+    ['bridge', 'draw_face', 'detach', 'clone', 'extrude', 'delete'],
+  ]],
+  edge: [[
+    ...stack(),
+    ['split', 'select_ring', 'draw_cut', 'bridge', 'dissolve', null],
+    ['cut_loop', 'select_loop', 'create_face_border', 'extrude', 'bevel', 'delete'],
+  ]],
+  vertex: [[
+    ...stack(),
+    ['bevel', 'dissolve', null, null, null, null],
+    ['add_vertex', 'create_face', 'connect', 'target_merge', 'merge', 'delete'],
+  ]],
 };
 
 const DEFAULT_HIDDEN = {
@@ -193,12 +213,20 @@ export function loadToolLayout(mode) {
       const openRow = rows.find((row) => row.some((cell) => cell === null));
       if (openRow) openRow[openRow.indexOf(null)] = 'bridge';
     }
+    // The Seam tool moved into the UV editor: its old slot becomes free.
+    if (mode === 'edge' && Array.isArray(rows)) {
+      for (const row of rows) for (let c = 0; c < row.length; c++) if (row[c] === 'seam') row[c] = null;
+    }
     const previousShape = JSON.stringify(rows);
     if (mode === 'face' || mode === 'edge' || mode === 'vertex') placeMissing(rows, mode, 'dissolve');
     if (mode === 'vertex') placeMissing(rows, mode, 'bevel');
-    if (mode === 'edge') placeMissing(rows, mode, 'seam');
     if (matchesDefault(rows, mode)) {
       const hidden = Array.isArray(all[mode].hidden) ? all[mode].hidden.filter((id) => allIds(rows).includes(id)) : [];
+      const defaultHidden = [...(DEFAULT_HIDDEN[mode] || [])].sort();
+      if ((EARLIER_DEFAULTS[mode] || []).some((earlier) => JSON.stringify(rows) === JSON.stringify(earlier))
+        && JSON.stringify([...hidden].sort()) === JSON.stringify(defaultHidden)) {
+        return { rows: DEFAULT_LAYOUTS[mode], hidden: [...(DEFAULT_HIDDEN[mode] || [])] };
+      }
       // Upgrade untouched defaults only; keep manually customized layouts.
       if (PREVIOUS_LAYOUTS[mode] && previousShape === JSON.stringify(widenStack(PREVIOUS_LAYOUTS[mode]))
         && (hidden.length === 0 || JSON.stringify([...hidden].sort()) === JSON.stringify([...PREVIOUS_HIDDEN[mode]].sort()))) {

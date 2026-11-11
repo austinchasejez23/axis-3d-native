@@ -531,30 +531,3 @@ export function islandBounds(data, islandIndex) {
   }
   return { minU, minV, maxU, maxV, cu: (minU + maxU) / 2, cv: (minV + maxV) / 2 };
 }
-
-// Mark the selected edges as seams, or clear them when they all already are.
-export function toggleSeamsOnSelection(sm) {
-  sm.toolNotice = null;
-  const sel = sm.selection;
-  const mesh = sm.getMesh?.(sel?.meshId);
-  if (!mesh || sel.type !== 'edge' || !sel.indices?.length) { sm.toolNotice = 'Select one or more edges to mark as a seam'; return false; }
-  const edges = mesh.getEdges();
-  const pairs = sel.indices.map((i) => edges[i]).filter(Boolean).map((e) => [e.v1, e.v2]);
-  if (!pairs.length) { sm.toolNotice = 'Select one or more edges to mark as a seam'; return false; }
-  const snapshot = sm.captureSnapshot();
-  const current = new Set((mesh.uvSeams || []).map((e) => edgeKey(e.v1, e.v2)));
-  const allSeams = pairs.every(([a, b]) => current.has(edgeKey(a, b)));
-  if (allSeams) {
-    const drop = new Set(pairs.map(([a, b]) => edgeKey(a, b)));
-    mesh.uvSeams = (mesh.uvSeams || []).filter((e) => !drop.has(edgeKey(e.v1, e.v2)));
-  } else {
-    mesh.uvSeams = [...(mesh.uvSeams || [])];
-    for (const [a, b] of pairs) if (!current.has(edgeKey(a, b))) mesh.uvSeams.push({ v1: a, v2: b });
-  }
-  sm.pushUndoSnapshot(snapshot);
-  sm.editVersion = (sm.editVersion || 0) + 1;
-  sm.toolNotice = allSeams
-    ? 'Seam cleared'
-    : `${mesh.uvSeams.length} seam edge${mesh.uvSeams.length === 1 ? '' : 's'} marked. Unwrap in the Texture tab uses them.`;
-  return true;
-}

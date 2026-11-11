@@ -1,7 +1,7 @@
 import {
   Globe, Scan, Move3D, Magnet, Crosshair, ImagePlus, Palette, Hand, ArrowLeftRight, EyeOff, Grid3x3,
   PaintBucket, Paintbrush, SprayCan, Blend, Pipette, Check, Undo2, Ban, Plus, SlidersHorizontal,
-  Sun, Spline, RotateCcw, Image, FlipHorizontal2, Box,
+  Sun, Spline, RotateCcw, Image, FlipHorizontal2, Box, LayoutGrid,
 } from 'lucide-react';
 import { ProtractorIcon, MeasureIcon } from '@/lib/toolIcons';
 import ResistanceIcon from '@/components/modeler/ResistanceIcon';
@@ -69,6 +69,7 @@ export const HELP_MATERIALS = [
       { key: 'texture:merge', label: 'Merge', icon: Blend, desc: 'Blends the texture with the object\'s color.' },
       { key: 'texture:seamless', label: 'Seamless', icon: FlipHorizontal2, desc: 'Mirrors the texture at its edges so repeats show no seams.' },
       { key: 'texture:wrap', label: 'Wrap', icon: Box, desc: 'Chooses how the texture projects onto the object: Box, Planar, Cylinder or Sphere.' },
+      { key: 'texture:uv', label: 'UV', icon: LayoutGrid, desc: 'Opens the UV Editor: the object\'s surface laid flat on the image. Drag a piece to move it, twist to turn it, pinch to resize it. Seams lets you tap edges on the model to cut along; Cut angle cuts sharp edges. Unwrap starts the layout again, Pack fits the pieces back into the square, Flip mirrors the selected piece.' },
       { key: 'texture:apply', label: 'Apply', icon: Check, desc: 'Keeps the texture changes.' },
       { key: 'texture:sliders', label: 'Texture sliders', icon: SlidersHorizontal, desc: 'Scale, Rotation and Opacity adjust the texture.' },
     ],
@@ -127,7 +128,6 @@ const desc = {
     select_loop: `Selects a continuous loop of edges. ${SP}: skip and offset.`,
     cut_loop: `Adds an edge loop around the object. ${SP}: cut, center, straight and follow.`,
     dissolve: 'Removes the selected edges and merges the faces on either side of each into one face.',
-    seam: 'Marks the selected edges as UV seams, where Unwrap cuts the surface open. Tap again on seam edges to clear them.',
     delete: 'Deletes the selected edges.',
   },
   vertex: {
