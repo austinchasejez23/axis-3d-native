@@ -393,6 +393,8 @@ export function applySceneGestures(SceneManager) {
       this.pressHoldTimer = setTimeout(() => {
         if (!this.movedSignificantly && this.pointers.size === 1) {
           if (this.surfaceMode && this.surfaceSection === 'texture') return;
+          // No multi-select (or selection frame) while a Boolean panel is open.
+          if (this.multiSelectBlocked) return;
           if (onGeometry) {
             this.enterMultiSelect();
             if (this.selectionMode === 'object') {
@@ -1051,8 +1053,8 @@ export function applySceneGestures(SceneManager) {
         const panelHandled = !tapHitsGeometry && this.cb.onEmptyTap?.();
         if (panelHandled) {
           // In multi-select a tap that selects nothing also ends multi-select,
-          // even when it closed a panel. Boolean picking keeps its objects.
-          if (this.multiSelect && !this.keepMultiSelectOnEmptyTap) { this.exitMultiSelect(); this.clearSelection(); }
+          // even when it closed a panel.
+          if (this.multiSelect) { this.exitMultiSelect(); this.clearSelection(); }
           this.activeAction = 'idle';
           this.activeAxis = null;
           this.gesture = null;

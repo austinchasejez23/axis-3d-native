@@ -115,6 +115,7 @@ export function applySceneSelection(SceneManager) {
 
   P.enterMultiSelect = /** @this {import('./SceneManager.js').SceneManager} */ function () {
     if (this.extrudeDrag?.kind === 'edge') return;
+    if (this.multiSelectBlocked) return;
     this.multiSelect = true;
     this.cb.onMultiSelectChange?.(true);
     this.updateStats();
