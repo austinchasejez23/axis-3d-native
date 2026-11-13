@@ -234,6 +234,38 @@ export function applySceneTexture(SceneManagerClass) {
   };
   SceneManagerClass.prototype.beginUnwrapEdit = function () { this.pushUndo(); };
 
+  // UV editor, while a piece is dragged: write the layout's UVs straight into
+  // the shown geometry instead of rebuilding it. The corners go in the same
+  // order the geometry builder uses; if the sizes do not line up it rebuilds.
+  SceneManagerClass.prototype.previewUnwrapData = function (meshId, data) {
+    const mesh = this.getMesh(meshId);
+    if (!mesh || !data) return false;
+    mesh.uvUnwrap = data;
+    mesh.uvMode = 'unwrap';
+    const obj = this.threeObjects?.get(meshId);
+    const attr = !obj?.focusProxyGeometry ? obj?.mesh?.geometry?.getAttribute?.('uv') : null;
+    if (attr && data.faceCount === mesh.faces.length) {
+      const out = attr.array;
+      let k = 0;
+      let fits = true;
+      for (let fi = 0; fi < mesh.faces.length && fits; fi++) {
+        const corners = data.faces[fi];
+        for (const tri of mesh.getFaceTriangleIndices(fi)) {
+          for (const vi of tri) {
+            if (k + 2 > out.length) { fits = false; break; }
+            const uv = corners?.[vi] || [0, 0];
+            out[k++] = uv[0];
+            out[k++] = uv[1];
+          }
+          if (!fits) break;
+        }
+      }
+      if (fits && k === out.length) { attr.needsUpdate = true; return true; }
+    }
+    this.rebuildThreeMesh(meshId);
+    return true;
+  };
+
   SceneManagerClass.prototype.setTextureScale = function (meshId, scale) {
     const mesh = this.getMesh(meshId);
     if (!mesh) return;

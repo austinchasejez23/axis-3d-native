@@ -16,11 +16,12 @@ const pairKey = (a, b) => JSON.stringify([a, b].map((mesh) => [
   mesh.id, mesh.position, mesh.rotation, mesh.scale, mesh.vertices.length, mesh.faces.length,
 ]));
 
-// Subtract / Union / Intersect: header with the tool's icon and name, Cancel
-// (X) and Done (check). Below it two boxes, one per object, each with an
-// Add button that assigns the selected object (Remove once assigned), and
-// between them the button that runs the operation. Buttons stay grey until
-// they can be used; a grey button explains what it needs.
+// Subtract / Union / Intersect, laid out like the other modeling panels:
+// header with the tool's icon and name, the button that runs the operation,
+// Cancel (X) and Done (check); below it one box split in two, one side per
+// object, each with an Add button that assigns the selected object (Remove
+// once assigned). Buttons stay grey until they can be used; a grey button
+// explains what it needs.
 export default function BooleanPanel({ operation, managerRef, onPrompt, onApply, onUndoApply, onAppliedChange, onDone, onCancel }) {
   const { uiColor, highlightColor } = useTheme();
   const { label, Icon, roles } = BOOLEAN_OPERATIONS[operation] || BOOLEAN_OPERATIONS.union;
@@ -108,11 +109,11 @@ export default function BooleanPanel({ operation, managerRef, onPrompt, onApply,
   const buttonStyle = (active) => (active
     ? { color: highlightColor, borderColor: highlightColor }
     : { color: uiColor, opacity: 0.4 });
-  const slotBox = (i) => {
+  const slotColumn = (i) => {
     const assigned = !!slots[i];
     return (
-      <div className="modeling-value flex min-w-0 flex-1 flex-col items-center gap-2 rounded-lg px-2 py-2">
-        <p className="w-full truncate text-center text-[12px] font-semibold leading-snug" style={{ color: uiColor }}>{roles[i]}</p>
+      <div className={i === 0 ? 'min-w-0 border-r border-white/15 pr-4' : 'min-w-0 pl-4'}>
+        <div className="mb-1 truncate text-[12px] font-semibold" style={{ color: uiColor }}>{roles[i]}</div>
         <button type="button" onClick={() => onSlot(i)} aria-label={`${assigned ? 'Remove' : 'Add'} ${roles[i].toLowerCase()}`} className="modeling-value flex h-8 w-full items-center justify-center rounded-lg text-[13px] font-semibold active:scale-95" style={buttonStyle(assigned || canAdd(i))}>
           {assigned ? 'Remove' : 'Add'}
         </button>
@@ -128,19 +129,15 @@ export default function BooleanPanel({ operation, managerRef, onPrompt, onApply,
             <Icon className="h-5 w-5 shrink-0" strokeWidth={1.75} />
             <h2 className="text-[16px] font-bold tracking-tight leading-none">{label}</h2>
           </div>
+          <button type="button" onClick={onRun} aria-label={label} className="modeling-value flex h-8 min-w-[3.75rem] shrink-0 items-center justify-center rounded-lg px-2 text-[13px] font-semibold active:scale-95" style={buttonStyle(ready)}>{label}</button>
           <div className="ml-2 flex shrink-0 items-center gap-3">
             <button type="button" onClick={onCancel} aria-label={`Cancel ${label.toLowerCase()}`} className="modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95" style={{ color: uiColor }}><X className="h-6 w-6" strokeWidth={2.5} /></button>
             <button type="button" onClick={onDone} aria-label={`Close ${label.toLowerCase()}`} className="modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95" style={{ color: highlightColor, borderColor: highlightColor }}><Check className="h-6 w-6" strokeWidth={2.5} /></button>
           </div>
         </div>
-        <div className="flex items-stretch gap-2">
-          {slotBox(0)}
-          <div className="flex shrink-0 items-center">
-            <button type="button" onClick={onRun} aria-label={label} className="modeling-value flex h-8 items-center justify-center rounded-lg px-3 text-[13px] font-semibold active:scale-95" style={buttonStyle(ready)}>
-              {label}
-            </button>
-          </div>
-          {slotBox(1)}
+        <div className="modeling-value grid grid-cols-2 rounded-lg px-2 py-2">
+          {slotColumn(0)}
+          {slotColumn(1)}
         </div>
       </div>
     </ModelingPanel>

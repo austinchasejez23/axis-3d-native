@@ -7,13 +7,16 @@ import LoopingScroller from './LoopingScroller';
 const SurfaceSliderRow = forwardRef(/** @param {import('react').PropsWithChildren<{ fit?: boolean, compact?: boolean, scrollPadTop?: boolean }>} props */ function SurfaceSliderRow({ children, fit = false, compact = false, scrollPadTop = false }, outerRef) {
   const loopRef = useRef(null);
   useImperativeHandle(outerRef, () => ({ goTo: (i) => loopRef.current?.goTo(i) }), []);
+  // With scrollPadTop the strip has extra room above the labels to swipe on.
+  // It reaches 8px further up into the space above it (a negative top margin)
+  // so nothing above it moves.
   const spacing = compact
     ? 'py-1 [&_input]:!h-7'
     : scrollPadTop
-      ? 'pt-4 pb-0 [&_input]:!h-8'
+      ? 'pt-6 pb-0 [&_input]:!h-8'
       : 'py-2 [&_input]:!h-8';
   return (
-    <div className="relative mt-1.5 rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)' }}>
+    <div className={`relative ${scrollPadTop ? '-mt-0.5' : 'mt-1.5'} rounded-xl overflow-hidden`} style={{ background: 'rgba(255,255,255,0.04)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)' }}>
       {fit ? (
         <div className={`flex items-end px-1 ${spacing} w-full [&>*]:px-3 [&>*+*]:border-l [&>*+*]:border-white/10`}>
           {children}

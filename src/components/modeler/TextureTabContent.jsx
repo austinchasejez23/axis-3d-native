@@ -8,13 +8,13 @@ import SurfaceSliderRow from './SurfaceSliderRow';
 import InlineSlider from './InlineSlider';
 import WrapModePicker from './WrapModePicker';
 import SheetActionButton from './SheetActionButton';
-import UVEditor from './UVEditor';
+import { notifyUnavailable } from '@/lib/unavailable';
 
 // Texture tab, top to bottom: None, Add (upload) and every texture preset as
 // round thumbnails; Merge, Seamless, Wrap, UV and Apply; then Scale / Rotation /
 // Opacity sliders along the bottom of the sheet. `onChange` tells the sheet
 // something changed, so Apply and the checkmark know there is work to keep.
-export default function TextureTabContent({ meshId, managerRef, opacity, onOpacity, onChange, onApply, canApply }) {
+export default function TextureTabContent({ meshId, managerRef, opacity, onOpacity, onChange, onApply, canApply, onOpenUv, refreshToken }) {
   const { highlightColor } = useTheme();
   const fileInputRef = useRef(null);
   const [scale, setScale] = useState(0.25);
@@ -24,7 +24,6 @@ export default function TextureTabContent({ meshId, managerRef, opacity, onOpaci
   const [uvMode, setUvMode] = useState('box');
   const [wrapOpen, setWrapOpen] = useState(false);
   const [activeUrl, setActiveUrl] = useState(null);
-  const [editorOpen, setEditorOpen] = useState(false);
 
   useEffect(() => {
     const mesh = managerRef.current?.getMesh(meshId);
@@ -34,7 +33,17 @@ export default function TextureTabContent({ meshId, managerRef, opacity, onOpaci
     setMirror(!!t?.mirror);
     setMergeColor(!!mesh?.textureMergeColor);
     setUvMode(mesh?.uvMode || 'box');
-  }, [meshId, managerRef]);
+  }, [meshId, managerRef, refreshToken]);
+
+  // The UV editor only changes how a texture sits on the object, so it opens
+  // once the object has one.
+  const openUv = () => {
+    const mesh = managerRef.current?.getMesh(meshId);
+    if (!mesh) { notifyUnavailable('Select an object first'); return; }
+    if (!mesh.mapTexture) { notifyUnavailable('Add a texture to edit UVs'); return; }
+    setWrapOpen(false);
+    onOpenUv?.();
+  };
 
   const applyScale = (v) => { setScale(v); managerRef.current?.setTextureScale(meshId, v); onChange?.(); };
   const applyRotation = (deg) => { setRotation(deg); managerRef.current?.setTextureRotation(meshId, (deg * Math.PI) / 180); onChange?.(); };
@@ -95,7 +104,7 @@ export default function TextureTabContent({ meshId, managerRef, opacity, onOpaci
         {chip('Merge', mergeColor, applyMerge)}
         {chip('Seamless', mirror, applyMirror)}
         {chip('Wrap', wrapOpen, () => setWrapOpen((v) => !v))}
-        {chip('UV', editorOpen, () => { setWrapOpen(false); setEditorOpen((v) => !v); })}
+        {chip('UV', false, openUv)}
         <SheetActionButton label="Apply" ariaLabel="Apply texture changes" onClick={onApply} disabled={!canApply} disabledReason="Select an object to apply the texture to" primary />
         {wrapOpen && (
           <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 z-10">
@@ -104,14 +113,6 @@ export default function TextureTabContent({ meshId, managerRef, opacity, onOpaci
               onMode={(m) => { applyUvMode(m); setWrapOpen(false); }}
             />
           </div>
-        )}
-        {editorOpen && (
-          <UVEditor
-            meshId={meshId}
-            managerRef={managerRef}
-            onChange={(state) => { if (state) { setUvMode(state.uvMode); setScale(state.scale); } onChange?.(); }}
-            onClose={() => setEditorOpen(false)}
-          />
         )}
       </div>
       <SurfaceSliderRow scrollPadTop>

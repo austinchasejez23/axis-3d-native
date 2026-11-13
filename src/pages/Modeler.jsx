@@ -23,6 +23,7 @@ import BevelPanel from '@/components/modeler/BevelPanel';
 import BooleanPanel from '@/components/modeler/BooleanPanel';
 import { applyBooleanPair } from '@/lib/booleanTools';
 import ModelLoading from '@/components/modeler/ModelLoading';
+import LogoLoader from '@/components/LogoLoader';
 import RadialArrayPanel from '@/components/modeler/RadialArrayPanel';
 import FreeTransformPanel from '@/components/modeler/FreeTransformPanel';
 import SnapPanel from '@/components/modeler/SnapPanel';
@@ -1674,11 +1675,8 @@ export default function Modeler() {
 
 
       {(importing || addingReference) && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: 'rgba(10,10,12,0.88)' }}>
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            <span className="text-sm font-medium text-white">{addingReference ? 'Adding reference…' : 'Importing…'}</span>
-          </div>
+        <div role="status" className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <LogoLoader label={addingReference ? 'Adding reference…' : 'Importing…'} />
         </div>
       )}
 

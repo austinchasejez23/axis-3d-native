@@ -6,6 +6,7 @@ import SurfaceSheetHeader from './SurfaceSheetHeader';
 import ColorTabContent from './ColorTabContent';
 import MaterialTabContent from './MaterialTabContent';
 import TextureTabContent from './TextureTabContent';
+import UVEditor from './UVEditor';
 
 // Legacy preset PBR values: only used to read initial slider values from
 // objects that had a preset applied before presets were removed.
@@ -300,6 +301,10 @@ export default function MaterialsPanel({
   // Eyedropper: armed from the paint tool row; the next tap on the model takes
   // that spot's color (as if picked on the wheel) and the eyedropper turns off.
   const [eyedropper, setEyedropper] = useState(false);
+  // The UV editor takes the sheet's place while open (Texture stays mounted
+  // under it, and re-reads the object when the editor closes).
+  const [uvOpen, setUvOpen] = useState(false);
+  const [textureRefresh, setTextureRefresh] = useState(0);
   const pickRef = useRef(null);
   pickRef.current = (hex) => { setActiveColor(hex); setEyedropper(false); };
   useEffect(() => {
@@ -324,6 +329,17 @@ export default function MaterialsPanel({
       {/* The sheet sits directly above the main bottom bar. */}
       <div data-surface-rows className="absolute left-0 right-0 bottom-[3.75rem] safe-bottom pointer-events-auto px-1.5">
         <div className="modeling-sheet rounded-2xl">
+          {uvOpen && (
+            <UVEditor
+              meshId={meshId}
+              managerRef={managerRef}
+              onChange={markDirty}
+              onBack={() => { setUvOpen(false); setTextureRefresh((n) => n + 1); }}
+              onCancelAll={() => { setUvOpen(false); closeAll(); }}
+              onApplyAll={() => { setUvOpen(false); applyAndClose(); }}
+            />
+          )}
+          <div className={uvOpen ? 'hidden' : undefined}>
           <SurfaceSheetHeader
             tab={tab}
             onTab={goTab}
@@ -389,8 +405,11 @@ export default function MaterialsPanel({
                 onChange={markDirty}
                 onApply={keepSurfaceChanges}
                 canApply={canApply}
+                onOpenUv={() => setUvOpen(true)}
+                refreshToken={textureRefresh}
               />
             )}
+          </div>
           </div>
         </div>
       </div>

@@ -401,31 +401,21 @@ export class SceneManager {
     const projectedTriangles = this.meshes.reduce((sum, item) => sum + item.getTriangleCount(), 0) + mesh.getTriangleCount();
     if (this.triangleLimit && projectedTriangles > this.triangleLimit) { this.cb.onTriangleLimit?.(); return null; }
     // The first primitive retains its factory geometry, size, and original
-    // grid placement. Only subsequently added primitives are camera-centered
-    // and uniformly sized relative to the existing model.
+    // grid placement. Later primitives are centred on the view.
     if (this.meshes.length === 0) {
       let minY = Infinity;
       for (const v of mesh.vertices) if (v.y < minY) minY = v.y;
       if (Number.isFinite(minY)) mesh.position.y = -minY * (mesh.scale.y || 1);
     } else {
-      const bounds = new THREE.Box3();
-      for (const existing of this.meshes) {
-        if (!existing.visible) continue;
-        const world = this.getWorldMatrix(existing);
-        for (const vertex of existing.vertices) {
-          bounds.expandByPoint(new THREE.Vector3(vertex.x, vertex.y, vertex.z).applyMatrix4(world));
-        }
-      }
       const primitiveBounds = new THREE.Box3();
       for (const vertex of mesh.vertices) primitiveBounds.expandByPoint(new THREE.Vector3(vertex.x, vertex.y, vertex.z));
       const size = primitiveBounds.getSize(new THREE.Vector3());
       const longest = Math.max(size.x, size.y, size.z, 1e-6);
-      const existingSize = bounds.getSize(new THREE.Vector3());
-      const modelLongest = Math.max(existingSize.x, existingSize.y, existingSize.z);
-      // A new part starts at 25% of the model's longest dimension.
-      // Never enlarge the factory primitive, and cap its screen footprint.
+      // A new part starts at its factory size, like the first object, kept
+      // between 15% and 50% of the view's height so it is never tiny on
+      // screen and never fills it.
       const visibleHeight = 2 * Math.max(0.1, this.cameraDist) * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
-      const targetSize = Math.min(modelLongest > 1e-6 ? modelLongest * 0.25 : longest, longest, visibleHeight * 0.25);
+      const targetSize = THREE.MathUtils.clamp(longest, visibleHeight * 0.15, visibleHeight * 0.5);
       const scale = Math.max(0.0001, targetSize / longest);
       mesh.scale.setScalar(scale);
       const center = primitiveBounds.getCenter(new THREE.Vector3()).multiplyScalar(scale);

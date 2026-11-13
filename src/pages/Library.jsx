@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Search, Loader2, Cloud } from 'lucide-react';
+import { ArrowLeft, Search, Cloud } from 'lucide-react';
+import LogoLoader from '@/components/LogoLoader';
 import usePullToRefresh from '@/hooks/use-pull-to-refresh';
 import { toast } from 'sonner';
 import { listProjects } from '@/lib/storage';
@@ -64,9 +65,11 @@ export default function Library() {
         className="absolute top-0 left-0 right-0 z-20 flex justify-center pointer-events-none overflow-hidden"
         style={{ height: pull, opacity: pull > 0 ? 1 : 0 }}
       >
-        <Loader2
-          className={`w-6 h-6 mt-2 ${refreshing ? 'animate-spin' : ''}`}
-          style={{ color: highlightColor, transform: refreshing ? undefined : `rotate(${pull * 4}deg)` }}
+        <LogoLoader
+          width={48}
+          spinning={refreshing}
+          className="mt-2"
+          style={{ transform: refreshing ? undefined : `rotate(${pull * 4}deg)` }}
         />
       </div>
       <div className="fixed inset-0 z-0 pointer-events-none opacity-25">

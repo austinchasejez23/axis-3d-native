@@ -71,6 +71,8 @@ export default function ColorTabContent({
           <ColorSwatchGrid color={color} onChange={onChange} />
         </div>
       </div>
+      {/* The slider strip sits at the bottom, where Material and Texture have theirs. */}
+      {showSliders && <div className="min-h-0 flex-1" />}
       {showSliders && (
         <SurfaceSliderRow scrollPadTop>
           <InlineSlider label="Size" value={size} min={4} max={100} onChange={onSize} onActiveChange={onSizeActive} disabled={!strokeActive} disabledReason={strokeReason} />

@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { Check, X, Scissors, LayoutGrid, FlipHorizontal2, Grid2X2 } from 'lucide-react';
+import { Check, X, ChevronLeft } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
-import { SeamIcon } from '@/lib/toolIcons';
+import { blockedButton } from '@/lib/unavailable';
 import { transformIsland, islandBounds, repackLayout, DEFAULT_CUT_ANGLE, NO_CUT_ANGLE } from '@/lib/uvUnwrap';
 import InlineSlider from './InlineSlider';
 
@@ -15,70 +14,82 @@ function insidePolygon(point, corners) {
   return inside;
 }
 
-// The outline of each piece: the edges only one of its faces uses.
-function outlineOf(data, faces) {
-  const count = new Map();
-  const k = ([u1, v1], [u2, v2]) => {
-    const a = `${u1.toFixed(4)},${v1.toFixed(4)}`, b = `${u2.toFixed(4)},${v2.toFixed(4)}`;
-    return a < b ? `${a}|${b}` : `${b}|${a}`;
-  };
-  for (const fi of faces) {
-    const c = data.faces[fi];
-    if (!c) continue;
-    for (let i = 0; i < c.length; i++) {
-      const key = k(c[i], c[(i + 1) % c.length]);
-      const item = count.get(key);
-      if (item) item.n++; else count.set(key, { n: 1, a: c[i], b: c[(i + 1) % c.length] });
+// The outline of each piece: the face sides only one of its faces uses, kept
+// as [face, corner, corner] so it can be redrawn after the piece moves
+// without working it out again (moving a piece never changes its outline).
+function outlinesOf(data) {
+  return data.islands.map((faces) => {
+    const count = new Map();
+    const k = ([u1, v1], [u2, v2]) => {
+      const a = `${u1.toFixed(4)},${v1.toFixed(4)}`, b = `${u2.toFixed(4)},${v2.toFixed(4)}`;
+      return a < b ? `${a}|${b}` : `${b}|${a}`;
+    };
+    for (const fi of faces) {
+      const c = data.faces[fi];
+      if (!c) continue;
+      for (let i = 0; i < c.length; i++) {
+        const key = k(c[i], c[(i + 1) % c.length]);
+        const item = count.get(key);
+        if (item) item.n++; else count.set(key, { n: 1, side: [fi, i, (i + 1) % c.length] });
+      }
     }
-  }
-  return [...count.values()].filter((e) => e.n === 1);
+    return [...count.values()].filter((e) => e.n === 1).map((e) => e.side);
+  });
 }
 
 const HINTS = {
   pieces: 'Drag a piece to move it. Twist to turn, pinch to resize.',
   seams: 'Tap edges on the model to mark or clear seams.',
 };
+// How often the model follows a piece while it is being dragged.
+const PREVIEW_MS = 60;
 
-// UV Editor: the object's surface laid flat on the image square.
-//  - Pieces: one finger drags a piece along one direction; two fingers twist
-//    to turn it or pinch to resize it. Each gesture does only what it starts as.
-//  - Seams: switches the view to Edge mode while on; tapping an edge on the
-//    model marks or clears a seam (red) and the layout updates. Cut angle also
-//    cuts every edge sharper than it (amber).
-//  - Unwrap starts the layout again, Pack fits the pieces back into the square,
-//    Flip mirrors the selected piece.
-//  - X puts everything back as it was when the editor opened; ✓ keeps it.
-export default function UVEditor({ meshId: openedFor, managerRef, onChange, onClose }) {
+// UV Editor, shown in the surface sheet in place of the Texture tab.
+//  - Header like the sheet's: Back returns to the Texture tab keeping the
+//    changes, X puts the UVs back and closes everything, ✓ keeps them and
+//    closes everything.
+//  - The layout: one finger drags a piece along one direction; two fingers
+//    twist to turn it or pinch to resize it. Each gesture does only what it
+//    starts as.
+//  - Seams switches the view to Edge mode while on; tapping an edge on the
+//    model marks or clears a seam (red). Cut angle also cuts every edge
+//    sharper than it (amber).
+//  - Unwrap starts the layout again, Pack fits the pieces back into the
+//    square, Flip mirrors the selected piece, Undo takes back the last UV
+//    change only.
+export default function UVEditor({ meshId: openedFor, managerRef, onChange, onBack, onCancelAll, onApplyAll }) {
   const { uiColor, highlightColor } = useTheme();
   // The object the editor works on: fixed when it opens, so marking seams in
   // Edge mode (where nothing stays selected) never loses it.
   const [meshId] = useState(openedFor);
   const canvasRef = useRef(null);
-  const [data, setData] = useState(() => managerRef.current?.getUnwrapData(meshId) || null);
-  const [selected, setSelected] = useState(0);
+  const [hasLayout, setHasLayout] = useState(() => !!managerRef.current?.getUnwrapData(meshId));
   const [seamMode, setSeamMode] = useState(false);
   const [angle, setAngle] = useState(() => {
     const a = managerRef.current?.getUnwrapData(meshId)?.angle;
     return a == null ? DEFAULT_CUT_ANGLE : a;
   });
+  const [canUndo, setCanUndo] = useState(false);
   const angleRef = useRef(angle);
   angleRef.current = angle;
-  const dataRef = useRef(data);
-  dataRef.current = data;
+  // The layout and its outlines live in refs and are drawn straight onto the
+  // canvas, so dragging a piece does not re-render the panel.
+  const dataRef = useRef(managerRef.current?.getUnwrapData(meshId) || null);
+  const outlinesRef = useRef(dataRef.current ? outlinesOf(dataRef.current) : []);
+  const selectedRef = useRef(0);
+  const history = useRef([]);
   const opening = useRef(null);
   const undoEntry = useRef(null);
   const pointers = useRef(new Map());
   const gesture = useRef(null);
-  const frame = useRef(0);
-  const pending = useRef(null);
-  const timer = useRef(0);
-  const size = useMemo(() => Math.round(Math.min(window.innerWidth * 0.62, window.innerHeight * 0.32)), []);
+  const drawFrame = useRef(0);
+  const preview = useRef({ timer: 0, last: 0 });
+  const angleTimer = useRef(0);
+  // The square fits beside the buttons and the Cut angle slider.
+  const size = useMemo(() => Math.round(Math.max(150, Math.min(237, window.innerWidth - 136))), []);
 
-  // Tell the Texture tab what the object's wrap and image scale now are.
-  const notify = () => {
-    const mesh = managerRef.current?.getMesh(meshId);
-    onChange?.({ uvMode: mesh?.uvMode || 'box', scale: mesh?.textureTransform?.scale ?? 1 });
-  };
+  // Tell the sheet something changed, so its checkmark keeps it.
+  const notify = () => onChange?.();
 
   // One undo step for the whole editing session, taken before the first change.
   const recordOnce = () => {
@@ -87,102 +98,22 @@ export default function UVEditor({ meshId: openedFor, managerRef, onChange, onCl
     m.beginUnwrapEdit();
     undoEntry.current = m.undoStack?.[m.undoStack.length - 1] || true;
   };
-  const commit = (next) => {
-    recordOnce();
-    setData(next);
-    pending.current = next;
-    if (frame.current) return;
-    frame.current = requestAnimationFrame(() => {
-      frame.current = 0;
-      if (pending.current) managerRef.current?.setUnwrapData(meshId, pending.current);
-      pending.current = null;
-      notify();
-    });
-  };
-  const runUnwrap = (cut) => {
+  // Undo inside the editor: the UV state before each change.
+  const remember = () => {
     const m = managerRef.current;
-    if (!m) return;
-    if (frame.current) { cancelAnimationFrame(frame.current); frame.current = 0; }
-    pending.current = null;
-    recordOnce();
-    if (m.unwrapMesh(meshId, { angle: cut, recordUndo: false })) {
-      setData(m.getUnwrapData(meshId));
-      setSelected(0);
-      notify();
-    }
+    const state = m?.captureUvState(meshId);
+    if (!state) return;
+    history.current.push(state);
+    setCanUndo(true);
   };
 
-  // Open: remember how things were (for X), make sure there is a layout, and
-  // show the cuts on the model.
-  useEffect(() => {
-    const m = managerRef.current;
-    if (!m) return undefined;
-    opening.current = m.captureUvState(meshId);
-    const mesh = m.getMesh(meshId);
-    if (!m.getUnwrapData(meshId)) runUnwrap(angleRef.current);
-    else if (mesh && mesh.uvMode !== 'unwrap') { recordOnce(); m.setUnwrapData(meshId, m.getUnwrapData(meshId)); notify(); }
-    m.setSeamOverlay(meshId);
-    return () => {
-      m.setSeamOverlay(null);
-      if (frame.current) cancelAnimationFrame(frame.current);
-      if (timer.current) clearTimeout(timer.current);
-      if (pending.current) m.setUnwrapData(meshId, pending.current);
-    };
-  }, [meshId]);
-
-  // Seams: Edge mode while on, every edge tap marks or clears that seam.
-  useEffect(() => {
-    const m = managerRef.current;
-    if (!m || !seamMode) return undefined;
-    const before = m.selectionMode;
-    m.setSelectionMode('edge');
-    m.cb?.onSelectionModeChange?.('edge');
-    m.edgeTapHandler = (hit) => {
-      if (hit.meshId !== meshId) return;
-      recordOnce();
-      if (!m.toggleMeshSeam(meshId, hit.index)) return;
-      runUnwrap(angleRef.current);
-    };
-    return () => {
-      m.edgeTapHandler = null;
-      m.setSelectionMode(before);
-      m.cb?.onSelectionModeChange?.(before);
-      if (before === 'object' && m.getMesh(meshId)) m.setSelection({ meshId, type: 'object', indices: [] });
-    };
-  }, [seamMode, meshId]);
-
-  const changeAngle = (v) => {
-    const cut = Math.round(v);
-    setAngle(cut);
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => runUnwrap(cut), 160);
-  };
-
-  const cancel = () => {
-    const m = managerRef.current;
-    setSeamMode(false);
-    if (frame.current) { cancelAnimationFrame(frame.current); frame.current = 0; }
-    if (timer.current) { clearTimeout(timer.current); timer.current = 0; }
-    pending.current = null;
-    if (m && opening.current && undoEntry.current) {
-      m.restoreUvState(meshId, opening.current);
-      const stack = m.undoStack || [];
-      if (stack[stack.length - 1] === undoEntry.current) stack.pop();
-      notify();
-    }
-    onClose?.();
-  };
-  const done = () => { setSeamMode(false); onClose?.(); };
-
-  // Draw: the image (or a checker when there is none) under a quarter grid,
-  // then every piece with its faces faint and its outline strong.
-  useEffect(() => {
+  const draw = () => {
+    drawFrame.current = 0;
     const canvas = canvasRef.current;
-    if (!canvas || !data) return;
-    const ratio = window.devicePixelRatio || 1;
-    canvas.width = size * ratio;
-    canvas.height = size * ratio;
+    const data = dataRef.current;
+    if (!canvas) return;
     const g = canvas.getContext('2d');
+    const ratio = window.devicePixelRatio || 1;
     g.setTransform(ratio, 0, 0, ratio, 0, 0);
     g.fillStyle = '#141824';
     g.fillRect(0, 0, size, size);
@@ -197,47 +128,187 @@ export default function UVEditor({ meshId: openedFor, managerRef, onChange, onCl
     }
     g.strokeStyle = 'rgba(255,255,255,0.12)';
     g.lineWidth = 1;
+    g.beginPath();
     for (let i = 1; i < 4; i++) {
       const p = Math.round((size * i) / 4) + 0.5;
-      g.beginPath(); g.moveTo(p, 0); g.lineTo(p, size); g.moveTo(0, p); g.lineTo(size, p); g.stroke();
+      g.moveTo(p, 0); g.lineTo(p, size); g.moveTo(0, p); g.lineTo(size, p);
     }
-    const at = ([u, v]) => [u * size, (1 - v) * size];
-    const path = (corners) => {
-      g.beginPath();
-      corners.forEach((uv, i) => { const [x, y] = at(uv); if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); });
-      g.closePath();
-    };
-    data.islands.forEach((faces, index) => {
-      const active = index === selected;
-      g.fillStyle = active ? `${highlightColor}4d` : 'rgba(255,255,255,0.10)';
-      g.strokeStyle = active ? `${highlightColor}66` : 'rgba(255,255,255,0.22)';
-      g.lineWidth = 0.75;
-      for (const fi of faces) {
-        const corners = data.faces[fi];
-        if (!corners?.length) continue;
-        path(corners);
+    g.stroke();
+    if (data) {
+      const selected = selectedRef.current;
+      data.islands.forEach((faces, index) => {
+        const active = index === selected;
+        g.fillStyle = active ? `${highlightColor}4d` : 'rgba(255,255,255,0.10)';
+        g.strokeStyle = active ? `${highlightColor}66` : 'rgba(255,255,255,0.22)';
+        g.lineWidth = 0.75;
+        g.beginPath();
+        for (const fi of faces) {
+          const corners = data.faces[fi];
+          if (!corners?.length) continue;
+          corners.forEach(([u, v], i) => { if (i === 0) g.moveTo(u * size, (1 - v) * size); else g.lineTo(u * size, (1 - v) * size); });
+          g.closePath();
+        }
         g.fill();
         g.stroke();
-      }
-      g.strokeStyle = active ? highlightColor : 'rgba(255,255,255,0.75)';
-      g.lineWidth = active ? 2 : 1.25;
-      g.beginPath();
-      for (const { a, b } of outlineOf(data, faces)) {
-        const [x1, y1] = at(a), [x2, y2] = at(b);
-        g.moveTo(x1, y1); g.lineTo(x2, y2);
-      }
-      g.stroke();
-    });
+        g.strokeStyle = active ? highlightColor : 'rgba(255,255,255,0.75)';
+        g.lineWidth = active ? 2 : 1.25;
+        g.beginPath();
+        for (const [fi, a, b] of outlinesRef.current[index] || []) {
+          const c = data.faces[fi];
+          if (!c?.[a] || !c?.[b]) continue;
+          g.moveTo(c[a][0] * size, (1 - c[a][1]) * size);
+          g.lineTo(c[b][0] * size, (1 - c[b][1]) * size);
+        }
+        g.stroke();
+      });
+    }
     g.strokeStyle = 'rgba(255,255,255,0.35)';
     g.lineWidth = 1;
     g.strokeRect(0.5, 0.5, size - 1, size - 1);
-  }, [data, selected, size, meshId, managerRef, highlightColor]);
+  };
+  const redraw = () => { if (!drawFrame.current) drawFrame.current = requestAnimationFrame(draw); };
+
+  // A new layout from the object (after Unwrap or Undo): its outlines change.
+  const reload = () => {
+    const data = managerRef.current?.getUnwrapData(meshId) || null;
+    dataRef.current = data;
+    outlinesRef.current = data ? outlinesOf(data) : [];
+    if (selectedRef.current >= (data?.islands.length || 0)) selectedRef.current = 0;
+    setHasLayout(!!data);
+    redraw();
+  };
+
+  // Move the model's UVs along with a dragged piece, a few times a second.
+  const previewNow = () => {
+    preview.current.timer = 0;
+    preview.current.last = performance.now();
+    if (dataRef.current) managerRef.current?.previewUnwrapData(meshId, dataRef.current);
+  };
+  const schedulePreview = () => {
+    if (preview.current.timer) return;
+    const wait = Math.max(0, PREVIEW_MS - (performance.now() - preview.current.last));
+    preview.current.timer = setTimeout(previewNow, wait);
+  };
+  const flushPreview = () => {
+    if (preview.current.timer) { clearTimeout(preview.current.timer); preview.current.timer = 0; }
+    if (dataRef.current) managerRef.current?.previewUnwrapData(meshId, dataRef.current);
+  };
+  // A finished change to the layout (gesture end, Pack, Flip).
+  const keep = (next) => {
+    dataRef.current = next;
+    redraw();
+    flushPreview();
+    notify();
+  };
+
+  const runUnwrap = (cut) => {
+    const m = managerRef.current;
+    if (!m) return;
+    recordOnce();
+    if (m.unwrapMesh(meshId, { angle: cut, recordUndo: false })) {
+      selectedRef.current = 0;
+      reload();
+      notify();
+    }
+  };
+
+  // Open: remember how things were (for X), make sure there is a layout, and
+  // show the cuts on the model.
+  useEffect(() => {
+    const m = managerRef.current;
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = size * ratio;
+      canvas.height = size * ratio;
+    }
+    if (!m) return undefined;
+    opening.current = m.captureUvState(meshId);
+    const mesh = m.getMesh(meshId);
+    if (!m.getUnwrapData(meshId)) runUnwrap(angleRef.current);
+    else if (mesh && mesh.uvMode !== 'unwrap') { recordOnce(); m.setUnwrapData(meshId, m.getUnwrapData(meshId)); notify(); }
+    reload();
+    m.setSeamOverlay(meshId);
+    return () => {
+      m.setSeamOverlay(null);
+      if (drawFrame.current) cancelAnimationFrame(drawFrame.current);
+      if (angleTimer.current) clearTimeout(angleTimer.current);
+      if (preview.current.timer) { clearTimeout(preview.current.timer); previewNow(); }
+    };
+  }, [meshId]);
+
+  useEffect(() => { redraw(); }, [highlightColor]);
+
+  // Seams: Edge mode while on, every edge tap marks or clears that seam.
+  useEffect(() => {
+    const m = managerRef.current;
+    if (!m || !seamMode) return undefined;
+    const before = m.selectionMode;
+    m.setSelectionMode('edge');
+    m.cb?.onSelectionModeChange?.('edge');
+    m.edgeTapHandler = (hit) => {
+      if (hit.meshId !== meshId) return;
+      recordOnce();
+      remember();
+      if (!m.toggleMeshSeam(meshId, hit.index)) { history.current.pop(); setCanUndo(history.current.length > 0); return; }
+      runUnwrap(angleRef.current);
+    };
+    return () => {
+      m.edgeTapHandler = null;
+      m.setSelectionMode(before);
+      m.cb?.onSelectionModeChange?.(before);
+      if (before === 'object' && m.getMesh(meshId)) m.setSelection({ meshId, type: 'object', indices: [] });
+    };
+  }, [seamMode, meshId]);
+
+  const changeAngle = (v) => {
+    const cut = Math.round(v);
+    // One undo step per slide (a pause starts a new one).
+    if (!angleTimer.current) remember();
+    setAngle(cut);
+    if (angleTimer.current) clearTimeout(angleTimer.current);
+    angleTimer.current = setTimeout(() => { angleTimer.current = 0; runUnwrap(cut); }, 160);
+  };
+
+  const undo = () => {
+    const m = managerRef.current;
+    const state = history.current.pop();
+    setCanUndo(history.current.length > 0);
+    if (!m || !state) return;
+    if (angleTimer.current) { clearTimeout(angleTimer.current); angleTimer.current = 0; }
+    if (preview.current.timer) { clearTimeout(preview.current.timer); preview.current.timer = 0; }
+    m.restoreUvState(meshId, state);
+    if (state.uvUnwrap?.angle != null) setAngle(state.uvUnwrap.angle);
+    reload();
+    notify();
+  };
+
+  const stopEditing = () => {
+    setSeamMode(false);
+    if (angleTimer.current) { clearTimeout(angleTimer.current); angleTimer.current = 0; runUnwrap(angleRef.current); }
+    flushPreview();
+  };
+  const back = () => { stopEditing(); onBack?.(); };
+  const done = () => { stopEditing(); onApplyAll?.(); };
+  const cancel = () => {
+    const m = managerRef.current;
+    setSeamMode(false);
+    if (angleTimer.current) { clearTimeout(angleTimer.current); angleTimer.current = 0; }
+    if (preview.current.timer) { clearTimeout(preview.current.timer); preview.current.timer = 0; }
+    if (m && opening.current && undoEntry.current) {
+      m.restoreUvState(meshId, opening.current);
+      const stack = m.undoStack || [];
+      if (stack[stack.length - 1] === undoEntry.current) stack.pop();
+    }
+    onCancelAll?.();
+  };
 
   const uvAt = (event) => {
     const rect = canvasRef.current.getBoundingClientRect();
     return [(event.clientX - rect.left) / rect.width, 1 - (event.clientY - rect.top) / rect.height];
   };
   const pick = (point) => {
+    const data = dataRef.current;
     for (let index = data.islands.length - 1; index >= 0; index--) {
       if (data.islands[index].some((fi) => data.faces[fi] && insidePolygon(point, data.faces[fi]))) return index;
     }
@@ -256,13 +327,13 @@ export default function UVEditor({ meshId: openedFor, managerRef, onChange, onCl
     g.start = pointers.current.size >= 2 ? pair() : pointers.current.get(g.finger);
   };
   const onPointerDown = (event) => {
-    if (!data) return;
+    if (!dataRef.current) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     pointers.current.set(event.pointerId, uvAt(event));
     if (pointers.current.size === 1) {
       const hit = pick(pointers.current.get(event.pointerId));
-      if (hit >= 0) setSelected(hit);
-      gesture.current = { index: hit >= 0 ? hit : selected, finger: event.pointerId, action: null };
+      if (hit >= 0 && hit !== selectedRef.current) { selectedRef.current = hit; redraw(); }
+      gesture.current = { index: hit >= 0 ? hit : selectedRef.current, finger: event.pointerId, action: null, changed: false };
       begin(gesture.current);
     } else if (pointers.current.size === 2 && gesture.current && !gesture.current.action) {
       gesture.current.action = 'pending';
@@ -303,60 +374,58 @@ export default function UVEditor({ meshId: openedFor, managerRef, onChange, onCl
         map = ([u, v]) => [cu + (u - cu) * ratio, cv + (v - cv) * ratio];
       }
     }
-    commit(transformIsland(g.base, g.index, map));
+    if (!g.changed) { g.changed = true; recordOnce(); remember(); }
+    dataRef.current = transformIsland(g.base, g.index, map);
+    redraw();
+    schedulePreview();
   };
   const onPointerUp = (event) => {
     pointers.current.delete(event.pointerId);
     const g = gesture.current;
-    if (pointers.current.size === 0) { gesture.current = null; return; }
-    if (g && (g.action !== null || event.pointerId === g.finger)) gesture.current = null;
+    const ended = pointers.current.size === 0 || (g && (g.action !== null || event.pointerId === g.finger));
+    if (!ended) return;
+    gesture.current = null;
+    if (g?.changed) keep(dataRef.current);
   };
 
   const flip = () => {
+    const data = dataRef.current;
     if (!data) return;
-    const b = islandBounds(data, selected);
-    commit(transformIsland(data, selected, ([u, v]) => [2 * b.cu - u, v]));
+    recordOnce();
+    remember();
+    const b = islandBounds(data, selectedRef.current);
+    keep(transformIsland(data, selectedRef.current, ([u, v]) => [2 * b.cu - u, v]));
   };
-  const pack = () => { if (data) commit(repackLayout(data)); };
+  const pack = () => {
+    const data = dataRef.current;
+    if (!data) return;
+    recordOnce();
+    remember();
+    keep(repackLayout(data));
+  };
+  const unwrap = () => { remember(); runUnwrap(angle); };
 
-  const action = (label, Icon, onClick) => (
-    <button
-      key={label} type="button" onClick={onClick}
-      className="modeling-value flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-1 rounded-lg text-[13px] font-semibold active:scale-95"
-      style={{ color: uiColor }}
-    >
-      <Icon className="h-5 w-5" strokeWidth={1.8} />
-      {label}
-    </button>
-  );
+  const btn = 'modeling-value flex h-8 w-full min-w-0 items-center justify-center rounded-lg px-1 text-[13px] font-semibold active:scale-95 aria-disabled:opacity-35 aria-disabled:active:scale-100';
+  const actionBtn = 'modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95';
 
-  return createPortal(
-    <section
-      aria-label="UV Editor"
-      className="modeling-panel fixed inset-x-0 z-[95] px-1.5 pointer-events-auto"
-      style={{ bottom: 'calc(4.375rem + var(--axis-safe-bottom, env(safe-area-inset-bottom, 0px)))' }}
-      onPointerDown={(event) => event.stopPropagation()}
-    >
-      <div className="modeling-sheet rounded-2xl px-2 py-2">
-        <div className="mb-2 flex items-center gap-1.5">
-          <div className="flex min-w-0 flex-1 items-center gap-1.5 pl-0.5" style={{ color: uiColor }}>
-            <Grid2X2 className="h-5 w-5 shrink-0" strokeWidth={1.75} />
-            <h2 className="truncate text-[16px] font-bold tracking-tight leading-none">UV Editor</h2>
+  return (
+    <div aria-label="UV Editor">
+      <div className="px-2 pt-1.5 pb-1">
+        <div className="relative flex items-center gap-1 rounded-xl px-1.5 py-1" style={{ background: 'rgba(255,255,255,0.04)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)' }}>
+          <div className="flex min-w-0 flex-1 items-center gap-0.5">
+            <button onClick={back} aria-label="Back to Texture" className="flex h-8 w-6 shrink-0 items-center justify-center rounded-lg active:scale-95" style={{ color: uiColor }}>
+              <ChevronLeft className="h-5 w-5" strokeWidth={2.5} />
+            </button>
+            <h2 className="min-w-0 flex-1 truncate text-[13px] font-bold leading-none" style={{ color: uiColor }}>UV Editor</h2>
           </div>
-          <button
-            type="button" onClick={() => setSeamMode((on) => !on)} aria-pressed={seamMode}
-            className="modeling-value flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg px-2.5 text-[13px] font-semibold active:scale-95"
-            style={{ color: seamMode ? highlightColor : uiColor, borderColor: seamMode ? highlightColor : undefined }}
-          >
-            <SeamIcon className="h-4 w-4" strokeWidth={1.8} />
-            Seams
-          </button>
-          <div className="ml-2 flex shrink-0 items-center gap-3">
-            <button type="button" onClick={cancel} aria-label="Cancel UV changes" className="modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95" style={{ color: uiColor }}><X className="h-6 w-6" strokeWidth={2.5} /></button>
-            <button type="button" onClick={done} aria-label="Keep UV changes" className="modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95" style={{ color: highlightColor, borderColor: highlightColor }}><Check className="h-6 w-6" strokeWidth={2.5} /></button>
+          <div className="w-[4.5rem] shrink-0 flex items-center justify-end gap-1.5">
+            <button onClick={cancel} aria-label="Cancel and close" className={actionBtn} style={{ color: uiColor }}><X className="h-6 w-6" strokeWidth={2.5} /></button>
+            <button onClick={done} aria-label="Apply" className={actionBtn} style={{ color: highlightColor, borderColor: highlightColor }}><Check className="h-6 w-6" strokeWidth={2.5} /></button>
           </div>
         </div>
-        <div className="flex gap-2">
+      </div>
+      <div className="px-2 pb-2">
+        <div className="flex items-start gap-2">
           <canvas
             ref={canvasRef}
             aria-label="UV layout"
@@ -367,21 +436,22 @@ export default function UVEditor({ meshId: openedFor, managerRef, onChange, onCl
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
           />
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5" style={{ height: size }}>
-            {action('Unwrap', Scissors, () => runUnwrap(angle))}
-            {action('Pack', LayoutGrid, pack)}
-            {action('Flip', FlipHorizontal2, flip)}
+          <div className="flex min-w-0 flex-1 flex-col justify-between gap-1.5" style={{ minHeight: size }}>
+            <button type="button" onClick={() => setSeamMode((on) => !on)} aria-pressed={seamMode} className={btn} style={{ color: seamMode ? highlightColor : uiColor, borderColor: seamMode ? highlightColor : undefined }}>Seams</button>
+            <button type="button" onClick={unwrap} className={btn} style={{ color: uiColor }}>Unwrap</button>
+            <button type="button" {...blockedButton(!hasLayout, 'Nothing to pack yet', pack)} className={btn} style={{ color: uiColor }}>Pack</button>
+            <button type="button" {...blockedButton(!hasLayout, 'Nothing to flip yet', flip)} className={btn} style={{ color: uiColor }}>Flip</button>
+            <button type="button" {...blockedButton(!canUndo, 'No UV edits to undo', undo)} aria-label="Undo UV edit" className={btn} style={{ color: uiColor }}>Undo</button>
+            <div>
+              <InlineSlider
+                label="Cut angle" value={angle} display={angle >= NO_CUT_ANGLE ? 'Off' : `${angle}°`}
+                min={10} max={NO_CUT_ANGLE} step={1} grow onChange={changeAngle}
+              />
+            </div>
           </div>
         </div>
         <p className="mt-1.5 text-[12px] leading-tight" style={{ color: seamMode ? highlightColor : uiColor }}>{seamMode ? HINTS.seams : HINTS.pieces}</p>
-        <div className="mt-1.5">
-          <InlineSlider
-            label="Cut angle" value={angle} display={angle >= NO_CUT_ANGLE ? 'Off' : `${angle}°`}
-            min={10} max={NO_CUT_ANGLE} step={1} grow onChange={changeAngle}
-          />
-        </div>
       </div>
-    </section>,
-    document.body,
+    </div>
   );
 }

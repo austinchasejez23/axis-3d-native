@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Crown, Loader2, X } from 'lucide-react';
+import LogoLoader from '@/components/LogoLoader';
 import { getCloudSession } from '@/lib/supabaseTest';
 import { SUBSCRIPTIONS_ENABLED, buyPlan, canBuyInApp, loadPlans, restorePurchases } from '@/lib/proPurchases';
 
@@ -82,7 +83,7 @@ export default function UpgradeSheet({ open, reason, onClose, isPro = false, onA
                 ))}
               </div>
             ) : !message && (
-              <div className="flex items-center justify-center gap-2 py-4 text-sm text-white/60"><Loader2 className="h-4 w-4 animate-spin" /> Loading plans</div>
+              <div className="flex items-center justify-center py-4 text-sm text-white/60"><LogoLoader width={56} label="Loading plans" /></div>
             )}
           </>
         )}
