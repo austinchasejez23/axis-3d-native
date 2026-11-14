@@ -57,7 +57,8 @@ export function updateObjectAxisArrows(manager) {
     group.position.copy(mesh.position);
     group.quaternion.setFromEuler(mesh.rotation);
     // Constant readable screen size, independent of object scale or camera zoom.
-    const length = 64 * 2 * Math.max(manager.camera.near, -viewPosition.z)
+    const depth = manager.camera.isOrthographicCamera ? manager.cameraDist : Math.max(manager.camera.near, -viewPosition.z);
+    const length = 64 * 2 * depth
       * Math.tan(THREE.MathUtils.degToRad(manager.camera.fov / 2)) / Math.max(1, resolution.y);
     group.scale.set(length * (Math.sign(mesh.scale.x) || 1), length * (Math.sign(mesh.scale.y) || 1), length * (Math.sign(mesh.scale.z) || 1));
     for (const child of group.children) child.material.resolution?.copy(resolution);

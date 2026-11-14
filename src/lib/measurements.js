@@ -131,7 +131,9 @@ export function getMeasurements(manager, option = 'edge', showConnectingEdges = 
       if (!va || !vb) continue;
       const wa = new THREE.Vector3(va.x, va.y, va.z).applyMatrix4(wm);
       const wb = new THREE.Vector3(vb.x, vb.y, vb.z).applyMatrix4(wm);
-      candidates.push({ va, vb, dist: manager.camera.position.distanceTo(wa.clone().lerp(wb, 0.5)) });
+      const mid = wa.clone().lerp(wb, 0.5);
+      // Orthographic: nearest by depth along the view, not by distance from the eye.
+      candidates.push({ va, vb, dist: manager.camera.isOrthographicCamera ? -mid.applyMatrix4(manager.camera.matrixWorldInverse).z : manager.camera.position.distanceTo(mid) });
     }
     candidates.sort((a, b) => a.dist - b.dist);
     for (const c of candidates.slice(0, 3)) addEdge(c.va, c.vb);

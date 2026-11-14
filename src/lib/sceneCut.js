@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { theme } from './theme';
 import { makeFatSegments } from './fatLines';
+import { viewDistance } from './viewDistance';
 import { drawCutIntersects } from '@/lib/cutIntersections';
 import { cleanupCommittedTopology, resolveLegacyDeletedBorders } from './meshTopologyInvariants';
 import {
@@ -285,7 +286,7 @@ export function applySceneCut(SceneManager) {
       dot.position.copy(p);
       // Match selected vertex dots exactly, including zoom-independent size.
       dot.onBeforeRender = (renderer, scene, camera) => {
-        const d = camera.position.distanceTo(dot.position);
+        const d = viewDistance(camera, dot.position);
         const s = Math.max(1e-4, d * 0.0055);
         dot.scale.set(s, s, s);
         dot.updateMatrixWorld();

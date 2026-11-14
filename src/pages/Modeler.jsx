@@ -121,6 +121,7 @@ export default function Modeler() {
   const setGridVisible = (v) => theme.set({ gridVisible: v });
   const [clayViewport, setClayViewport] = useState(false);
   const [transparentViewport, setTransparentViewport] = useState(false);
+  const [orthographic, setOrthographic] = useState(false);
   const [multiSelect, setMultiSelect] = useState(false);
   const [segmentsOpen, setSegmentsOpen] = useState(false);
   const [segValues, setSegValues] = useState({ x: 1, y: 1, z: 1 });
@@ -242,6 +243,10 @@ export default function Modeler() {
   }, [clayViewport, transparentViewport]);
 
   useEffect(() => {
+    managerRef.current?.setOrthographic(orthographic);
+  }, [orthographic]);
+
+  useEffect(() => {
     if (managerRef.current) managerRef.current.triangleLimit = isPro ? Infinity : FREE_TRIANGLE_LIMIT;
   }, [isPro]);
 
@@ -355,7 +360,8 @@ export default function Modeler() {
     }
     mgr.triangleLimit = isPro ? Infinity : FREE_TRIANGLE_LIMIT;
     mgr.setViewportDisplayMode({ clay: clayViewport, transparent: transparentViewport });
-  }, [clayViewport, transparentViewport, isPro, openUpgrade, navigate]);
+    mgr.setOrthographic(orthographic);
+  }, [clayViewport, transparentViewport, orthographic, isPro, openUpgrade, navigate]);
 
   // Keyboard undo
   const undoActionRef = useRef(null);
@@ -1206,6 +1212,8 @@ export default function Modeler() {
       <TopBar
         clayViewport={clayViewport}
         transparentViewport={transparentViewport}
+        orthographic={orthographic}
+        onToggleOrthographic={() => setOrthographic((value) => !value)}
         freeTransform={freeTransform}
         snapping={snapToGrid}
         precision={precision}
@@ -1245,7 +1253,8 @@ export default function Modeler() {
           it covers. */}
       {!(guideOpen || libraryOpen || transformDrawerOpen) && (<>
       <div className="absolute left-[3.75rem] right-[4.25rem] top-[calc(env(safe-area-inset-top,0px)+0.25rem)] z-[60] flex flex-col items-center gap-1 pointer-events-none">
-      <div ref={tipRef} className="w-fit max-w-full overflow-hidden rounded-xl" style={{ background: 'rgba(9,13,22,0.26)', border: '1px solid rgba(255,255,255,0.07)', visibility: tipCovered ? 'hidden' : undefined }}>
+      {/* On narrow screens the tip moves right just enough to clear the Orthographic button. */}
+      <div ref={tipRef} className="w-fit max-w-full overflow-hidden rounded-xl" style={{ background: 'rgba(9,13,22,0.26)', border: '1px solid rgba(255,255,255,0.07)', visibility: tipCovered ? 'hidden' : undefined, marginLeft: 'max(0px, calc(382px - 100vw))' }}>
       <ContextTip
         context={
           cut?.kind === 'loop' ? 'cutLoop'

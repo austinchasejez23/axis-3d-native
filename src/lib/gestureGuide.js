@@ -14,7 +14,7 @@ export const GUIDE_SECTIONS = [
     title: 'Transformations',
     items: [
       'Tap geometry to select it.',
-      'Hold a finger on geometry to start multiple selection. Tap other parts to add or remove them, or drag across parts to select several at once.',
+      'Hold a finger on geometry to start multiple selection. Tap other parts to add or remove them, or drag across parts to select several at once. A tap that selects nothing ends multiple selection and clears it.',
       'Hold a finger on empty space, then drag to box-select everything inside the box.',
       'Drag one finger directly on selected geometry to move it.',
       'Place two fingers on selected geometry and twist to rotate.',

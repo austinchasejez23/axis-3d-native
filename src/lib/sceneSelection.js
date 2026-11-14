@@ -322,6 +322,17 @@ export function applySceneSelection(SceneManager) {
   };
 
   P.isWorldPointVisible = /** @this {import('./SceneManager.js').SceneManager} */ function (point) {
+    if (this.camera.isOrthographicCamera) {
+      // Orthographic: the occlusion ray runs along the view direction from the
+      // near plane, behind everything drawn.
+      const forward = this.camera.getWorldDirection(new THREE.Vector3());
+      const span = point.clone().sub(this.camera.position).dot(forward) - this.camera.near;
+      if (span < 1e-6) return true;
+      this.raycaster.set(point.clone().addScaledVector(forward, -span), forward);
+      const objects = [...this.threeObjects.values()].filter(o => o.mesh.visible).map(o => o.mesh);
+      const first = this.raycaster.intersectObjects(objects, false)[0];
+      return !first || first.distance >= span - Math.max(0.025, this.cameraDist * 0.006);
+    }
     const direction = point.clone().sub(this.camera.position), distance = direction.length();
     if (distance < 1e-6) return true;
     // A point behind the camera is never visible. The occlusion ray below

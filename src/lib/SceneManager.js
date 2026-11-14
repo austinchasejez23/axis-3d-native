@@ -28,6 +28,7 @@ import { applySceneMeasure } from './sceneMeasure';
 import { applySceneAddVertex } from './sceneAddVertex';
 import { applySceneReference, loadReferenceImage } from './sceneReference';
 import { applySceneOrientation } from './sceneOrientation';
+import { viewDistance } from './viewDistance';
 import { mergeVerticesWithin, weldCoincidentVertices, edgeKey } from './meshTopology';
 import { cleanupCommittedTopology, dissolveSharedBoundary, adjacentFacesForBoundary, removeFaceByIndex, resolveLegacyDeletedBorders } from './meshTopologyInvariants';
 import { updateGeometryInPlace } from './meshBufferUpdate';
@@ -65,7 +66,14 @@ export class SceneManager {
 
     const w = container.clientWidth || window.innerWidth;
     const h = container.clientHeight || window.innerHeight;
-    this.camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 1000);
+    this.perspectiveCamera = new THREE.PerspectiveCamera(50, w / h, 0.1, 1000);
+    // Orthographic view: the same orbit, pivot and zoom, drawn without
+    // perspective. It carries the perspective camera's fov and aspect, so the
+    // view's size (orbit distance × tan(fov/2)) works out the same in both.
+    this.orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, -1000, 1000);
+    this.orthoCamera.fov = this.perspectiveCamera.fov;
+    this.orthoCamera.aspect = w / h;
+    this.camera = this.perspectiveCamera;
     this.cameraTarget = new THREE.Vector3(0, 0, 0);
     this.cameraTheta = 0;
     this.cameraPhi = Math.PI / 2;
@@ -164,6 +172,14 @@ export class SceneManager {
     this.scene.add(this.highlightGroup);
 
     this.raycaster = new THREE.Raycaster();
+    // The orthographic view also draws geometry behind the camera's own
+    // plane, so its picking rays start at the near plane, behind all of it.
+    const setRayFromCamera = this.raycaster.setFromCamera.bind(this.raycaster);
+    this.raycaster.setFromCamera = (coords, camera) => {
+      setRayFromCamera(coords, camera);
+      if (camera.isOrthographicCamera) this.raycaster.ray.origin.addScaledVector(this.raycaster.ray.direction, camera.near);
+      return this.raycaster;
+    };
     this.pointer = new THREE.Vector2();
 
     this.pointers = new Map();
@@ -252,14 +268,28 @@ export class SceneManager {
     this.camera.up.set(-se * sa, ce, -se * ca);
     this.camera.lookAt(this.cameraTarget);
     this.camera.updateMatrixWorld();
-    // The near plane closes in with the orbit distance, so geometry right in
-    // front of the camera is never sliced away while moving through it.
-    const near = THREE.MathUtils.clamp(R * 0.02, 0.005, 0.1);
-    if (Math.abs(this.camera.near - near) > 1e-9) {
-      this.camera.near = near;
-      this.camera.updateProjectionMatrix();
+    if (this.camera.isOrthographicCamera) {
+      // The orbit distance sets the orthographic view's size, exactly the
+      // height a perspective view shows at the orbit pivot.
+      const cam = this.camera;
+      const halfHeight = R * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+      cam.top = halfHeight;
+      cam.bottom = -halfHeight;
+      cam.right = halfHeight * cam.aspect;
+      cam.left = -cam.right;
+      cam.userData.viewDistance = R;
+      this._fitOrthoDepth(false);
+      cam.updateProjectionMatrix();
+    } else {
+      // The near plane closes in with the orbit distance, so geometry right in
+      // front of the camera is never sliced away while moving through it.
+      const near = THREE.MathUtils.clamp(R * 0.02, 0.005, 0.1);
+      if (Math.abs(this.camera.near - near) > 1e-9) {
+        this.camera.near = near;
+        this.camera.updateProjectionMatrix();
+      }
     }
-    updateViewportGridFade(this.grid, this.camera, this.cameraDist, theme.backgroundColor);
+    updateViewportGridFade(this.grid, this._gridFadeCamera(), this.cameraDist, theme.backgroundColor);
     // Sun follows the camera (offset up and to the side) so the shadow is
     // always cast to the side visible from the viewing angle — natural,
     // always-visible shadows while the shadow toggle is on. Without this the
@@ -283,6 +313,49 @@ export class SceneManager {
       this.dirLight.target.position.copy(this.cameraTarget);
       this.dirLight.target.updateMatrixWorld();
     }
+  }
+
+  // Perspective or orthographic view. Orbit, pivot and zoom carry over, so the
+  // model stays the same size at the pivot when switching.
+  setOrthographic(on) {
+    const next = on ? this.orthoCamera : this.perspectiveCamera;
+    if (this.camera === next) return;
+    this.camera = next;
+    this.applyCamera();
+    this.updateHighlights();
+  }
+
+  isOrthographic() { return !!this.camera.isOrthographicCamera; }
+
+  // The orthographic view draws every depth at the same scale, so its depth
+  // range covers the whole scene on both sides of the camera rather than
+  // starting just in front of it.
+  _fitOrthoDepth(updateProjection = true) {
+    const cam = this.camera;
+    if (!cam.isOrthographicCamera) return;
+    const sphere = this._orthoSphere || (this._orthoSphere = new THREE.Sphere());
+    let reach = this.cameraDist * 4 + 10;
+    for (const obj of this.threeObjects.values()) {
+      const geo = obj.mesh.geometry;
+      if (!geo.boundingSphere) geo.computeBoundingSphere();
+      if (!geo.boundingSphere) continue;
+      sphere.copy(geo.boundingSphere).applyMatrix4(obj.mesh.matrixWorld);
+      reach = Math.max(reach, cam.position.distanceTo(sphere.center) + sphere.radius);
+    }
+    for (const light of this.sceneLights || []) {
+      if (light.gizmo) reach = Math.max(reach, cam.position.distanceTo(light.gizmo.position) + 1);
+    }
+    const span = reach * 1.25;
+    if (Math.abs(cam.far - span) <= span * 0.1 && cam.far >= reach) return;
+    cam.near = -span;
+    cam.far = span;
+    if (updateProjection) cam.updateProjectionMatrix();
+  }
+
+  // The grid fades with distance from the eye. The orthographic view has no
+  // eye, so its grid fades out from the orbit pivot instead.
+  _gridFadeCamera() {
+    return this.camera.isOrthographicCamera ? { position: this.cameraTarget } : this.camera;
   }
 
   applyShadows() { applyShadowsFn(this); }
@@ -343,6 +416,13 @@ export class SceneManager {
     const center = this.getDisplayCenter();
     if (!center) return;
     const forward = this.camera.getWorldDirection(new THREE.Vector3());
+    if (this.camera.isOrthographicCamera) {
+      // Depth never changes the orthographic view's size, so only the pivot
+      // slides along the view axis; the zoom stays as it is.
+      this.cameraTarget.addScaledVector(forward, center.clone().sub(this.cameraTarget).dot(forward));
+      this.applyCamera();
+      return;
+    }
     const depth = center.clone().sub(this.camera.position).dot(forward);
     if (!(depth > 0.05)) return;
     this.cameraTarget.copy(this.camera.position).addScaledVector(forward, depth);
@@ -1274,7 +1354,7 @@ export class SceneManager {
         sph.position.copy(wp);
         sph.renderOrder = 999;
         sph.onBeforeRender = (renderer, scene, camera) => {
-          const d = camera.position.distanceTo(sph.position);
+          const d = viewDistance(camera, sph.position);
           const s = Math.max(1e-4, d * 0.0055);
           sph.scale.set(s, s, s);
           sph.updateMatrixWorld();
@@ -1509,7 +1589,10 @@ export class SceneManager {
       if (theme.snapToGrid) mesh.position.add(this.snapCorrection(this.getSelectionCenter()));
       this.updateObjectTransform(mesh.id);
     } else {
-      mesh.lockTriangulationDiagonals();
+      // Keep each face's current triangles while its vertices move, as
+      // rotation does: re-triangulating a face that the move bends sharply
+      // drops the triangles that fold past its normal and opens holes.
+      mesh.lockFaceRenderTriangles(); mesh.lockTriangulationDiagonals();
       const vids = this.getSelectedVertexIds();
       mesh.translateVertexIds(vids, this.worldToLocalDelta(mesh, worldDelta));
       const correction = this.snapCorrection(this.getSelectionCenter());
@@ -1557,7 +1640,7 @@ export class SceneManager {
       this.updateObjectTransform(mesh.id);
     } else {
       const center = this.getSelectionCenter();
-      mesh.lockTriangulationDiagonals();
+      mesh.lockFaceRenderTriangles(); mesh.lockTriangulationDiagonals();
       const wm = this.getWorldMatrix(mesh);
       const vids = this.getSelectedVertexIds();
       for (const vid of vids) {
@@ -1674,7 +1757,7 @@ export class SceneManager {
       this.updateObjectTransform(mesh.id);
     } else {
       const center = this.getSelectionCenter();
-      mesh.lockTriangulationDiagonals();
+      mesh.lockFaceRenderTriangles(); mesh.lockTriangulationDiagonals();
       const wm = this.getWorldMatrix(mesh);
       const vids = this.getSelectedVertexIds();
       for (const vid of vids) {
@@ -2163,7 +2246,7 @@ export class SceneManager {
     if (!mesh) return;
     const wm = this.getWorldMatrix(mesh);
     const center = new THREE.Vector3().applyMatrix4(wm);
-    const dist = this.camera.position.distanceTo(center);
+    const dist = viewDistance(this.camera, center);
     const fov = this.camera.fov * Math.PI / 180;
     const vh = this.renderer.domElement.clientHeight || window.innerHeight;
     const worldPerPixel = (2 * dist * Math.tan(fov / 2)) / Math.max(1, vh);
@@ -2311,7 +2394,7 @@ export class SceneManager {
     this.grid.visible = wasVisible;
     this._gridConfig = config;
     this.scene.add(this.grid);
-    updateViewportGridFade(this.grid, this.camera, this.cameraDist, theme.backgroundColor);
+    updateViewportGridFade(this.grid, this._gridFadeCamera(), this.cameraDist, theme.backgroundColor);
   }
 
   toggleGrid() {
@@ -2527,6 +2610,7 @@ export class SceneManager {
         this.updateHighlights();
       }
       syncObjectHighlightTransforms(this);
+      this._fitOrthoDepth();
       this.renderer.render(this.scene, this.camera);
     } catch (err) {
       this._reportGraphicsError(err?.message || String(err));
@@ -2583,8 +2667,10 @@ export class SceneManager {
   handleResize() {
     const w = this.container.clientWidth || window.innerWidth;
     const h = this.container.clientHeight || window.innerHeight;
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
+    this.perspectiveCamera.aspect = w / h;
+    this.perspectiveCamera.updateProjectionMatrix();
+    this.orthoCamera.aspect = w / h;
+    if (this.camera.isOrthographicCamera) this.applyCamera();
     this.renderer.setSize(w, h);
     // Fat lines carry a pixel resolution; refresh the grid axes, wireframes and highlights.
     updateViewportGridResolution(this.grid, w, h);

@@ -8,7 +8,7 @@ const padded = (text) => ` ${clean(text)} `;
 const tokens = (text) => clean(text).split(' ').filter(Boolean);
 
 const FALLBACK = 'I do not have a reliable AXIS 3D answer for that yet. Try naming the exact tool or gesture. I would rather leave this unanswered than guess.';
-const AMBIGUOUS_TOOL_NAMES = new Set(['object', 'face', 'edge', 'vertex', 'smooth', 'merge', 'delete', 'clone', 'split', 'connect', 'lock', 'mirror', 'combine', 'separate', 'divide', 'measure']);
+const AMBIGUOUS_TOOL_NAMES = new Set(['object', 'face', 'edge', 'vertex', 'smooth', 'merge', 'delete', 'clone', 'split', 'connect', 'lock', 'mirror', 'combine', 'separate', 'divide', 'measure', 'focus']);
 const WEAK_TOPIC_WORDS = new Set(['select', 'selection', 'choose', 'move', 'drag', 'position', 'rotate', 'rotation', 'scale', 'resize', 'color', 'image', 'file', 'save', 'name', 'view', 'box', 'multiple', 'smooth']);
 const STOP_WORDS = new Set(['a', 'an', 'and', 'are', 'can', 'do', 'does', 'for', 'how', 'i', 'in', 'is', 'it', 'me', 'of', 'on', 'or', 'the', 'this', 'to', 'what', 'where', 'with', 'you']);
 

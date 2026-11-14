@@ -3,6 +3,7 @@ import { clamp } from './utils';
 import { theme } from './theme';
 import makeLightGizmo from '@/lib/makeLightGizmo';
 import { makeLightRangeGuide, updateLightRangeGuide } from './lightRangeGuide';
+import { viewDistance } from './viewDistance';
 
 // Longest Range a light can have: enough to light a full-size model.
 export const MAX_LIGHT_RANGE = 500;
@@ -235,7 +236,7 @@ export function applySceneLights(SceneManager) {
   P.updateSceneLightGizmos = /** @this {import("./SceneManager").SceneManager} */ function () {
     if (!this.lightingEdit) return;
     for (const light of this.sceneLights) {
-      const distance = this.camera.position.distanceTo(light.gizmo.position);
+      const distance = viewDistance(this.camera, light.gizmo.position);
       const scale = Math.max(0.08, distance * (light.id === this.selectedLightId ? 0.05 : 0.043));
       light.gizmo.scale.setScalar(scale);
     }

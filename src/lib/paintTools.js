@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createPaintLayer, paintDab, beginPaintStroke, finishPaintStroke } from './paintLayer';
 import fillEdges from '@/lib/fillEdges';
+import { viewDistance } from './viewDistance';
 
 const blend = (current, target, opacity) => {
   const a = new THREE.Color(current), b = new THREE.Color(target);
@@ -117,7 +118,7 @@ export function paintAt(sm, clientX, clientY) {
   // Screen radius → world radius at the touched depth → local radius.
   const wm = sm.getWorldMatrix(mesh);
   const center = hit.point.clone().applyMatrix4(wm.clone().invert());
-  const dist = sm.camera.position.distanceTo(hit.point);
+  const dist = viewDistance(sm.camera, hit.point);
   const fov = sm.camera.fov * Math.PI / 180;
   const vh = sm.renderer.domElement.clientHeight || window.innerHeight;
   const worldPerPixel = (2 * dist * Math.tan(fov / 2)) / Math.max(1, vh);

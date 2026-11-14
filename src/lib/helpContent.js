@@ -6,6 +6,7 @@ import {
 import { ProtractorIcon, MeasureIcon } from '@/lib/toolIcons';
 import ResistanceIcon from '@/components/modeler/ResistanceIcon';
 import OrientationResetIcon from '@/components/modeler/OrientationResetIcon';
+import OrthographicIcon from '@/components/modeler/OrthographicIcon';
 import { TOOLS } from '@/lib/tools';
 
 // Basics shown at the top of the main Help page.
@@ -24,9 +25,9 @@ export const HELP_GESTURES = [
   ['Pan', 'Drag two fingers.'],
   ['Zoom', 'Pinch two fingers in or out.'],
   ['Select', 'Tap an object, face, edge or vertex.'],
-  ['Select multiple', 'Touch and hold the model, then tap more.'],
+  ['Select multiple', 'Touch and hold the model, then tap more. A tap that selects nothing ends it and clears the selection.'],
   ['Box select', 'Touch and hold empty space, then drag a box.'],
-  ['Deselect', 'Tap empty space.'],
+  ['Deselect', 'Tap empty space, or tap the selection again.'],
   ['Move', 'Drag the selected item.'],
   ['Rotate', 'Twist two fingers.'],
   ['Scale', 'Pinch two fingers.'],
@@ -69,7 +70,7 @@ export const HELP_MATERIALS = [
       { key: 'texture:merge', label: 'Merge', icon: Blend, desc: 'Blends the texture with the object\'s color.' },
       { key: 'texture:seamless', label: 'Seamless', icon: FlipHorizontal2, desc: 'Mirrors the texture at its edges so repeats show no seams.' },
       { key: 'texture:wrap', label: 'Wrap', icon: Box, desc: 'Chooses how the texture projects onto the object: Box, Planar, Cylinder or Sphere.' },
-      { key: 'texture:uv', label: 'UV', icon: LayoutGrid, desc: 'Opens the UV Editor: the object\'s surface laid flat on the image. Drag a piece to move it, twist to turn it, pinch to resize it. Seams lets you tap edges on the model to cut along; Cut angle cuts sharp edges. Unwrap starts the layout again, Pack fits the pieces back into the square, Flip mirrors the selected piece.' },
+      { key: 'texture:uv', label: 'UV', icon: LayoutGrid, desc: 'Opens the UV Editor: the object\'s surface laid flat on the image. The object needs a texture first. Drag a piece to move it, twist to turn it, pinch to resize it. Seams lets you tap edges on the model to cut along; Cut angle cuts sharp edges. Unwrap starts the layout again, Pack fits the pieces back into the square, Flip mirrors the selected piece, Undo steps back through UV edits only. Back returns to Texture, the check mark applies and closes, X undoes the changes and closes.' },
       { key: 'texture:apply', label: 'Apply', icon: Check, desc: 'Keeps the texture changes.' },
       { key: 'texture:sliders', label: 'Texture sliders', icon: SlidersHorizontal, desc: 'Scale, Rotation and Opacity adjust the texture.' },
     ],
@@ -99,13 +100,13 @@ const desc = {
     separate: 'Splits disconnected parts of a mesh into separate objects.',
     divide: 'Subdivides the mesh to add faces and edges.',
     boolean: 'Opens Subtract, Union and Intersect.',
-    subtract: 'Removes the volume of one object from another.',
-    union: 'Fuses overlapping objects into one solid.',
-    intersect: 'Keeps only the volume where objects overlap.',
+    subtract: 'Removes the volume of one object from another. In its panel, select an object and tap Add under Base object, select the other and tap Add under Cutter object, then tap Subtract.',
+    union: 'Fuses two overlapping objects into one solid. In its panel, select an object and tap Add under First object, select the other and tap Add under Second object, then tap Union.',
+    intersect: 'Keeps only the volume where two objects overlap. In its panel, select an object and tap Add under First object, select the other and tap Add under Second object, then tap Intersect.',
     smooth: 'Relaxes vertices to even out the surface.',
     clone: 'Duplicates the selected object.',
     radial_array: `Duplicates the object in a circle around an axis. ${SP}: count, radius, axis and follow.`,
-    lock: 'Prevents the object from being edited. Unlock releases it.',
+    lock: 'Locks the selected objects so they can\'t be edited. With nothing selected the button becomes Unlock, which releases every locked object.',
     delete: 'Deletes the selected object.',
   },
   face: {
@@ -128,7 +129,7 @@ const desc = {
     select_loop: `Selects a continuous loop of edges. ${SP}: skip and offset.`,
     cut_loop: `Adds an edge loop around the object. ${SP}: cut, center, straight and follow.`,
     dissolve: 'Removes the selected edges and merges the faces on either side of each into one face.',
-    delete: 'Deletes the selected edges.',
+    delete: 'Deletes selected edges that lie between two faces, joining those faces into one. An outer border edge stays.',
   },
   vertex: {
     create_face: 'Creates a face from the selected vertices.',
@@ -136,12 +137,18 @@ const desc = {
     connect: 'Connects the selected vertices with edges.',
     target_merge: 'Moves a vertex onto a target vertex and merges them.',
     merge: 'Merges the selected vertices at a single point.',
+    bevel: `Rounds the selected corner vertices into a curved corner. ${SP}: radius, segments, smooth and sweep (Pro).`,
     dissolve: 'Removes the selected vertices and merges the faces around each into one face.',
-    delete: 'Deletes the selected vertices.',
+    delete: 'Deletes selected vertices that lie partway along a straight edge. A corner of a face cannot be deleted.',
   },
 };
 
 const ALIASES = { soft_normals: ['Hard normals'], lock: ['Unlock'] };
+
+// The button at the top of the screen, between Menu and the information tip.
+const TOP = [
+  { key: 'top:orthographic', side: 'orthographic', label: 'Orthographic view', icon: OrthographicIcon, desc: 'Switches the view between perspective and orthographic. Orthographic draws everything at one scale with no perspective, so parallel edges stay parallel. Orbit, pan and zoom work the same in both. Tap again for perspective.' },
+];
 
 const modeEntries = (mode) => TOOLS[mode].pages[0].map((t) => ({
   key: `${mode}:${t.id}`, mode, label: t.label, aliases: ALIASES[t.id] || [], icon: t.icon, desc: desc[mode][t.id],
@@ -159,7 +166,7 @@ const SIDE = [
   { key: 'side:focus', side: 'focus', label: 'Focus', icon: Crosshair, desc: 'Re-centers the camera on the selection.' },
 ];
 
-// Tools grouped by mode: Object, Face, Edge, Vertex, General, then the side buttons.
+// Tools grouped by mode: Object, Face, Edge, Vertex, General, then the side and top buttons.
 export const HELP_SECTIONS = [
   { title: 'Object tools', entries: [...modeEntries('object'), segments] },
   { title: 'Face tools', entries: modeEntries('face') },
@@ -167,6 +174,7 @@ export const HELP_SECTIONS = [
   { title: 'Vertex tools', entries: modeEntries('vertex') },
   { title: 'General tools', entries: G.map((e) => ({ ...e, key: `general:${e.key}`, mode: 'general' })) },
   { title: 'Side buttons', entries: SIDE },
+  { title: 'Top button', entries: TOP },
 ];
 
 const HELP_ENTRIES = HELP_SECTIONS.flatMap((section) => section.entries);

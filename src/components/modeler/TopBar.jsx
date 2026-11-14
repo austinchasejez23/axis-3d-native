@@ -4,6 +4,8 @@ import { useTheme } from '@/lib/theme';
 import { helpHintActive, stopHelpHint } from '@/lib/helpHint';
 import ViewportModeButtons from '@/components/modeler/ViewportModeButtons';
 import RenderBoostButtons from '@/components/modeler/RenderBoostButtons';
+import OrthographicIcon from '@/components/modeler/OrthographicIcon';
+import { helpIntercept } from '@/lib/helpMode';
 
 const PANEL = { background: 'rgba(9,13,22,0.38)', border: '1px solid rgba(255,255,255,0.07)' };
 const TOP = 'calc(env(safe-area-inset-top, 0px) + 0.25rem)';
@@ -16,7 +18,7 @@ const FLASH_MS = 4000;
 const FLASH_EVERY_MS = 120000;
 const FLASH_WINDOW_MS = 600000;
 
-export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transparentViewport, freeTransform, snapping, onToggleClayViewport, onToggleTransparentViewport, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel, onFocus, precision, onTogglePrecision, onOpenPrecisionPanel, onHelp, helpOpen, counter, onOrientationReset, onOpenOrientationPanel, orientationOpen }) {
+export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transparentViewport, freeTransform, snapping, onToggleClayViewport, onToggleTransparentViewport, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel, onFocus, precision, onTogglePrecision, onOpenPrecisionPanel, onHelp, helpOpen, counter, onOrientationReset, onOpenOrientationPanel, orientationOpen, orthographic, onToggleOrthographic }) {
   const { uiColor, highlightColor, hintsEnabled } = useTheme();
   // New users: the information button now and then flashes three times.
   const [helpFlash, setHelpFlash] = useState(false);
@@ -35,6 +37,17 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
     schedule(FLASH_FIRST_MS);
     return () => { clearTimeout(timer); setHelpFlash(false); };
   }, [helpOpen, hintsEnabled]);
+  // The view's name shows briefly under the Orthographic button when tapped.
+  const [viewNotice, setViewNotice] = useState(null);
+  const viewNoticeTimer = useRef(null);
+  useEffect(() => () => clearTimeout(viewNoticeTimer.current), []);
+  const toggleOrthographic = () => {
+    if (helpIntercept({ id: 'orthographic' })) return;
+    clearTimeout(viewNoticeTimer.current);
+    setViewNotice(orthographic ? 'Perspective' : 'Orthographic');
+    viewNoticeTimer.current = setTimeout(() => setViewNotice(null), 1400);
+    onToggleOrthographic?.();
+  };
   const [sideControlsExpanded, setSideControlsExpanded] = useState(true);
   const sideControlsRef = useRef(null);
   useEffect(() => {
@@ -59,6 +72,13 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
       <div className="absolute left-[6px] w-12 rounded-xl pointer-events-auto" style={{ ...PANEL, top: TOP }}>
         <button onClick={onMenu} aria-label="Menu" style={{ color: uiColor, textShadow: txtShadow }} className={`${btn} h-12`}>
           <Menu className="w-8 h-8" strokeWidth={2.5} />
+        </button>
+      </div>
+      {/* Orthographic view: between Menu and the information tip. */}
+      <div className="absolute left-[58px] w-8 rounded-xl pointer-events-auto" style={{ ...PANEL, top: TOP }}>
+        <button onClick={toggleOrthographic} aria-label="Orthographic view" aria-pressed={!!orthographic} style={{ color: orthographic ? highlightColor : uiColor, textShadow: txtShadow }} className={`${btn} relative h-8`}>
+          <OrthographicIcon className="w-5 h-5 shrink-0" strokeWidth={2} />
+          {viewNotice && <span className="absolute left-0 top-full mt-1 z-20 text-sm whitespace-nowrap" style={{ color: uiColor }}>{viewNotice}</span>}
         </button>
       </div>
       {counter && (
