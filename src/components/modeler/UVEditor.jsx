@@ -86,7 +86,7 @@ export default function UVEditor({ meshId: openedFor, managerRef, onChange, onBa
   const preview = useRef({ timer: 0, last: 0 });
   const angleTimer = useRef(0);
   // The square fits beside the buttons and the Cut angle slider.
-  const size = useMemo(() => Math.round(Math.max(150, Math.min(237, window.innerWidth - 136))), []);
+  const size = useMemo(() => Math.round(Math.max(180, Math.min(420, window.innerWidth - 32))), []);
 
   // Tell the sheet something changed, so its checkmark keeps it.
   const notify = () => onChange?.();
@@ -353,9 +353,9 @@ export default function UVEditor({ meshId: openedFor, managerRef, onChange, onBa
       if (!g.action) {
         if (Math.hypot(dx, dy) * size < 5) return;
         g.action = 'move';
-        g.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+        
       }
-      map = g.axis === 'x' ? ([u, v]) => [u + dx, v] : ([u, v]) => [u, v + dy];
+      map = ([u, v]) => [u + dx, v + dy];
     } else {
       if (pointers.current.size < 2) return;
       const now = pair();
@@ -425,29 +425,29 @@ export default function UVEditor({ meshId: openedFor, managerRef, onChange, onBa
         </div>
       </div>
       <div className="px-2 pb-2">
-        <div className="flex items-start gap-2">
+        <div className="flex flex-col items-center gap-2">
           <canvas
             ref={canvasRef}
             aria-label="UV layout"
-            className="block shrink-0 touch-none rounded-lg"
-            style={{ width: size, height: size }}
+            className="block touch-none rounded-lg"
+            style={{ width: size, height: size, maxWidth: '100%' }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
           />
-          <div className="flex min-w-0 flex-1 flex-col justify-between gap-1.5" style={{ minHeight: size }}>
+          <div className="grid w-full grid-cols-5 gap-1.5">
             <button type="button" onClick={() => setSeamMode((on) => !on)} aria-pressed={seamMode} className={btn} style={{ color: seamMode ? highlightColor : uiColor, borderColor: seamMode ? highlightColor : undefined }}>Seams</button>
             <button type="button" onClick={unwrap} className={btn} style={{ color: uiColor }}>Unwrap</button>
             <button type="button" {...blockedButton(!hasLayout, 'Nothing to pack yet', pack)} className={btn} style={{ color: uiColor }}>Pack</button>
             <button type="button" {...blockedButton(!hasLayout, 'Nothing to flip yet', flip)} className={btn} style={{ color: uiColor }}>Flip</button>
             <button type="button" {...blockedButton(!canUndo, 'No UV edits to undo', undo)} aria-label="Undo UV edit" className={btn} style={{ color: uiColor }}>Undo</button>
-            <div>
-              <InlineSlider
-                label="Cut angle" value={angle} display={angle >= NO_CUT_ANGLE ? 'Off' : `${angle}°`}
-                min={10} max={NO_CUT_ANGLE} step={1} grow onChange={changeAngle}
-              />
-            </div>
+          </div>
+          <div className="w-full">
+            <InlineSlider
+              label="Cut angle" value={angle} display={angle >= NO_CUT_ANGLE ? 'Off' : `${angle}°`}
+              min={10} max={NO_CUT_ANGLE} step={1} grow onChange={changeAngle}
+            />
           </div>
         </div>
         <p className="mt-1.5 text-[12px] leading-tight" style={{ color: seamMode ? highlightColor : uiColor }}>{seamMode ? HINTS.seams : HINTS.pieces}</p>
