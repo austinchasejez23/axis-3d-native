@@ -1,15 +1,39 @@
 import * as THREE from 'three';
 
 // UV unwrapping. A mesh is cut into islands along its seams (seams the user
-// marked, or automatic ones at sharp edges), each island is flattened with a
-// least-squares conformal map so the image keeps its shapes, and the islands
-// are packed into the 0..1 square with the same texel size everywhere.
+// marked, plus automatic ones at edges sharper than the Cut angle when it is
+// on), each island is flattened with a least-squares conformal map so the
+// image keeps its shapes, and the islands are packed into the 0..1 square with
+// the same texel size everywhere. A piece that would stretch the image more
+// than STRETCH_LIMIT is split: first along its hard edges, where a cut hides
+// best, otherwise between its stretched and squeezed parts.
 // Result: mesh.uvUnwrap = { faceCount, faces: [[[u, v] per corner] per face], islands: [[face index]] }
 
 const edgeKey = (a, b) => (a < b ? `${a},${b}` : `${b},${a}`);
-export const DEFAULT_CUT_ANGLE = 60;
 export const NO_CUT_ANGLE = 180;
+// Cut angle starts off: the model is cut only where seams are marked (and
+// where a piece could not lie flat without it).
+export const DEFAULT_CUT_ANGLE = NO_CUT_ANGLE;
+// An edge bending by exactly the cut angle is never cut, so a shape whose
+// edges all bend by that much (a 12-sided torus at 60°) is not cut wherever
+// rounding happened to tip it over.
+const ANGLE_TOLERANCE = 0.5;
+// Edges bending more than this are hard edges: the first place to split a
+// piece that stretches too much.
+const HARD_ANGLE = 60;
+// Largest stretch (either way, relative to the piece's typical face) a piece
+// may have before it is split.
+const STRETCH_LIMIT = 1.5;
+const MAX_SPLIT_DEPTH = 6;
+// The usual share of its bounding box a net of joined pieces must keep
+// filling (other shares are tried too; see computeUnwrap).
+const MIN_NET_FILL = 0.6;
 const round = (n) => Math.round(n * 100000) / 100000;
+
+function bendDegrees(mesh, f1, f2) {
+  const d = THREE.MathUtils.clamp(mesh.getFaceNormal(f1).dot(mesh.getFaceNormal(f2)), -1, 1);
+  return THREE.MathUtils.radToDeg(Math.acos(d));
+}
 
 function faceEdgeKeys(face) {
   const keys = [];
@@ -29,14 +53,13 @@ function buildEdgeFaces(mesh) {
   return map;
 }
 
-// Seams the user marked, plus every edge sharper than the cut angle.
+// Seams the user marked, plus every edge bending more than the cut angle.
 function seamSet(mesh, edgeFaces, angle) {
   const seams = new Set((mesh.uvSeams || []).map((e) => edgeKey(e.v1, e.v2)));
   if (angle >= NO_CUT_ANGLE) return seams;
-  const cos = Math.cos((angle * Math.PI) / 180);
   for (const [key, list] of edgeFaces) {
     if (list.length !== 2) continue;
-    if (mesh.getFaceNormal(list[0]).dot(mesh.getFaceNormal(list[1])) < cos) seams.add(key);
+    if (bendDegrees(mesh, list[0], list[1]) > angle + ANGLE_TOLERANCE) seams.add(key);
   }
   return seams;
 }
@@ -221,6 +244,218 @@ function flatten(mesh, faces, surface) {
   return result;
 }
 
+// Cut an island open until it is a disk, then flatten it.
+function flattenIsland(mesh, faces, edgeFaces, seams) {
+  let surface = cutSurface(mesh, faces, edgeFaces, seams);
+  for (let i = 0; i < 3 && surface.chi !== 1; i++) {
+    if (!cutOnce(mesh, faces, surface, seams)) break;
+    surface = cutSurface(mesh, faces, edgeFaces, seams);
+  }
+  return { faces, surface, points: flatten(mesh, faces, surface) };
+}
+
+const signedArea2 = (a, b, c) => ((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2;
+
+// How unevenly a flattened piece scales the image: each face's flat area over
+// its real area, as a log, relative to the piece's typical (area-weighted
+// median) face. A face that came out flipped counts as the worst stretch.
+// Faces too small to see are left out of the worst case.
+function stretchOf(mesh, island) {
+  const items = [];
+  let total = 0;
+  for (const fi of island.faces) {
+    const face = mesh.faces[fi];
+    let real = 0, flat = 0;
+    for (const tri of mesh.getFaceTriangleIndices(fi)) {
+      const p = tri.map((c) => mesh.getVertexVector(face[c]));
+      real += new THREE.Vector3().subVectors(p[1], p[0]).cross(new THREE.Vector3().subVectors(p[2], p[0])).length() / 2;
+      const q = tri.map((c) => island.points[island.surface.corner.get(`${fi}:${c}`)]);
+      flat += signedArea2(q[0], q[1], q[2]);
+    }
+    total += real;
+    items.push({ fi, real, flat });
+  }
+  const logOf = new Map();
+  const visible = [];
+  for (const it of items) {
+    if (it.real <= total * 1e-6) { logOf.set(it.fi, 0); continue; }
+    const flipped = it.flat <= 0;
+    const value = flipped ? null : Math.log(it.flat / it.real);
+    logOf.set(it.fi, value);
+    visible.push({ ...it, value, flipped });
+  }
+  const sorted = visible.filter((it) => !it.flipped).sort((a, b) => a.value - b.value);
+  let median = 0;
+  const half = sorted.reduce((sum, it) => sum + it.real, 0) / 2;
+  let run = 0;
+  for (const it of sorted) { run += it.real; if (run >= half) { median = it.value; break; } }
+  let worst = 0;
+  let maxValue = -Infinity;
+  for (const it of visible) {
+    if (it.flipped) { worst = Infinity; continue; }
+    worst = Math.max(worst, Math.abs(it.value - median));
+    maxValue = Math.max(maxValue, it.value);
+  }
+  // Flipped faces join the most stretched side when the piece is split.
+  for (const [fi, value] of logOf) if (value === null) logOf.set(fi, Number.isFinite(maxValue) ? maxValue + 1 : 1);
+  return { stretch: Math.exp(worst), logOf };
+}
+
+// Faces of one piece that stay connected without crossing a seam.
+function componentsOf(faces, edgeFaces, mesh, seams) {
+  const inPiece = new Set(faces);
+  const parent = new Map(faces.map((fi) => [fi, fi]));
+  const find = (x) => { while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); } return x; };
+  for (const fi of faces) {
+    for (const key of faceEdgeKeys(mesh.faces[fi])) {
+      if (seams.has(key)) continue;
+      for (const other of edgeFaces.get(key) || []) {
+        if (other === fi || !inPiece.has(other)) continue;
+        const a = find(fi), b = find(other);
+        if (a !== b) parent.set(a, b);
+      }
+    }
+  }
+  const groups = new Map();
+  for (const fi of faces) {
+    const root = find(fi);
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root).push(fi);
+  }
+  return [...groups.values()];
+}
+
+// Edges inside a piece (between two of its faces, not already a seam).
+function innerEdges(faces, edgeFaces, mesh, seams) {
+  const inPiece = new Set(faces);
+  const out = [];
+  const seen = new Set();
+  for (const fi of faces) {
+    for (const key of faceEdgeKeys(mesh.faces[fi])) {
+      if (seen.has(key) || seams.has(key)) continue;
+      seen.add(key);
+      const list = edgeFaces.get(key) || [];
+      if (list.length === 2 && inPiece.has(list[0]) && inPiece.has(list[1])) out.push({ key, a: list[0], b: list[1] });
+    }
+  }
+  return out;
+}
+
+// Axes along which a piece's faces spread, widest first (area-weighted
+// principal axes of the face centres).
+function spreadAxes(mesh, faces) {
+  const centre = new THREE.Vector3();
+  let total = 0;
+  const points = faces.map((fi) => {
+    const face = mesh.faces[fi];
+    const c = new THREE.Vector3();
+    for (const vid of face) c.add(mesh.getVertexVector(vid));
+    c.divideScalar(face.length);
+    const w = Math.max(mesh.getFaceArea ? mesh.getFaceArea(fi) : 1, 1e-12);
+    centre.addScaledVector(c, w);
+    total += w;
+    return { c, w };
+  });
+  centre.divideScalar(total);
+  const m = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  for (const { c, w } of points) {
+    const d = [c.x - centre.x, c.y - centre.y, c.z - centre.z];
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) m[i][j] += w * d[i] * d[j];
+  }
+  // Jacobi rotations for the symmetric 3×3 matrix.
+  const v = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  for (let sweep = 0; sweep < 20; sweep++) {
+    let off = 0;
+    for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) off += m[i][j] * m[i][j];
+    if (off < 1e-20) break;
+    for (let p = 0; p < 3; p++) for (let q = p + 1; q < 3; q++) {
+      if (Math.abs(m[p][q]) < 1e-15) continue;
+      const theta = (m[q][q] - m[p][p]) / (2 * m[p][q]);
+      const t = Math.sign(theta || 1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+      const c = 1 / Math.sqrt(t * t + 1), s = t * c;
+      for (let k = 0; k < 3; k++) {
+        const mkp = m[k][p], mkq = m[k][q];
+        m[k][p] = c * mkp - s * mkq; m[k][q] = s * mkp + c * mkq;
+      }
+      for (let k = 0; k < 3; k++) {
+        const mpk = m[p][k], mqk = m[q][k];
+        m[p][k] = c * mpk - s * mqk; m[q][k] = s * mpk + c * mqk;
+      }
+      for (let k = 0; k < 3; k++) {
+        const vkp = v[k][p], vkq = v[k][q];
+        v[k][p] = c * vkp - s * vkq; v[k][q] = s * vkp + c * vkq;
+      }
+    }
+  }
+  const axes = [0, 1, 2].map((i) => ({ spread: m[i][i], axis: new THREE.Vector3(v[0][i], v[1][i], v[2][i]).normalize() }));
+  axes.sort((a, b) => b.spread - a.spread);
+  return { centre, axes: axes.map((a) => a.axis) };
+}
+
+// Flatten a piece, splitting it while it stretches the image too much: along
+// its hard edges first, where a cut hides best; otherwise each way of halving
+// it (between the parts the flattening stretched and squeezed, or across each
+// of its spread axes) is tried and the one that stretches least is kept.
+// Returns the flattened pieces.
+function flattenLimited(mesh, faces, edgeFaces, seams, depth = 0, hardDone = false) {
+  const island = flattenIsland(mesh, faces, edgeFaces, seams);
+  if (depth >= MAX_SPLIT_DEPTH || faces.length < 2) return [island];
+  const { stretch, logOf } = stretchOf(mesh, island);
+  if (stretch <= STRETCH_LIMIT) return [island];
+  const inner = innerEdges(faces, edgeFaces, mesh, seams);
+  if (!hardDone) {
+    const hard = inner.filter((e) => bendDegrees(mesh, e.a, e.b) > HARD_ANGLE + ANGLE_TOLERANCE);
+    if (hard.length) {
+      for (const e of hard) seams.add(e.key);
+      return componentsOf(faces, edgeFaces, mesh, seams)
+        .flatMap((part) => flattenLimited(mesh, part, edgeFaces, seams, depth + 1, true));
+    }
+  }
+  // Ways to halve the piece: each says which side a face is on.
+  const sides = [];
+  let lo = Infinity, hi = -Infinity;
+  for (const fi of faces) { const value = logOf.get(fi); lo = Math.min(lo, value); hi = Math.max(hi, value); }
+  const middle = (lo + hi) / 2;
+  sides.push((fi) => logOf.get(fi) > middle);
+  if (faces.length <= 3000) {
+    const { centre, axes } = spreadAxes(mesh, faces);
+    for (const axis of axes) {
+      const offset = centre.dot(axis);
+      sides.push((fi) => {
+        const face = mesh.faces[fi];
+        let d = 0;
+        for (const vid of face) d += mesh.getVertexVector(vid).dot(axis);
+        return d / face.length > offset;
+      });
+    }
+  }
+  let best = null;
+  for (const side of sides) {
+    const between = inner.filter((e) => side(e.a) !== side(e.b));
+    if (!between.length) continue;
+    const trial = new Set(seams);
+    for (const e of between) trial.add(e.key);
+    const parts = componentsOf(faces, edgeFaces, mesh, trial);
+    if (parts.length < 2) continue;
+    let worst = 0;
+    for (const part of parts) {
+      const flatPart = flattenIsland(mesh, part, edgeFaces, trial);
+      worst = Math.max(worst, part.length < 2 ? 1 : stretchOf(mesh, flatPart).stretch);
+    }
+    // A split that brings every part within the limit wins with the fewest
+    // cuts; otherwise the one that stretches least.
+    const cutCount = trial.size - seams.size;
+    const ok = worst <= STRETCH_LIMIT;
+    const better = !best
+      || (ok && (!best.ok || cutCount < best.cutCount))
+      || (!ok && !best.ok && (worst < best.worst * 0.97 || (worst <= best.worst * 1.03 && cutCount < best.cutCount)));
+    if (better) best = { worst, ok, cutCount, trial, parts };
+  }
+  if (!best) return [island];
+  for (const key of best.trial) seams.add(key);
+  return best.parts.flatMap((part) => flattenLimited(mesh, part, edgeFaces, seams, depth + 1, true));
+}
+
 // Least squares conformal map (Levy et al.): two points are pinned and the rest
 // solve for the flattest-angle layout, by conjugate gradient on the normal equations.
 function solveConformal(pos, tris, init) {
@@ -343,49 +578,116 @@ function solveConformal(pos, tris, init) {
   return out.every((pt) => Number.isFinite(pt[0]) && Number.isFinite(pt[1])) ? out : null;
 }
 
-// Pack flattened islands side by side (shelves) into the 0..1 square.
-function pack(islands) {
-  const items = islands.map((island, index) => {
-    let minU = Infinity, minV = Infinity, maxU = -Infinity, maxV = -Infinity;
-    for (const [u, v] of island.points) { minU = Math.min(minU, u); minV = Math.min(minV, v); maxU = Math.max(maxU, u); maxV = Math.max(maxV, v); }
-    return { index, minU, minV, w: Math.max(1e-6, maxU - minU), h: Math.max(1e-6, maxV - minV) };
-  });
-  const totalArea = items.reduce((s, it) => s + it.w * it.h, 0);
-  const pad = Math.sqrt(totalArea) * 0.02;
-  const stripW = Math.max(Math.max(...items.map((it) => it.w)), Math.sqrt(totalArea / 0.7));
-  const order = [...items].sort((p, q) => q.h - p.h);
-  let x = 0, y = 0, rowH = 0, usedW = 0;
-  for (const it of order) {
-    if (x > 0 && x + it.w > stripW) { x = 0; y += rowH + pad; rowH = 0; }
-    it.ox = x; it.oy = y;
-    x += it.w + pad;
-    rowH = Math.max(rowH, it.h);
-    usedW = Math.max(usedW, it.ox + it.w);
-  }
-  const usedH = y + rowH;
-  const scale = 0.96 / Math.max(usedW, usedH, 1e-6);
-  const margin = 0.02;
-  return items.map((it) => ({
-    index: it.index,
-    map: ([u, v]) => [round((it.ox + (u - it.minU)) * scale + margin), round((it.oy + (v - it.minV)) * scale + margin)],
-  }));
+// Convex hull (monotone chain) of 2D points.
+function hullOf(points) {
+  const pts = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (pts.length < 3) return pts;
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower = [], upper = [];
+  for (const p of pts) { while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop(); lower.push(p); }
+  for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop(); upper.push(p); }
+  return lower.slice(0, -1).concat(upper.slice(0, -1));
 }
 
-// Unfold pieces into one connected layout, like a paper net: a piece that
-// touches another across a cut edge is turned flat beside it along that edge
-// (top first, sides around it). A piece that would land on top of another stays
-// loose instead. Returns the groups of piece indexes and the folded edges.
-function joinIslands(mesh, flat, edgeFaces, userSeams) {
+// The turn that gives a piece its smallest bounding box (one of its hull's
+// sides lies along an axis), then a quarter turn more if needed so it lies
+// wider than tall.
+function snugTurn(points) {
+  const hull = hullOf(points);
+  let best = 0, bestArea = Infinity, bestWide = true;
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i], b = hull[(i + 1) % hull.length];
+    const turn = -Math.atan2(b[1] - a[1], b[0] - a[0]);
+    const c = Math.cos(turn), sn = Math.sin(turn);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of hull) { const u = c * x - sn * y, v = sn * x + c * y; x0 = Math.min(x0, u); x1 = Math.max(x1, u); y0 = Math.min(y0, v); y1 = Math.max(y1, v); }
+    const area = (x1 - x0) * (y1 - y0);
+    if (area < bestArea * (1 - 1e-6)) { bestArea = area; best = turn; bestWide = x1 - x0 >= y1 - y0; }
+  }
+  return bestWide ? best : best + Math.PI / 2;
+}
+
+// Pack pieces side by side in rows (shelves) into the 0..1 square. With
+// `turn`, each piece is first turned to its snuggest box; several row widths
+// are tried and the one that fills the square best is kept.
+function pack(islands, { turn = false } = {}) {
+  const items = islands.map((island, index) => {
+    const angle = turn && island.points.length > 2 ? snugTurn(island.points) : 0;
+    const c = Math.cos(angle), sn = Math.sin(angle);
+    const rot = angle ? ([u, v]) => [c * u - sn * v, sn * u + c * v] : ([u, v]) => [u, v];
+    let minU = Infinity, minV = Infinity, maxU = -Infinity, maxV = -Infinity;
+    for (const p of island.points) { const [u, v] = rot(p); minU = Math.min(minU, u); minV = Math.min(minV, v); maxU = Math.max(maxU, u); maxV = Math.max(maxV, v); }
+    return { index, rot, minU, minV, w: Math.max(1e-6, maxU - minU), h: Math.max(1e-6, maxV - minV) };
+  });
+  const totalArea = items.reduce((sum, it) => sum + it.w * it.h, 0);
+  const pad = Math.sqrt(totalArea) * 0.02;
+  const order = [...items].sort((p, q) => q.h - p.h);
+  const widest = Math.max(...items.map((it) => it.w));
+  const allInRow = items.reduce((sum, it) => sum + it.w + pad, 0);
+  const shelve = (stripW) => {
+    let x = 0, y = 0, rowH = 0, usedW = 0;
+    const at = new Map();
+    for (const it of order) {
+      if (x > 0 && x + it.w > stripW + 1e-9) { x = 0; y += rowH + pad; rowH = 0; }
+      at.set(it, [x, y]);
+      x += it.w + pad;
+      rowH = Math.max(rowH, it.h);
+      usedW = Math.max(usedW, at.get(it)[0] + it.w);
+    }
+    return { at, side: Math.max(usedW, y + rowH) };
+  };
+  let best = null;
+  const steps = 24;
+  for (let k = 0; k <= steps; k++) {
+    const stripW = widest + (Math.max(widest, allInRow) - widest) * (k / steps) ** 2;
+    const layout = shelve(stripW);
+    if (!best || layout.side < best.side - 1e-12) best = layout;
+  }
+  const scale = 0.96 / Math.max(best.side, 1e-6);
+  const margin = 0.02;
+  return items.map((it) => {
+    const [ox, oy] = best.at.get(it);
+    return {
+      index: it.index,
+      map: (p) => { const [u, v] = it.rot(p); return [round((ox + (u - it.minU)) * scale + margin), round((oy + (v - it.minV)) * scale + margin)]; },
+    };
+  });
+}
+
+// Do two flat triangles overlap (more than touching along a side)?
+function trianglesOverlap(A, B, tol) {
+  for (const T of [A, B]) {
+    for (let i = 0; i < 3; i++) {
+      const a = T[i], b = T[(i + 1) % 3];
+      const nx = -(b[1] - a[1]), ny = b[0] - a[0];
+      const len = Math.hypot(nx, ny);
+      if (len < 1e-12) continue;
+      let minA = Infinity, maxA = -Infinity, minB = Infinity, maxB = -Infinity;
+      for (const p of A) { const d = (p[0] * nx + p[1] * ny) / len; minA = Math.min(minA, d); maxA = Math.max(maxA, d); }
+      for (const p of B) { const d = (p[0] * nx + p[1] * ny) / len; minB = Math.min(minB, d); maxB = Math.max(maxB, d); }
+      if (minA >= maxB - tol || minB >= maxA - tol) return false;
+    }
+  }
+  return true;
+}
+
+// Unfold pieces into connected layouts, like a paper net: a piece that touches
+// another across a cut edge is turned flat beside it along that edge (largest
+// piece first, the others around it). A piece joins only if it lands on no
+// other piece of the net and the net still fills at least `minFill` of its
+// bounding box, so nets stay compact enough to pack well. Returns the nets
+// (piece indexes) and each piece's moved points.
+function joinIslands(mesh, flat, edgeFaces, userSeams, minFill) {
   const count = flat.length;
-  const joined = new Set();
-  if (count < 2 || count > 400) return { nets: flat.map((_, i) => [i]), joined };
+  const pts = flat.map((island) => island.points.map((q) => [q[0], q[1]]));
+  if (count < 2 || count > 400 || !(minFill <= 1)) return { nets: flat.map((_, i) => [i]), pts };
   const clusterOf = new Array(mesh.faces.length);
   flat.forEach((island, i) => island.faces.forEach((fi) => { clusterOf[fi] = i; }));
   const links = Array.from({ length: count }, () => new Map());
   for (const [key, list] of edgeFaces) {
     if (list.length !== 2 || userSeams.has(key)) continue;
     const a = clusterOf[list[0]], b = clusterOf[list[1]];
-    if (a === b) continue;
+    if (a === b || a === undefined || b === undefined) continue;
     const [v1, v2] = key.split(',').map(Number);
     const len = mesh.getVertexVector(v1).distanceTo(mesh.getVertexVector(v2));
     const cur = links[a].get(b);
@@ -406,17 +708,22 @@ function joinIslands(mesh, flat, edgeFaces, userSeams) {
     return { area, up: n.lengthSq() > 0 ? n.normalize().y : 0 };
   });
   const totalArea = info.reduce((sum, it) => sum + it.area, 0);
-  const eps = 0.002 * Math.sqrt(Math.max(totalArea, 1e-9));
+  const tol = 1e-4 * Math.sqrt(Math.max(totalArea, 1e-9));
+  // Each piece's triangles, as indexes into its points.
+  const tris = flat.map((island) => island.faces.flatMap((fi) => mesh.getFaceTriangleIndices(fi)
+    .map((tri) => tri.map((c) => island.surface.corner.get(`${fi}:${c}`)))));
+  const flatArea = flat.map((island, i) => tris[i].reduce((sum, [a, b, c]) => sum + Math.abs(signedArea2(island.points[a], island.points[b], island.points[c])), 0));
   const order = [...info.keys()].sort((p, q) => (Math.abs(info[q].area - info[p].area) > 1e-6 * Math.max(info[q].area, info[p].area) ? info[q].area - info[p].area : info[q].up - info[p].up));
-  const box = (pts) => {
+  const box = (points) => {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    for (const [x, y] of points) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
     return [x0, y0, x1, y1];
   };
-  const hit = (a, b) => a[0] < b[2] - eps && b[0] < a[2] - eps && a[1] < b[3] - eps && b[1] < a[3] - eps;
-  const cornerPoints = (i, fi) => mesh.faces[fi].map((_, k) => flat[i].points[flat[i].surface.corner.get(`${fi}:${k}`)]);
-  const pointOf = (i, fi, vid) => flat[i].points[flat[i].surface.corner.get(`${fi}:${mesh.faces[fi].indexOf(vid)}`)];
-  const centroid = (pts) => [pts.reduce((sum, q) => sum + q[0], 0) / pts.length, pts.reduce((sum, q) => sum + q[1], 0) / pts.length];
+  const boxesHit = (a, b) => a[0] < b[2] - tol && b[0] < a[2] - tol && a[1] < b[3] - tol && b[1] < a[3] - tol;
+  const triangleList = (i, points) => tris[i].map((t) => { const T = t.map((k) => points[k]); return { T, b: box(T) }; });
+  const cornerPoints = (i, fi) => mesh.faces[fi].map((_, k) => pts[i][flat[i].surface.corner.get(`${fi}:${k}`)]);
+  const pointOf = (i, fi, vid) => pts[i][flat[i].surface.corner.get(`${fi}:${mesh.faces[fi].indexOf(vid)}`)];
+  const centroid = (points) => [points.reduce((sum, q) => sum + q[0], 0) / points.length, points.reduce((sum, q) => sum + q[1], 0) / points.length];
 
   // The child's points turned and moved so its copy of the shared edge sits on the parent's.
   const alignAcross = (parent, child, link) => {
@@ -434,18 +741,19 @@ function joinIslands(mesh, flat, edgeFaces, userSeams) {
     const move = ([x, y]) => { const dx = x - from[0], dy = y - from[1]; return [to[0] + c * dx - sn * dy, to[1] + sn * dx + c * dy]; };
     const side = (q) => da[0] * (q[1] - a1[1]) - da[1] * (q[0] - a1[0]);
     if (side(centroid(cornerPoints(parent, pf))) * side(move(centroid(cornerPoints(child, cf)))) >= 0) return null;
-    return flat[child].points.map(move);
+    return pts[child].map(move);
   };
 
   const placed = new Array(count).fill(false);
-  const boxes = new Array(count);
   const nets = [];
   for (const root of order) {
     if (placed[root]) continue;
     placed[root] = true;
-    boxes[root] = box(flat[root].points);
     const net = [root];
     const queue = [root];
+    let netBox = box(pts[root]);
+    let netArea = flatArea[root];
+    let netTris = triangleList(root, pts[root]);
     while (queue.length) {
       const parent = queue.shift();
       const neighbours = [...links[parent].entries()].filter(([j]) => !placed[j]).sort((p, q) => q[1].len - p[1].len);
@@ -454,49 +762,111 @@ function joinIslands(mesh, flat, edgeFaces, userSeams) {
         const moved = alignAcross(parent, child, link);
         if (!moved) continue;
         const b = box(moved);
-        if (net.some((j) => j !== parent && hit(boxes[j], b))) continue;
-        flat[child].points = moved;
-        boxes[child] = b;
+        const grown = [Math.min(netBox[0], b[0]), Math.min(netBox[1], b[1]), Math.max(netBox[2], b[2]), Math.max(netBox[3], b[3])];
+        const grownArea = (grown[2] - grown[0]) * (grown[3] - grown[1]);
+        if (grownArea > 0 && (netArea + flatArea[child]) / grownArea < minFill) continue;
+        const childTris = triangleList(child, moved);
+        const lands = childTris.some((ct) => netTris.some((nt) => boxesHit(ct.b, nt.b) && trianglesOverlap(ct.T, nt.T, tol)));
+        if (lands) continue;
+        pts[child] = moved;
+        netBox = grown;
+        netArea += flatArea[child];
+        netTris = netTris.concat(childTris);
         placed[child] = true;
         net.push(child);
         queue.push(child);
-        joined.add(link.key);
       }
     }
     nets.push(net);
   }
-  return { nets, joined };
+  return { nets, pts };
 }
+
+// A long piece packs badly into a square, so it is halved across its length
+// (along mesh edges) until it is at most LONG_PIECE times longer than wide.
+const LONG_PIECE = 2;
+function halveLong(mesh, item, depth = 0) {
+  const corners = item.faces.flatMap((fi) => item.uv.get(fi));
+  if (depth >= 3 || item.faces.length < 2 || corners.length < 3) return [item];
+  const turn = snugTurn(corners);
+  const c = Math.cos(turn), sn = Math.sin(turn);
+  const along = ([u, v]) => c * u - sn * v;
+  const across = ([u, v]) => sn * u + c * v;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const q of corners) { x0 = Math.min(x0, along(q)); x1 = Math.max(x1, along(q)); y0 = Math.min(y0, across(q)); y1 = Math.max(y1, across(q)); }
+  if ((x1 - x0) <= LONG_PIECE * Math.max(y1 - y0, 1e-9)) return [item];
+  const faces = item.faces.map((fi) => {
+    const uv = item.uv.get(fi);
+    let a = 0;
+    for (let k = 0; k < uv.length; k++) { const p = uv[k], q = uv[(k + 1) % uv.length]; a += p[0] * q[1] - q[0] * p[1]; }
+    return { fi, x: uv.reduce((sum, q) => sum + along(q), 0) / uv.length, area: Math.abs(a) / 2 };
+  }).sort((p, q) => p.x - q.x);
+  const half = faces.reduce((sum, f) => sum + f.area, 0) / 2;
+  let run = 0, cut = 0;
+  while (cut < faces.length - 1 && run + faces[cut].area <= half) { run += faces[cut].area; cut++; }
+  if (cut === 0) cut = 1;
+  const make = (list) => ({ faces: list.map((f) => f.fi), uv: new Map(list.map((f) => [f.fi, item.uv.get(f.fi)])) });
+  return [make(faces.slice(0, cut)), make(faces.slice(cut))].flatMap((part) => halveLong(mesh, part, depth + 1));
+}
+
+// Pack the items into the square; returns each face's corners, the pieces,
+// how much of the square they cover, and the edges cut open (an edge whose two
+// faces put its ends in different places).
+function layoutOf(mesh, items, edgeFaces) {
+  const packed = pack(items.map((item) => ({ points: item.faces.flatMap((fi) => item.uv.get(fi)) })), { turn: true });
+  const faceUv = new Array(mesh.faces.length);
+  let used = 0;
+  items.forEach((item, n) => {
+    const place = packed.find((p) => p.index === n).map;
+    for (const fi of item.faces) {
+      const uv = item.uv.get(fi).map(place);
+      faceUv[fi] = uv;
+      let a = 0;
+      for (let k = 0; k < uv.length; k++) { const p = uv[k], q = uv[(k + 1) % uv.length]; a += p[0] * q[1] - q[0] * p[1]; }
+      used += Math.abs(a) / 2;
+    }
+  });
+  const cuts = [];
+  const same = (p, q) => Math.abs(p[0] - q[0]) < 1e-5 && Math.abs(p[1] - q[1]) < 1e-5;
+  for (const [key, list] of edgeFaces) {
+    if (list.length !== 2 || !faceUv[list[0]] || !faceUv[list[1]]) continue;
+    const [v1, v2] = key.split(',').map(Number);
+    const at = (fi, vid) => faceUv[fi][mesh.faces[fi].indexOf(vid)];
+    if (!same(at(list[0], v1), at(list[1], v1)) || !same(at(list[0], v2), at(list[1], v2))) cuts.push([v1, v2]);
+  }
+  return { faceUv, islands: items.map((item) => item.faces), used, cuts };
+}
+
+// How much texture a layout uses, less a little for every edge it cuts open:
+// among layouts using about the same amount, the one with fewer cuts wins.
+const CUT_COST = 0.15;
 
 export function computeUnwrap(mesh, { angle = DEFAULT_CUT_ANGLE } = {}) {
   const edgeFaces = buildEdgeFaces(mesh);
   const seams = seamSet(mesh, edgeFaces, angle);
   const islandFaces = findIslands(mesh, edgeFaces, seams);
-  const flat = [];
-  for (const faces of islandFaces) {
-    let surface = cutSurface(mesh, faces, edgeFaces, seams);
-    for (let i = 0; i < 3 && surface.chi !== 1; i++) {
-      if (!cutOnce(mesh, faces, surface, seams)) break;
-      surface = cutSurface(mesh, faces, edgeFaces, seams);
+  const flat = islandFaces.flatMap((faces) => flattenLimited(mesh, faces, edgeFaces, seams));
+  const userSeams = new Set((mesh.uvSeams || []).map((e) => edgeKey(e.v1, e.v2)));
+  const innerEdgeCount = Math.max(1, [...edgeFaces.values()].filter((list) => list.length === 2).length);
+  // Try nets from loose (no joining) to fully joined, each with and without
+  // halving long pieces, and keep the layout that uses the texture best for
+  // the cuts it makes.
+  const fills = flat.length > 200 ? [MIN_NET_FILL] : [Infinity, 0.85, 0.7, MIN_NET_FILL, 0.5, 0];
+  let best = null;
+  for (const minFill of fills) {
+    const { nets, pts } = joinIslands(mesh, flat, edgeFaces, userSeams, minFill);
+    const items = nets.map((net) => {
+      const uv = new Map();
+      for (const i of net) for (const fi of flat[i].faces) uv.set(fi, mesh.faces[fi].map((_, k) => pts[i][flat[i].surface.corner.get(`${fi}:${k}`)]));
+      return { faces: net.flatMap((i) => flat[i].faces), uv };
+    });
+    for (const halve of [false, true]) {
+      const layout = layoutOf(mesh, halve ? items.flatMap((item) => halveLong(mesh, item)) : items, edgeFaces);
+      const score = layout.used - CUT_COST * (layout.cuts.length / innerEdgeCount);
+      if (!best || score > best.score + 1e-9) best = { ...layout, score };
     }
-    flat.push({ faces, surface, points: flatten(mesh, faces, surface) });
   }
-  const { nets, joined } = joinIslands(mesh, flat, edgeFaces, new Set((mesh.uvSeams || []).map((e) => edgeKey(e.v1, e.v2))));
-  const packed = pack(nets.map((net) => ({ points: net.flatMap((i) => flat[i].points) })));
-  const faceUv = new Array(mesh.faces.length);
-  nets.forEach((net, n) => {
-    const place = packed.find((p) => p.index === n).map;
-    for (const i of net) {
-      const island = flat[i];
-      for (const fi of island.faces) {
-        faceUv[fi] = mesh.faces[fi].map((_, k) => place(island.points[island.surface.corner.get(`${fi}:${k}`)]));
-      }
-    }
-  });
-  // Where the surface was cut open, for showing on the model (folds are not cuts).
-  const cuts = [];
-  for (const key of seams) if ((edgeFaces.get(key) || []).length && !joined.has(key)) cuts.push(key.split(',').map(Number));
-  return { faceCount: mesh.faces.length, angle, faces: faceUv, islands: nets.map((net) => net.flatMap((i) => flat[i].faces)), seams: cuts };
+  return { faceCount: mesh.faces.length, angle, faces: best.faceUv, islands: best.islands, seams: best.cuts };
 }
 
 // Pack the islands again as they are now (their own sizes and turns kept), so

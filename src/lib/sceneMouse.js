@@ -149,12 +149,7 @@ export function applySceneMouse(SceneManager) {
       return;
     }
     if (m.mode === 'extrude_drag') {
-      const offset = this.extrudeOffsetFromDrag(m.startX, m.startY, e.clientX, e.clientY);
-      if (Math.abs(offset) > 1e-4) {
-        m.moved = true;
-        this.extrudeDrag.hasDragged = true;
-        this.updateExtrudeHeight(offset);
-      }
+      if (this.dragExtrude(m.startX, m.startY, e.clientX, e.clientY)) m.moved = true;
       return;
     }
 

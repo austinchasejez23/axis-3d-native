@@ -2675,6 +2675,7 @@ export class SceneManager {
     // Fat lines carry a pixel resolution; refresh the grid axes, wireframes and highlights.
     updateViewportGridResolution(this.grid, w, h);
     for (const obj of this.threeObjects.values()) obj.wireframe.material.resolution?.set(w, h);
+    for (const lines of this._seamOverlay?.children || []) lines.material.resolution?.set(w, h);
     this.updateHighlights();
   }
 

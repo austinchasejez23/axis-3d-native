@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { computeUnwrap, unwrapIsValid } from './uvUnwrap';
+import { makeFatSegments } from './fatLines';
 
 // Texture application for selected objects. A local image file is loaded into
 // a RepeatWrapping THREE.Texture and assigned to the mesh's material map; the
@@ -171,7 +172,8 @@ export function applySceneTexture(SceneManagerClass) {
   };
 
   // Show where the surface is cut open while the UV panel is open: seams the
-  // user marked in red, cuts made by the cut angle in amber. Pass null to hide.
+  // user marked in red, cuts the unwrap made itself in amber. Drawn like the
+  // wireframe, so the model hides the cuts on its far side. Pass null to hide.
   SceneManagerClass.prototype.setSeamOverlay = function (meshId) {
     this._seamOverlayMeshId = meshId || null;
     this._refreshSeamOverlay();
@@ -179,8 +181,10 @@ export function applySceneTexture(SceneManagerClass) {
   SceneManagerClass.prototype._refreshSeamOverlay = function () {
     if (this._seamOverlay) {
       this._seamOverlay.parent?.remove(this._seamOverlay);
-      this._seamOverlay.geometry.dispose();
-      this._seamOverlay.material.dispose();
+      for (const lines of this._seamOverlay.children) {
+        lines.geometry.dispose();
+        lines.material.dispose();
+      }
       this._seamOverlay = null;
     }
     const id = this._seamOverlayMeshId;
@@ -193,25 +197,23 @@ export function applySceneTexture(SceneManagerClass) {
       ...(mesh.uvSeams || []).map((e) => [e.v1, e.v2, true]),
       ...(mesh.uvUnwrap?.seams || []).filter(([a, b]) => !marked.has(key(a, b))).map(([a, b]) => [a, b, false]),
     ];
-    const positions = [];
-    const colors = [];
-    const red = new THREE.Color(0xff3b30), amber = new THREE.Color(0xffb020);
+    const markedLines = [], cutLines = [];
     for (const [a, b, mine] of pairs) {
       const va = mesh.getVertex(a), vb = mesh.getVertex(b);
       if (!va || !vb) continue;
-      positions.push(va.x, va.y, va.z, vb.x, vb.y, vb.z);
-      const c = mine ? red : amber;
-      colors.push(c.r, c.g, c.b, c.r, c.g, c.b);
+      (mine ? markedLines : cutLines).push(va.x, va.y, va.z, vb.x, vb.y, vb.z);
     }
-    if (!positions.length) return;
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    const lines = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false, transparent: true, toneMapped: false }));
-    lines.renderOrder = 999;
-    lines.raycast = () => {};
-    holder.add(lines);
-    this._seamOverlay = lines;
+    if (!markedLines.length && !cutLines.length) return;
+    const group = new THREE.Group();
+    for (const [positions, color] of [[cutLines, 0xffb020], [markedLines, 0xff3b30]]) {
+      if (!positions.length) continue;
+      const lines = makeFatSegments(positions, color, 2, this.renderer);
+      lines.renderOrder = 2;
+      lines.raycast = () => {};
+      group.add(lines);
+    }
+    holder.add(group);
+    this._seamOverlay = group;
   };
 
   // The unwrapped layout of one object, or null when it has none (or its

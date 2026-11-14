@@ -579,20 +579,7 @@ export function applySceneGestures(SceneManager) {
     }
 
     if (this.gesture === 'extrude_drag') {
-      if (this.extrudeDrag.freeDrag) {
-        const center = this.getSelectionCenter();
-        const worldDelta = this.screenToWorldDrag(this.gestureData.startX, this.gestureData.startY, e.clientX, e.clientY, center);
-        if (worldDelta.lengthSq() > 1e-8) {
-          this.extrudeDrag.hasDragged = true;
-          this.updateExtrudeFree(worldDelta);
-        }
-        return;
-      }
-      const offset = this.extrudeOffsetFromDrag(this.gestureData.startX, this.gestureData.startY, e.clientX, e.clientY);
-      if (Math.abs(offset) > 1e-4) {
-        this.extrudeDrag.hasDragged = true;
-        this.updateExtrudeHeight(offset);
-      }
+      this.dragExtrude(this.gestureData.startX, this.gestureData.startY, e.clientX, e.clientY);
       return;
     }
 

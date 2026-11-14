@@ -265,7 +265,7 @@ declare module './SceneManager.js' {
     /** Implemented by sceneSelection.js */
     exitMultiSelect(): void;
     /** Implemented by sceneExtrude.js */
-    extrudeOffsetFromDrag(startX: number, startY: number, curX: number, curY: number): any;
+    dragExtrude(startX: number, startY: number, curX: number, curY: number): any;
     /** Implemented by sceneSelection.js */
     faceIndexFromHit(hit: any): any;
     /** Implemented by sceneSelection.js */
@@ -457,8 +457,6 @@ declare module './SceneManager.js' {
     updateCutPreview(): any;
     /** Implemented by sceneExtrude.js */
     updateExtrudeFree(worldDelta: any): any;
-    /** Implemented by sceneExtrude.js */
-    updateExtrudeHeight(offset: number): any;
     /** Implemented by sceneGestures.js */
     updateMarquee(): any;
     /** Implemented by sceneRadialArray.js */

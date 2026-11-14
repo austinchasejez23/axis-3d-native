@@ -276,34 +276,31 @@ export function applySceneExtrude(SceneManager) {
     this.updateStats();
   };
 
-  // Drag → extrude offset, measured against the normal AS SEEN ON SCREEN.
-  // A world-space dot product against a camera-facing drag plane collapses to
-  // zero whenever the extruded face points at the camera (the usual case), so
-  // the extrude never moved. Screen-space projection has no such blind spot;
-  // when the normal points almost straight at the camera its screen direction
-  // is undefined, so vertical drag (up = outward) drives it instead.
-  P.extrudeOffsetFromDrag = /** @this {import("./SceneManager").SceneManager} */ function (startX, startY, curX, curY) {
+  // Drag → extrusion that goes where the finger goes, as Move does: with Free
+  // Move on it follows the drag across the screen plane; with it off it
+  // follows the world axis the drag starts along (chosen once the finger has
+  // moved a few pixels, so a wobble at touch-down can't pick the axis).
+  P.dragExtrude = /** @this {import("./SceneManager").SceneManager} */ function (startX, startY, curX, curY) {
     const ed = this.extrudeDrag;
-    if (!ed) return 0;
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    const toScreen = (v) => {
-      const p = v.clone().project(this.camera);
-      return { x: (p.x * 0.5 + 0.5) * rect.width, y: (-p.y * 0.5 + 0.5) * rect.height };
-    };
-    const center = this.getSelectionCenter();
-    const probe = Math.max(0.001, this.cameraDist * 0.05);
-    const a = toScreen(center);
-    const b = toScreen(center.clone().addScaledVector(ed.worldDirection, probe));
-    const nx = b.x - a.x, ny = b.y - a.y;
-    const nLen = Math.hypot(nx, ny);
-    const dx = curX - startX, dy = curY - startY;
-    if (nLen > 3) {
-      const along = (dx * nx + dy * ny) / nLen;
-      return (along * (probe / nLen)) / ed.worldUnitsPerLocal;
+    if (!ed) return false;
+    if (!ed.dragOrigin) ed.dragOrigin = this.getSelectionCenter().clone();
+    if (!ed.axis && !this.freeMove && Math.hypot(curX - startX, curY - startY) < 8) return false;
+    const worldDelta = this.screenToWorldDrag(startX, startY, curX, curY, ed.dragOrigin).multiplyScalar(this.precisionFactor ?? 1);
+    let delta = worldDelta;
+    if (this.freeMove) {
+      this.activeAxis = null;
+    } else {
+      if (!ed.axis) {
+        const ax = Math.abs(worldDelta.x), ay = Math.abs(worldDelta.y), az = Math.abs(worldDelta.z);
+        ed.axis = ax >= ay && ax >= az ? 'x' : (ay >= az ? 'y' : 'z');
+      }
+      this.activeAxis = ed.axis;
+      delta = new THREE.Vector3();
+      delta[ed.axis] = worldDelta[ed.axis];
     }
-    const fov = this.camera.fov * Math.PI / 180;
-    const worldPerPixel = (2 * this.cameraDist * Math.tan(fov / 2)) / (rect.height || 1);
-    return (-dy * worldPerPixel) / ed.worldUnitsPerLocal;
+    ed.hasDragged = true;
+    this.updateExtrudeFree(delta);
+    return true;
   };
 
   // Faces adjacent to an edge (by vertex pair).
@@ -314,26 +311,6 @@ export function applySceneExtrude(SceneManager) {
       if (f.includes(v1) && f.includes(v2)) res.push(i);
     }
     return res;
-  };
-
-  P.updateExtrudeHeight = /** @this {import("./SceneManager").SceneManager} */ function (offset) {
-    if (!this.extrudeDrag) return;
-    const mesh = this.getMesh(this.extrudeDrag.meshId);
-    if (!mesh) return;
-    const previous = this.extrudeDrag.lastOffset || 0;
-    const step = offset - previous;
-    this.extrudeDrag.lastOffset = offset;
-    for (const it of this.extrudeDrag.items) {
-      const v = mesh.vertices.find(vx => vx.id === it.capVid);
-      if (!v) continue;
-      v.x += it.nx * step;
-      v.y += it.ny * step;
-      v.z += it.nz * step;
-    }
-    mesh.invalidateCache();
-    this.rebuildThreeMesh(mesh.id);
-    this.updateHighlights();
-    this.updateHud();
   };
 
   // Free extrude: the new vertices follow the drag itself, in any direction.
@@ -358,7 +335,7 @@ export function applySceneExtrude(SceneManager) {
     this.updateHud();
   };
 
-  // True once the extrusion has actually changed: dragged along its normal, or
+  // True once the extrusion has actually changed: dragged, or
   // moved / scaled / rotated by any other gesture (a two-finger scale of the new
   // cap is how you inset it). Only a completely untouched extrude is a no-op.
   P.extrudeWasMoved = /** @this {import("./SceneManager").SceneManager} */ function () {
