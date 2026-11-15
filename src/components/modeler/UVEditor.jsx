@@ -1,9 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, X, ChevronLeft } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
-import { blockedButton } from '@/lib/unavailable';
-import { transformIsland, islandBounds, repackLayout, DEFAULT_CUT_ANGLE, NO_CUT_ANGLE } from '@/lib/uvUnwrap';
+import { blockedButton, notifyUnavailable } from '@/lib/unavailable';
+import { computeUnwrap, transformIsland, islandBounds, repackLayout, DEFAULT_CUT_ANGLE, NO_CUT_ANGLE } from '@/lib/uvUnwrap';
 import InlineSlider from './InlineSlider';
+
+// Do two layouts put every corner of every face in the same place?
+function sameLayout(a, b) {
+  if (!a || !b || a.faces.length !== b.faces.length) return false;
+  return a.faces.every((c, fi) => {
+    const d = b.faces[fi];
+    if (!c || !d) return !c && !d;
+    return c.length === d.length && c.every((q, k) => Math.abs(q[0] - d[k][0]) < 1e-4 && Math.abs(q[1] - d[k][1]) < 1e-4);
+  });
+}
 
 function insidePolygon(point, corners) {
   let inside = false;
@@ -64,6 +74,8 @@ export default function UVEditor({ meshId: openedFor, managerRef, onChange, onBa
   const [meshId] = useState(openedFor);
   const canvasRef = useRef(null);
   const [hasLayout, setHasLayout] = useState(() => !!managerRef.current?.getUnwrapData(meshId));
+  // The pieces sit as Pack would put them, so Pack has nothing to do.
+  const [packed, setPacked] = useState(false);
   const [seamMode, setSeamMode] = useState(false);
   const [angle, setAngle] = useState(() => {
     const a = managerRef.current?.getUnwrapData(meshId)?.angle;
@@ -175,6 +187,7 @@ export default function UVEditor({ meshId: openedFor, managerRef, onChange, onBa
     outlinesRef.current = data ? outlinesOf(data) : [];
     if (selectedRef.current >= (data?.islands.length || 0)) selectedRef.current = 0;
     setHasLayout(!!data);
+    setPacked(!!data && sameLayout(data, repackLayout(data)));
     redraw();
   };
 
@@ -196,16 +209,17 @@ export default function UVEditor({ meshId: openedFor, managerRef, onChange, onBa
   // A finished change to the layout (gesture end, Pack, Flip).
   const keep = (next) => {
     dataRef.current = next;
+    setPacked(sameLayout(next, repackLayout(next)));
     redraw();
     flushPreview();
     notify();
   };
 
-  const runUnwrap = (cut) => {
+  const runUnwrap = (cut, data) => {
     const m = managerRef.current;
     if (!m) return;
     recordOnce();
-    if (m.unwrapMesh(meshId, { angle: cut, recordUndo: false })) {
+    if (m.unwrapMesh(meshId, { angle: cut, recordUndo: false, data })) {
       selectedRef.current = 0;
       reload();
       notify();
@@ -403,7 +417,19 @@ export default function UVEditor({ meshId: openedFor, managerRef, onChange, onBa
     remember();
     keep(repackLayout(data));
   };
-  const unwrap = () => { remember(); runUnwrap(angle); };
+  // Unwrap says so when starting again would give the layout already there.
+  const unwrap = () => {
+    const m = managerRef.current;
+    const mesh = m?.getMesh(meshId);
+    if (!mesh) return;
+    const next = computeUnwrap(mesh, { angle });
+    if (mesh.uvMode === 'unwrap' && (mesh.textureTransform?.scale ?? 1) === 1 && sameLayout(m.getUnwrapData(meshId), next)) {
+      notifyUnavailable('Already unwrapped');
+      return;
+    }
+    remember();
+    runUnwrap(angle, next);
+  };
 
   const btn = 'modeling-value flex h-8 w-full min-w-0 items-center justify-center rounded-lg px-1 text-[13px] font-semibold active:scale-95 aria-disabled:opacity-35 aria-disabled:active:scale-100';
   const actionBtn = 'modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95';
@@ -439,7 +465,7 @@ export default function UVEditor({ meshId: openedFor, managerRef, onChange, onBa
           <div className="flex min-w-0 flex-1 flex-col justify-between gap-1.5" style={{ minHeight: size }}>
             <button type="button" onClick={() => setSeamMode((on) => !on)} aria-pressed={seamMode} className={btn} style={{ color: seamMode ? highlightColor : uiColor, borderColor: seamMode ? highlightColor : undefined }}>Seams</button>
             <button type="button" onClick={unwrap} className={btn} style={{ color: uiColor }}>Unwrap</button>
-            <button type="button" {...blockedButton(!hasLayout, 'Nothing to pack yet', pack)} className={btn} style={{ color: uiColor }}>Pack</button>
+            <button type="button" {...blockedButton(!hasLayout || packed, hasLayout ? 'Already packed' : 'Nothing to pack yet', pack)} className={btn} style={{ color: uiColor }}>Pack</button>
             <button type="button" {...blockedButton(!hasLayout, 'Nothing to flip yet', flip)} className={btn} style={{ color: uiColor }}>Flip</button>
             <button type="button" {...blockedButton(!canUndo, 'No UV edits to undo', undo)} aria-label="Undo UV edit" className={btn} style={{ color: uiColor }}>Undo</button>
             <div>

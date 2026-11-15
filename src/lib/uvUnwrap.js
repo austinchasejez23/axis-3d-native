@@ -589,6 +589,47 @@ function hullOf(points) {
   return lower.slice(0, -1).concat(upper.slice(0, -1));
 }
 
+// Pieces keep the object's up (+Y) pointing up the image, so a texture such as
+// brick or stone stands the right way on every wall. A piece's up is the
+// average direction, in its flat layout, in which height grows across its
+// upright faces (weighted by area); none if it has no upright faces or they
+// disagree.
+const UPRIGHT_SLACK = (5 * Math.PI) / 180;
+function upOf(mesh, faces, uvOf) {
+  let x = 0, y = 0, total = 0;
+  for (const fi of faces) {
+    const side = 1 - Math.abs(mesh.getFaceNormal(fi).y);
+    if (side < 0.1) continue;
+    const uv = uvOf(fi);
+    const ys = mesh.faces[fi].map((vid) => mesh.getVertexVector(vid).y);
+    if (!uv || uv.length < 3 || uv.some((q) => !q)) continue;
+    const mu = uv.reduce((sum, q) => sum + q[0], 0) / uv.length;
+    const mv = uv.reduce((sum, q) => sum + q[1], 0) / uv.length;
+    const my = ys.reduce((sum, h) => sum + h, 0) / ys.length;
+    let suu = 0, suv = 0, svv = 0, suy = 0, svy = 0;
+    uv.forEach((q, k) => {
+      const du = q[0] - mu, dv = q[1] - mv, dy = ys[k] - my;
+      suu += du * du; suv += du * dv; svv += dv * dv; suy += du * dy; svy += dv * dy;
+    });
+    const det = suu * svv - suv * suv;
+    if (!(Math.abs(det) > 1e-18)) continue;
+    const gu = (svv * suy - suv * svy) / det, gv = (suu * svy - suv * suy) / det;
+    const len = Math.hypot(gu, gv);
+    if (!(len > 0)) continue;
+    const w = (mesh.getFaceArea ? mesh.getFaceArea(fi) : 1) * side;
+    x += (w * gu) / len; y += (w * gv) / len; total += w;
+  }
+  return total > 0 && Math.hypot(x, y) > 0.5 * total ? Math.atan2(y, x) : null;
+}
+// Turn a flattened piece so its up points up the image.
+function standUp(mesh, island) {
+  const angle = upOf(mesh, island.faces, (fi) => mesh.faces[fi].map((_, k) => island.points[island.surface.corner.get(`${fi}:${k}`)]));
+  if (angle == null) return { ...island, up: false };
+  const turn = Math.PI / 2 - angle;
+  const c = Math.cos(turn), sn = Math.sin(turn);
+  return { ...island, up: true, points: island.points.map(([u, v]) => [c * u - sn * v, sn * u + c * v]) };
+}
+
 // The turn that gives a piece its smallest bounding box (one of its hull's
 // sides lies along an axis), then a quarter turn more if needed so it lies
 // wider than tall.
@@ -608,11 +649,12 @@ function snugTurn(points) {
 }
 
 // Pack pieces side by side in rows (shelves) into the 0..1 square. With
-// `turn`, each piece is first turned to its snuggest box; several row widths
+// `turn`, each piece without an up is first turned to its snuggest box (an
+// upright piece stays upright); several row widths
 // are tried and the one that fills the square best is kept.
 function pack(islands, { turn = false } = {}) {
   const items = islands.map((island, index) => {
-    const angle = turn && island.points.length > 2 ? snugTurn(island.points) : 0;
+    const angle = turn && !island.up && island.points.length > 2 ? snugTurn(island.points) : 0;
     const c = Math.cos(angle), sn = Math.sin(angle);
     const rot = angle ? ([u, v]) => [c * u - sn * v, sn * u + c * v] : ([u, v]) => [u, v];
     let minU = Infinity, minV = Infinity, maxU = -Infinity, maxV = -Infinity;
@@ -621,14 +663,17 @@ function pack(islands, { turn = false } = {}) {
   });
   const totalArea = items.reduce((sum, it) => sum + it.w * it.h, 0);
   const pad = Math.sqrt(totalArea) * 0.02;
-  const order = [...items].sort((p, q) => q.h - p.h);
+  // Sizes within NEAR of each other count as equal, so packing a layout
+  // again puts every piece back where it was instead of swapping look-alikes.
+  const NEAR = 1e-3;
+  const order = [...items].sort((p, q) => (Math.abs(q.h - p.h) > NEAR * Math.max(p.h, q.h) ? q.h - p.h : p.index - q.index));
   const widest = Math.max(...items.map((it) => it.w));
   const allInRow = items.reduce((sum, it) => sum + it.w + pad, 0);
   const shelve = (stripW) => {
     let x = 0, y = 0, rowH = 0, usedW = 0;
     const at = new Map();
     for (const it of order) {
-      if (x > 0 && x + it.w > stripW + 1e-9) { x = 0; y += rowH + pad; rowH = 0; }
+      if (x > 0 && x + it.w > stripW * (1 + NEAR)) { x = 0; y += rowH + pad; rowH = 0; }
       at.set(it, [x, y]);
       x += it.w + pad;
       rowH = Math.max(rowH, it.h);
@@ -641,7 +686,7 @@ function pack(islands, { turn = false } = {}) {
   for (let k = 0; k <= steps; k++) {
     const stripW = widest + (Math.max(widest, allInRow) - widest) * (k / steps) ** 2;
     const layout = shelve(stripW);
-    if (!best || layout.side < best.side - 1e-12) best = layout;
+    if (!best || layout.side < best.side * (1 - NEAR)) best = layout;
   }
   const scale = 0.96 / Math.max(best.side, 1e-6);
   const margin = 0.02;
@@ -672,12 +717,14 @@ function trianglesOverlap(A, B, tol) {
 }
 
 // Unfold pieces into connected layouts, like a paper net: a piece that touches
-// another across a cut edge is turned flat beside it along that edge (largest
-// piece first, the others around it). A piece joins only if it lands on no
-// other piece of the net and the net still fills at least `minFill` of its
-// bounding box, so nets stay compact enough to pack well. Returns the nets
-// (piece indexes) and each piece's moved points.
-function joinIslands(mesh, flat, edgeFaces, userSeams, minFill) {
+// another across an edge the unwrap cut by itself is turned flat beside it
+// along that edge (largest piece first, the others around it). Edges in
+// `cutEdges` (marked seams and the Cut angle's cuts) stay cut. A piece joins
+// only if it lands on no other piece of the net, an upright piece stays
+// upright, and the net still fills at least `minFill` of its bounding box, so
+// nets stay compact enough to pack well. Returns the nets (piece indexes) and
+// each piece's moved points.
+function joinIslands(mesh, flat, edgeFaces, cutEdges, minFill) {
   const count = flat.length;
   const pts = flat.map((island) => island.points.map((q) => [q[0], q[1]]));
   if (count < 2 || count > 400 || !(minFill <= 1)) return { nets: flat.map((_, i) => [i]), pts };
@@ -685,7 +732,7 @@ function joinIslands(mesh, flat, edgeFaces, userSeams, minFill) {
   flat.forEach((island, i) => island.faces.forEach((fi) => { clusterOf[fi] = i; }));
   const links = Array.from({ length: count }, () => new Map());
   for (const [key, list] of edgeFaces) {
-    if (list.length !== 2 || userSeams.has(key)) continue;
+    if (list.length !== 2 || cutEdges.has(key)) continue;
     const a = clusterOf[list[0]], b = clusterOf[list[1]];
     if (a === b || a === undefined || b === undefined) continue;
     const [v1, v2] = key.split(',').map(Number);
@@ -741,8 +788,9 @@ function joinIslands(mesh, flat, edgeFaces, userSeams, minFill) {
     const move = ([x, y]) => { const dx = x - from[0], dy = y - from[1]; return [to[0] + c * dx - sn * dy, to[1] + sn * dx + c * dy]; };
     const side = (q) => da[0] * (q[1] - a1[1]) - da[1] * (q[0] - a1[0]);
     if (side(centroid(cornerPoints(parent, pf))) * side(move(centroid(cornerPoints(child, cf)))) >= 0) return null;
-    return pts[child].map(move);
+    return { points: pts[child].map(move), turn: Math.atan2(Math.sin(turn), Math.cos(turn)) };
   };
+  const spun = (angle) => { const c = Math.cos(angle), sn = Math.sin(angle); return ([x, y]) => [c * x - sn * y, sn * x + c * y]; };
 
   const placed = new Array(count).fill(false);
   const nets = [];
@@ -754,24 +802,39 @@ function joinIslands(mesh, flat, edgeFaces, userSeams, minFill) {
     let netBox = box(pts[root]);
     let netArea = flatArea[root];
     let netTris = triangleList(root, pts[root]);
+    let netUp = !!flat[root].up;
     while (queue.length) {
       const parent = queue.shift();
       const neighbours = [...links[parent].entries()].filter(([j]) => !placed[j]).sort((p, q) => q[1].len - p[1].len);
       for (const [child, link] of neighbours) {
         if (placed[child]) continue;
-        const moved = alignAcross(parent, child, link);
-        if (!moved) continue;
+        const across = alignAcross(parent, child, link);
+        if (!across) continue;
+        // An upright piece must land upright; the first one into a net with
+        // none turns the whole net so it stands up.
+        let spin = 0;
+        if (flat[child].up) {
+          if (netUp && Math.abs(across.turn) > UPRIGHT_SLACK) continue;
+          if (!netUp) spin = -across.turn;
+        }
+        const turnNet = spin ? spun(spin) : null;
+        const moved = turnNet ? across.points.map(turnNet) : across.points;
+        const netPts = turnNet ? net.map((i) => pts[i].map(turnNet)) : null;
+        const fromBox = netPts ? box(netPts.flat()) : netBox;
         const b = box(moved);
-        const grown = [Math.min(netBox[0], b[0]), Math.min(netBox[1], b[1]), Math.max(netBox[2], b[2]), Math.max(netBox[3], b[3])];
+        const grown = [Math.min(fromBox[0], b[0]), Math.min(fromBox[1], b[1]), Math.max(fromBox[2], b[2]), Math.max(fromBox[3], b[3])];
         const grownArea = (grown[2] - grown[0]) * (grown[3] - grown[1]);
         if (grownArea > 0 && (netArea + flatArea[child]) / grownArea < minFill) continue;
         const childTris = triangleList(child, moved);
-        const lands = childTris.some((ct) => netTris.some((nt) => boxesHit(ct.b, nt.b) && trianglesOverlap(ct.T, nt.T, tol)));
+        const fromTris = netPts ? net.flatMap((i, k) => triangleList(i, netPts[k])) : netTris;
+        const lands = childTris.some((ct) => fromTris.some((nt) => boxesHit(ct.b, nt.b) && trianglesOverlap(ct.T, nt.T, tol)));
         if (lands) continue;
+        if (netPts) net.forEach((i, k) => { pts[i] = netPts[k]; });
+        if (flat[child].up) netUp = true;
         pts[child] = moved;
         netBox = grown;
         netArea += flatArea[child];
-        netTris = netTris.concat(childTris);
+        netTris = fromTris.concat(childTris);
         placed[child] = true;
         net.push(child);
         queue.push(child);
@@ -805,7 +868,7 @@ function halveLong(mesh, item, depth = 0) {
   let run = 0, cut = 0;
   while (cut < faces.length - 1 && run + faces[cut].area <= half) { run += faces[cut].area; cut++; }
   if (cut === 0) cut = 1;
-  const make = (list) => ({ faces: list.map((f) => f.fi), uv: new Map(list.map((f) => [f.fi, item.uv.get(f.fi)])) });
+  const make = (list) => ({ faces: list.map((f) => f.fi), uv: new Map(list.map((f) => [f.fi, item.uv.get(f.fi)])), up: item.up });
   return [make(faces.slice(0, cut)), make(faces.slice(cut))].flatMap((part) => halveLong(mesh, part, depth + 1));
 }
 
@@ -813,7 +876,7 @@ function halveLong(mesh, item, depth = 0) {
 // how much of the square they cover, and the edges cut open (an edge whose two
 // faces put its ends in different places).
 function layoutOf(mesh, items, edgeFaces) {
-  const packed = pack(items.map((item) => ({ points: item.faces.flatMap((fi) => item.uv.get(fi)) })), { turn: true });
+  const packed = pack(items.map((item) => ({ points: item.faces.flatMap((fi) => item.uv.get(fi)), up: item.up })), { turn: true });
   const faceUv = new Array(mesh.faces.length);
   let used = 0;
   items.forEach((item, n) => {
@@ -844,9 +907,9 @@ const CUT_COST = 0.15;
 export function computeUnwrap(mesh, { angle = DEFAULT_CUT_ANGLE } = {}) {
   const edgeFaces = buildEdgeFaces(mesh);
   const seams = seamSet(mesh, edgeFaces, angle);
+  const cutEdges = new Set(seams);
   const islandFaces = findIslands(mesh, edgeFaces, seams);
-  const flat = islandFaces.flatMap((faces) => flattenLimited(mesh, faces, edgeFaces, seams));
-  const userSeams = new Set((mesh.uvSeams || []).map((e) => edgeKey(e.v1, e.v2)));
+  const flat = islandFaces.flatMap((faces) => flattenLimited(mesh, faces, edgeFaces, seams)).map((island) => standUp(mesh, island));
   const innerEdgeCount = Math.max(1, [...edgeFaces.values()].filter((list) => list.length === 2).length);
   // Try nets from loose (no joining) to fully joined, each with and without
   // halving long pieces, and keep the layout that uses the texture best for
@@ -854,11 +917,11 @@ export function computeUnwrap(mesh, { angle = DEFAULT_CUT_ANGLE } = {}) {
   const fills = flat.length > 200 ? [MIN_NET_FILL] : [Infinity, 0.85, 0.7, MIN_NET_FILL, 0.5, 0];
   let best = null;
   for (const minFill of fills) {
-    const { nets, pts } = joinIslands(mesh, flat, edgeFaces, userSeams, minFill);
+    const { nets, pts } = joinIslands(mesh, flat, edgeFaces, cutEdges, minFill);
     const items = nets.map((net) => {
       const uv = new Map();
       for (const i of net) for (const fi of flat[i].faces) uv.set(fi, mesh.faces[fi].map((_, k) => pts[i][flat[i].surface.corner.get(`${fi}:${k}`)]));
-      return { faces: net.flatMap((i) => flat[i].faces), uv };
+      return { faces: net.flatMap((i) => flat[i].faces), uv, up: net.some((i) => flat[i].up) };
     });
     for (const halve of [false, true]) {
       const layout = layoutOf(mesh, halve ? items.flatMap((item) => halveLong(mesh, item)) : items, edgeFaces);

@@ -112,12 +112,13 @@ export function applySceneTexture(SceneManagerClass) {
     return true;
   };
   // Unwrap one object by id (the UV editor works on its object even while the
-  // view is in Edge mode for marking seams, when nothing is selected).
-  SceneManagerClass.prototype.unwrapMesh = function (meshId, { angle, recordUndo = true } = {}) {
+  // view is in Edge mode for marking seams, when nothing is selected). `data`
+  // is a layout already worked out for it.
+  SceneManagerClass.prototype.unwrapMesh = function (meshId, { angle, recordUndo = true, data } = {}) {
     const mesh = this.getMesh(meshId);
     if (!mesh) return false;
     if (recordUndo) this.pushUndo();
-    mesh.uvUnwrap = computeUnwrap(mesh, angle == null ? undefined : { angle });
+    mesh.uvUnwrap = data || computeUnwrap(mesh, angle == null ? undefined : { angle });
     mesh.uvMode = 'unwrap';
     mesh.textureTransform = { ...(mesh.textureTransform || { rotation: 0 }), scale: 1 };
     if (mesh.mapTexture) { mesh.mapTexture.repeat.set(1, 1); mesh.mapTexture.needsUpdate = true; }
