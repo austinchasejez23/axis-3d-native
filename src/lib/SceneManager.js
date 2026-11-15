@@ -48,6 +48,7 @@ import cloneObjects from '@/lib/cloneObjects';
 import {
   makeFatSegments,
   replaceFatSegmentPositions,
+  thinWithDistance,
 } from './fatLines';
 
 // Default lighting's key light shines from here towards the orbit pivot (the
@@ -1288,10 +1289,36 @@ export class SceneManager {
     }
   }
 
+  // Selection highlight lines. They thin out with distance from the camera,
+  // as the model does, so a far-away selection isn't buried under its own
+  // highlight: full width out to the distance the whole scene fits the view
+  // from, thinner beyond that, never below 1 pixel.
+  _highlightLines(positions, widthPx) {
+    const line = makeFatSegments(positions, theme.highlightInt, widthPx, this.renderer);
+    return thinWithDistance(line, () => this._highlightReference || 6, 1);
+  }
+
+  // The distance the whole scene just fits the view from (no closer than 6,
+  // as frameScene has it). Depends on the scene only, not on what is selected.
+  _sceneFitDistance() {
+    const bounds = new THREE.Box3();
+    for (const { mesh } of this.threeObjects.values()) {
+      if (!mesh.visible) continue;
+      if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+      mesh.updateMatrixWorld();
+      bounds.union(mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld));
+    }
+    if (bounds.isEmpty()) return 6;
+    const size = bounds.getSize(new THREE.Vector3());
+    const radius = Math.max(size.x, size.y, size.z, 1) * 0.5;
+    return Math.max(6, radius / Math.tan(THREE.MathUtils.degToRad(this.perspectiveCamera.fov * 0.5)));
+  }
+
   updateHighlights(force = false) {
     // Only topology changes (like origin re-centering) force a rebuild during
     // a heavy gesture; object transforms reuse the existing local outline.
     if (this._heavyEdit && !force) { this._highlightsStale = true; return; }
+    this._highlightReference = this._sceneFitDistance();
     while (this.highlightGroup.children.length > 0) {
       const child = this.highlightGroup.children[0];
       this.highlightGroup.remove(child);
@@ -1316,7 +1343,7 @@ export class SceneManager {
         if (!mesh) continue;
         const wireGeo = mesh.toEdgesGeometry();
         const wirePositions = Array.from(wireGeo.getAttribute('position').array);
-        const wire = makeFatSegments(wirePositions, hl, 2, this.renderer);
+        const wire = this._highlightLines(wirePositions, 2);
         wireGeo.dispose();
         wire.position.copy(mesh.position);
         wire.rotation.copy(mesh.rotation);
@@ -1341,7 +1368,7 @@ export class SceneManager {
     if (sel.type === 'object') {
       const wireGeo = mesh.toEdgesGeometry();
       const wirePositions = Array.from(wireGeo.getAttribute('position').array);
-      const wire = makeFatSegments(wirePositions, hl, 2, this.renderer);
+      const wire = this._highlightLines(wirePositions, 2);
       wireGeo.dispose();
       wire.position.copy(mesh.position);
       wire.rotation.copy(mesh.rotation);
@@ -1383,7 +1410,7 @@ export class SceneManager {
         positions.push(wa.x, wa.y, wa.z, wb.x, wb.y, wb.z);
       }
       if (positions.length > 0) {
-        const line = makeFatSegments(positions, hl, 2, this.renderer);
+        const line = this._highlightLines(positions, 2);
         line.renderOrder = 999;
         this.highlightGroup.add(line);
       }
@@ -1453,7 +1480,7 @@ export class SceneManager {
         this.highlightGroup.add(fill);
       }
       if (borderPositions.length) {
-        const border = makeFatSegments(borderPositions, hl, 2.25, this.renderer);
+        const border = this._highlightLines(borderPositions, 2.25);
         border.material.depthTest = false;
         border.renderOrder = 999;
         this.highlightGroup.add(border);
