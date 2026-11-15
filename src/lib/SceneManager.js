@@ -50,6 +50,10 @@ import {
   replaceFatSegmentPositions,
 } from './fatLines';
 
+// Default lighting's key light shines from here towards the orbit pivot (the
+// same direction setLightLevels gives it).
+const DEFAULT_SUN_DIRECTION = new THREE.Vector3(-5, 8, 1.5).normalize();
+
 // Above this triangle count a mesh is treated as heavy: while a deforming
 // gesture is in flight its wireframe and selection highlight (both rebuilt from
 // scratch every frame) are skipped so only the surface updates. Lighter meshes
@@ -307,8 +311,13 @@ export class SceneManager {
           this.cameraTarget.y + right.y * 4 + up.y * 6,
           this.cameraTarget.z + right.z * 4 + up.z * 6
         );
-      } else if (this.lightDir) {
-        this.dirLight.position.copy(this.cameraTarget).addScaledVector(this.lightDir, this.lightDistance);
+      } else {
+        // The key light travels with the orbit pivot but keeps its own
+        // direction. It used to stay at a fixed spot while aiming at the
+        // pivot, so whenever selecting moved the pivot its angle to the model
+        // changed, and with it how bright every upward-facing surface was:
+        // most of all on models away from the middle of the scene.
+        this.dirLight.position.copy(this.cameraTarget).addScaledVector(this.lightDir || DEFAULT_SUN_DIRECTION, this.lightDistance);
       }
       this.dirLight.target.position.copy(this.cameraTarget);
       this.dirLight.target.updateMatrixWorld();

@@ -37,6 +37,12 @@ export function makeShadowFloor() {
     // Never write depth: the floor must not occlude wireframe lines or
     // highlights that sit at / below grid level.
     depthWrite: false,
+    // A model surface lying at floor level (a ground plane) always draws over
+    // the floor. Without this the two fought over the same depth and the dark
+    // floor showed through the plane in bands, worst far from the camera.
+    polygonOffset: true,
+    polygonOffsetFactor: 4,
+    polygonOffsetUnits: 4,
   }));
   // The glow darkens in shadow, by the lights' Shadow strength.
   const compile = material.onBeforeCompile;
