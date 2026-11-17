@@ -17,6 +17,12 @@ const FLASH_FIRST_MS = 4000;
 const FLASH_MS = 4000;
 const FLASH_EVERY_MS = 120000;
 const FLASH_WINDOW_MS = 600000;
+const SIDE_HANDLE_TOP = 'calc(env(safe-area-inset-top, 0px) + 5.6rem)';
+// The device's orientation (not the window's shape, which the keyboard changes).
+const isLandscape = () => {
+  const type = window.screen?.orientation?.type;
+  return type ? type.startsWith('landscape') : !!window.matchMedia?.('(orientation: landscape)').matches;
+};
 
 export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transparentViewport, freeTransform, snapping, onToggleClayViewport, onToggleTransparentViewport, onToggleFreeTransform, onToggleSnapping, onOpenFreeTransformPanel, onOpenSnapPanel, onFocus, precision, onTogglePrecision, onOpenPrecisionPanel, onHelp, helpOpen, counter, onOrientationReset, onOpenOrientationPanel, orientationOpen, orthographic, onToggleOrthographic }) {
   const { uiColor, highlightColor, hintsEnabled } = useTheme();
@@ -48,17 +54,37 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
     viewNoticeTimer.current = setTimeout(() => setViewNotice(null), 1400);
     onToggleOrthographic?.();
   };
+  // Upright, the side controls stand in a column under the handle. Turned
+  // sideways, only the handle shows; the controls slide out to its right in a
+  // row, and they start hidden every time the screen is turned sideways.
+  const [landscape, setLandscape] = useState(isLandscape);
+  useEffect(() => {
+    const target = window.screen?.orientation || window.matchMedia?.('(orientation: landscape)');
+    if (!target?.addEventListener) return undefined;
+    const change = () => setLandscape(isLandscape());
+    target.addEventListener('change', change);
+    return () => target.removeEventListener('change', change);
+  }, []);
   const [sideControlsExpanded, setSideControlsExpanded] = useState(true);
+  const [landscapeOpen, setLandscapeOpen] = useState(false);
+  const expanded = landscape ? landscapeOpen : sideControlsExpanded;
   const sideControlsRef = useRef(null);
   useEffect(() => {
     // Prevent off-screen buttons from being reached with keyboard focus.
-    if (sideControlsRef.current) sideControlsRef.current.inert = !sideControlsExpanded;
-  }, [sideControlsExpanded]);
+    if (sideControlsRef.current) sideControlsRef.current.inert = !expanded;
+  }, [expanded, landscape]);
   // The arrow changes direction only after the controls finish sliding.
-  const [sideChevronFacesRight, setSideChevronFacesRight] = useState(false);
+  const [sideChevronFacesRight, setSideChevronFacesRight] = useState(isLandscape);
+  const [shownLandscape, setShownLandscape] = useState(landscape);
+  if (shownLandscape !== landscape) {
+    setShownLandscape(landscape);
+    setLandscapeOpen(false);
+    setSideChevronFacesRight(landscape || !sideControlsExpanded);
+  }
   const toggleSideControls = () => {
-    const nextExpanded = !sideControlsExpanded;
-    setSideControlsExpanded(nextExpanded);
+    const nextExpanded = !expanded;
+    if (landscape) setLandscapeOpen(nextExpanded);
+    else setSideControlsExpanded(nextExpanded);
     // Reduced-motion users have no transitionend event to update the arrow.
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
       setSideChevronFacesRight(!nextExpanded);
@@ -104,12 +130,12 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
 
       {/* Fixed handle: stays in place while the seven controls slide left
           fully out of view. It occupies the original top control position. */}
-      <div className="absolute left-[2px] w-12 rounded-xl pointer-events-auto" style={{ ...PANEL, top: 'calc(env(safe-area-inset-top, 0px) + 5.6rem)' }}>
+      <div id="axis-side-handle" className="absolute left-[2px] w-12 rounded-xl pointer-events-auto" style={{ ...PANEL, top: SIDE_HANDLE_TOP }}>
         <button
           type="button"
           onClick={toggleSideControls}
-          aria-label={sideControlsExpanded ? 'Hide side controls' : 'Show side controls'}
-          aria-expanded={sideControlsExpanded}
+          aria-label={expanded ? 'Hide side controls' : 'Show side controls'}
+          aria-expanded={expanded}
           aria-controls="axis-side-controls"
           className={`${btn} h-10`}
           style={{ color: uiColor, textShadow: txtShadow }}
@@ -118,8 +144,34 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
         </button>
       </div>
 
-      {/* The seven controls: one background, dividers between buttons, moved
-          down one button space. All seven move together; only the handle stays. */}
+      {/* Sideways: the seven controls in a row that slides out from behind the
+          handle's right edge. */}
+      {landscape ? (
+        <div className="absolute left-[50px] pl-2 pointer-events-none" style={{ top: SIDE_HANDLE_TOP, overflowX: 'clip', overflowY: 'visible' }}>
+          <div
+            id="axis-side-controls"
+            ref={sideControlsRef}
+            aria-hidden={!expanded}
+            onTransitionEnd={(event) => {
+              if (event.target === event.currentTarget && event.propertyName === 'transform') {
+                setSideChevronFacesRight(!landscapeOpen);
+              }
+            }}
+            className="h-10 rounded-xl px-1 flex flex-row items-center transition-transform duration-300 ease-in-out motion-reduce:transition-none"
+            style={{ ...PANEL, transform: expanded ? 'translateX(0)' : 'translateX(calc(-100% - 0.5rem))', pointerEvents: expanded ? 'auto' : 'none' }}>
+            <ViewportModeButtons row clay={clayViewport} transparent={transparentViewport}
+              onClay={onToggleClayViewport} onTransparent={onToggleTransparentViewport} />
+            <div className="w-[10px] h-full" aria-hidden="true" />
+            <RenderBoostButtons row orientationOpen={orientationOpen} freeTransform={freeTransform} snapping={snapping}
+              onOrientationReset={onOrientationReset} onOpenOrientationPanel={onOpenOrientationPanel} onToggleFreeTransform={onToggleFreeTransform}
+              onToggleSnapping={onToggleSnapping} onOpenFreeTransformPanel={onOpenFreeTransformPanel}
+              onOpenSnapPanel={onOpenSnapPanel} onFocus={onFocus} precision={precision}
+              onTogglePrecision={onTogglePrecision} onOpenPrecisionPanel={onOpenPrecisionPanel} />
+          </div>
+        </div>
+      ) : (
+      /* The seven controls: one background, dividers between buttons, moved
+          down one button space. All seven move together; only the handle stays. */
       <div
         id="axis-side-controls"
         ref={sideControlsRef}
@@ -140,6 +192,7 @@ export default function TopBar({ onMenu, onUndo, onRedo, clayViewport, transpare
           onOpenSnapPanel={onOpenSnapPanel} onFocus={onFocus} precision={precision}
           onTogglePrecision={onTogglePrecision} onOpenPrecisionPanel={onOpenPrecisionPanel} />
       </div>
+      )}
     </div>
   );
 }

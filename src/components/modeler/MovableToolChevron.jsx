@@ -23,7 +23,10 @@ function toolAnchor(node) {
   if (topCell && top - 54 < controls.getBoundingClientRect().bottom + 2) {
     return { x: Math.round(topCell.right + 2), y: Math.round(topCell.top) };
   }
-  return { x: Math.round(controls.offsetLeft + controls.offsetWidth / 2 - 34), y: Math.round(top - 52 - 2) };
+  // Centred under the side controls' handle: the same spot whether the
+  // controls stand in a column under it or slide out in a row beside it.
+  const handle = document.getElementById('axis-side-handle') || controls;
+  return { x: Math.round(handle.offsetLeft + handle.offsetWidth / 2 - 34), y: Math.round(top - 52 - 2) };
 }
 
 export default function MovableToolChevron({ mode, expanded, onToggle }) {

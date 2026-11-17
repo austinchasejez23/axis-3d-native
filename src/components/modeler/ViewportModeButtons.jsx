@@ -3,7 +3,9 @@ import { Globe, Scan } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
 import { helpIntercept } from '@/lib/helpMode';
 
-export default function ViewportModeButtons({ clay, transparent, onClay, onTransparent }) {
+// `row`: laid out side by side (the sideways side-controls row), with each
+// button's name shown under it instead of beside it.
+export default function ViewportModeButtons({ clay, transparent, onClay, onTransparent, row = false }) {
   const { uiColor, highlightColor } = useTheme();
   const [notice, setNotice] = useState(null);
   const timerRef = useRef(null);
@@ -33,21 +35,23 @@ export default function ViewportModeButtons({ clay, transparent, onClay, onTrans
       }
     },
   });
-  const button = 'pointer-events-auto relative w-full h-8 rounded-md flex items-center justify-center active:scale-95 transition-transform touch-none';
+  const button = `pointer-events-auto relative ${row ? 'w-8' : 'w-full'} h-8 rounded-md flex items-center justify-center active:scale-95 transition-transform touch-none`;
+  const gap = row ? 'w-[10px] h-full' : 'h-[10px] w-full';
+  const name = row ? 'absolute top-full mt-2 left-1/2 -translate-x-1/2 z-20 text-sm whitespace-nowrap' : 'absolute left-full ml-1 z-20 text-sm whitespace-nowrap translate-y-[3px]';
   const style = (active) => ({
     color: active ? highlightColor : uiColor,
     textShadow: '0 1px 3px rgba(0,0,0,0.35)',
   });
 
   return (
-    <div className="relative z-10 flex w-full flex-col items-center">
+    <div className={`relative z-10 flex ${row ? 'h-full flex-row' : 'w-full flex-col'} items-center`}>
       <button {...tapProps('clay', () => select('Clay', onClay))} aria-label="Toggle clay viewport" aria-pressed={clay} style={style(clay)} className={button}>
-        {notice === 'Clay' && <span className="absolute left-full ml-1 z-20 text-sm whitespace-nowrap translate-y-[3px]">Clay</span>}
+        {notice === 'Clay' && <span className={name}>Clay</span>}
         <Globe className="w-5 h-5 shrink-0" strokeWidth={2.0} />
       </button>
-      <div className="h-[10px] w-full" aria-hidden="true" />
+      <div className={gap} aria-hidden="true" />
       <button {...tapProps('transparent', () => select('Transparent', onTransparent))} aria-label="Toggle transparent viewport" aria-pressed={transparent} style={style(transparent)} className={button}>
-        {notice === 'Transparent' && <span className="absolute left-full ml-1 z-20 text-sm whitespace-nowrap translate-y-[3px]">Transparent</span>}
+        {notice === 'Transparent' && <span className={name}>Transparent</span>}
         <Scan className="w-5 h-5 shrink-0" strokeWidth={2.0} />
       </button>
     </div>
