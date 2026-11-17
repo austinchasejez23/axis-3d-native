@@ -3,7 +3,7 @@ import { sculptGrabStart, sculptGrabMove } from './sculptTools';
 import { theme } from './theme';
 import { beginFreeScale, updateFreeScale, updateFreeRotation } from '@/lib/freeTransforms';
 import { beginCameraTouch, endCameraTouch } from '@/lib/cameraTouchSession';
-import { discardTapMotion, resetCameraTouchSpeed } from '@/lib/cameraMotion';
+import { discardTapMotion, resetCameraTouchSpeed, sampleCameraSurface } from '@/lib/cameraMotion';
 
 // How long one finger may move alone before a two-finger gesture is read as
 // "one finger anchored" (pinch / twist). Fingers never land and start moving
@@ -449,6 +449,7 @@ export function applySceneGestures(SceneManager) {
           startMidX: midX, startMidY: midY,
           lastMidX: midX, lastMidY: midY, lastDist: dist, lastAngle: angle,
         };
+        sampleCameraSurface(this, midX, midY, true);
         return;
       }
 
@@ -490,6 +491,7 @@ export function applySceneGestures(SceneManager) {
           lastDist: dist,
           lastAngle: angle,
         };
+        sampleCameraSurface(this, midX, midY, true);
       }
     }
   };
@@ -1173,6 +1175,7 @@ export function applySceneGestures(SceneManager) {
     const dist = Math.max(1, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y));
     const midX = (pts[0].x + pts[1].x) / 2;
     const midY = (pts[0].y + pts[1].y) / 2;
+    sampleCameraSurface(this, midX, midY);
     this.pan(midX - g.lastMidX, midY - g.lastMidY);
     this.zoom(Math.max(1, g.lastDist) / dist);
     g.lastMidX = midX;

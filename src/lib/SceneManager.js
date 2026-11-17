@@ -30,6 +30,7 @@ import { applySceneReference, loadReferenceImage } from './sceneReference';
 import { applySceneOrientation } from './sceneOrientation';
 import { viewDistance } from './viewDistance';
 import { mergeVerticesWithin, weldCoincidentVertices, edgeKey } from './meshTopology';
+import { notifyUnavailable } from './unavailable';
 import { cleanupCommittedTopology, dissolveSharedBoundary, adjacentFacesForBoundary, removeFaceByIndex, resolveLegacyDeletedBorders } from './meshTopologyInvariants';
 import { updateGeometryInPlace } from './meshBufferUpdate';
 import { syncObjectHighlightTransforms, refreshTransformHighlights } from './highlightFollow';
@@ -2273,9 +2274,9 @@ export class SceneManager {
     this.clearSelection();
   }
 
-  // Object-mode Merge vertices: any vertices within 2 screen pixels of each
+  // Object-mode Merge vertices: any vertices within half a screen pixel of each
   // other (at the object's current distance from the camera) are merged.
-  mergeCloseVertices(pixels = 2) {
+  mergeCloseVertices(pixels = 0.5) {
     const sel = this.selection;
     if (!sel.meshId || sel.type !== 'object') return;
     const mesh = this.getMesh(sel.meshId);
@@ -2290,7 +2291,7 @@ export class SceneManager {
     const localPerWorld = 1 / Math.max(1e-6, Math.max(scale.x, scale.y, scale.z));
     const threshold = pixels * worldPerPixel * localPerWorld;
     const snapshot = this.captureSnapshot();
-    if (!mergeVerticesWithin(mesh, threshold)) return;
+    if (!mergeVerticesWithin(mesh, threshold)) { notifyUnavailable('No vertices close enough to merge'); return; }
     resolveLegacyDeletedBorders(mesh);
     cleanupCommittedTopology(mesh);
     this.pushUndoSnapshot(snapshot);

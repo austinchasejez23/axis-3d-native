@@ -12,10 +12,10 @@ import { pulseNavigationResolution } from '@/lib/renderBoost';
 const empty = () => ({ orbitX: 0, orbitY: 0, panX: 0, panY: 0, zoom: 0 });
 const KEYS = Object.keys(empty());
 const MIN_DISTANCE = 0.05, MAX_DISTANCE = 800;
-// Geometry never slows or blocks the camera. Zoom and pan speed come from the
-// view alone: below this orbit distance they stop shrinking, so a camera
-// close to (or inside) an object keeps moving at the same pace, and zooming
-// past the orbit pivot carries the pivot forward instead of stopping there.
+// Geometry never blocks the camera. Zoom and pan speed stop shrinking below
+// this distance, so a camera close to (or inside) an object keeps moving at
+// the same pace, and zooming past the orbit pivot carries the pivot forward
+// instead of stopping there.
 const SPEED_FLOOR = 0.5;
 const TOUCH_ORBIT_RESISTANCE = 0.48;
 const TOUCH_PAN_RESISTANCE = 0.8;
@@ -49,13 +49,44 @@ function speedBoost(manager, kind, amount, now) {
   return 1 + (BOOST_MAX - 1) * t * t * (3 - 2 * t);
 }
 
+// Zoom and pan speed come from how far away the geometry in front of the
+// camera is: the orbit distance, or the nearest surface under the fingers (or
+// the mouse) when that is closer. Next to an object that isn't selected, with
+// the pivot far beyond it, the steps then stay as small as they are next to the
+// selection instead of leaping into and through the object. The speed floor
+// still keeps the camera moving through anything it reaches.
+const SURFACE_SAMPLE_MS = 100;
+const _surfaceNdc = new THREE.Vector2();
+
+export function sampleCameraSurface(manager, clientX, clientY, fresh = false) {
+  if (manager.camera?.isOrthographicCamera) { manager._cameraSurface = null; return; }
+  const now = performance.now();
+  if (!fresh && manager._cameraSurface && now - manager._cameraSurface.at < SURFACE_SAMPLE_MS) return;
+  const rect = manager.renderer.domElement.getBoundingClientRect();
+  _surfaceNdc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+  manager.raycaster.setFromCamera(_surfaceNdc, manager.camera);
+  const meshes = [];
+  for (const obj of manager.threeObjects.values()) if (obj.mesh.visible) meshes.push(obj.mesh);
+  const hit = manager.raycaster.intersectObjects(meshes, false)[0];
+  manager._cameraSurface = { at: now, distance: hit ? hit.distance : Infinity };
+}
+
+function speedDistance(manager) {
+  const surface = manager._cameraSurface?.distance;
+  const dist = Number.isFinite(surface) ? Math.min(manager.cameraDist, surface) : manager.cameraDist;
+  return Math.max(dist, SPEED_FLOOR);
+}
+
 // Dolly along the view direction. Away from the pivot (or far from it) this is
 // the usual exponential zoom. Close to the pivot the pace holds steady, and
 // travel beyond the minimum orbit distance moves the pivot with the camera, so
 // the camera passes straight through whatever is there.
 function zoomCamera(manager, zoom) {
   const dist = manager.cameraDist;
-  const travel = Math.max(dist, SPEED_FLOOR) * (1 - Math.exp(zoom));
+  const travel = speedDistance(manager) * (1 - Math.exp(zoom));
+  // The surface ahead comes nearer by the same amount (until it is sampled again).
+  const surface = manager._cameraSurface;
+  if (surface && Number.isFinite(surface.distance)) surface.distance = Math.max(0, surface.distance - travel);
   const next = dist - travel;
   if (next >= MIN_DISTANCE) {
     manager.cameraDist = Math.min(next, MAX_DISTANCE);
@@ -90,7 +121,7 @@ function orbitPivot(manager) {
 function applyMotion(manager, motion) {
   const height = Math.max(1, manager.renderer.domElement.getBoundingClientRect().height);
   const angle = 2 * Math.PI / height;
-  const scale = 2 * Math.max(manager.cameraDist, SPEED_FLOOR) * Math.tan(THREE.MathUtils.degToRad(manager.camera.fov / 2)) / height;
+  const scale = 2 * speedDistance(manager) * Math.tan(THREE.MathUtils.degToRad(manager.camera.fov / 2)) / height;
   if (motion.panX || motion.panY) {
     const right = new THREE.Vector3().setFromMatrixColumn(manager.camera.matrixWorld, 0);
     const up = new THREE.Vector3().setFromMatrixColumn(manager.camera.matrixWorld, 1);
