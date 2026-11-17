@@ -1185,9 +1185,11 @@ export default function Modeler() {
             setFreeTransformPanelOpen(false);
             return true;
           }
-          // Measure and Protractor are used on the canvas with their panel open:
-          // an empty tap only clears the selection.
-          if (toolsOpen && (measureMode || angleMode)) return false;
+          // Measure is used on the canvas with its panel open: an empty tap only
+          // clears the selection. An empty tap closes the Protractor, and clears
+          // the selection as before.
+          if (toolsOpen && angleMode) { stopAngle(); return false; }
+          if (toolsOpen && measureMode) return false;
           // Snapping settings close only through their own close controls.
           if (toolsOpen || modeToolsOpen) {
             setToolsOpen(false);

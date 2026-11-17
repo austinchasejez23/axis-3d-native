@@ -75,7 +75,7 @@ export default function ColorTabContent({
       {showSliders && <div className="min-h-0 flex-1" />}
       {showSliders && (
         <SurfaceSliderRow scrollPadTop>
-          <InlineSlider label="Size" value={size} min={4} max={100} onChange={onSize} onActiveChange={onSizeActive} disabled={!strokeActive} disabledReason={strokeReason} />
+          <InlineSlider label="Size" value={size} min={1} max={100} onChange={onSize} onActiveChange={onSizeActive} disabled={!strokeActive} disabledReason={strokeReason} />
           <InlineSlider label="Opacity" value={opacity} min={1} max={100} onChange={onOpacity} />
           <InlineSlider label="Hardness" value={smoothness} min={0} max={100} onChange={onSmoothness} disabled={!strokeActive} disabledReason={strokeReason} />
         </SurfaceSliderRow>

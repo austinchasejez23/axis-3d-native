@@ -4,6 +4,30 @@ import { capturePaintPatches, applyPaintPatches } from './paintLayer';
 // Undo / lock / object-transform helpers attached to SceneManager.prototype.
 // Kept in a separate module so the main SceneManager source stays maintainable.
 
+// Plain data (numbers, strings, arrays, plain objects) compared by value;
+// anything else (a paint layer, a texture) only matches itself.
+function sameValue(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (!sameValue(a[i], b[i])) return false;
+    return true;
+  }
+  if (Object.getPrototypeOf(a) !== Object.prototype || Object.getPrototypeOf(b) !== Object.prototype) return false;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  for (const k of keys) if (!sameValue(a[k], b[k])) return false;
+  return true;
+}
+
+// Everything the surface and wireframe of an object are built from. When an
+// undo step leaves these as they are, rebuilding the object is wasted work.
+const SURFACE_KEYS = ['vertices', 'faces', 'faceRenderTriangles', 'color', 'smoothShading', 'uvMode', 'uvUnwrap',
+  'vertexColors', 'faceColors', 'paintLayer', 'paintWireEdges', '_paintDense', 'explicitEdges', 'hiddenEdges',
+  'visibleEdges', 'importedFeatureEdges', 'importedWireframeOnly', 'importedQuadsMerged'];
+const sameSurface = (a, b) => !!a && !!b && SURFACE_KEYS.every((k) => sameValue(a[k], b[k]));
+
 export function applySceneUndo(SceneManager) {
   const P = SceneManager.prototype;
 
@@ -57,14 +81,21 @@ export function applySceneUndo(SceneManager) {
 
   P.restoreSnapshot = /** @this {import("./SceneManager").SceneManager} */ function (snapshot) {
     this.editVersion = (this.editVersion || 0) + 1;
+    const before = new Map(this.meshes.map((m) => [m.id, m]));
     this.meshes = snapshot.meshes.map((m) => m.clone());
     for (const mesh of this.meshes) {
       if (!this.threeObjects.has(mesh.id)) this.buildThreeMesh(mesh);
       else {
-        this.rebuildThreeMesh(mesh.id);
+        const obj = this.threeObjects.get(mesh.id);
+        if (sameSurface(before.get(mesh.id), mesh)) {
+          // Same shape: only where it sits and whether it shows can differ.
+          obj.mesh.position.copy(mesh.position);
+          obj.mesh.rotation.copy(mesh.rotation);
+          obj.mesh.scale.copy(mesh.scale);
+          obj.mesh.visible = mesh.visible;
+        } else this.rebuildThreeMesh(mesh.id);
         // A paint layer that appeared or vanished needs the material's shader
         // to follow (only the geometry is refreshed above).
-        const obj = this.threeObjects.get(mesh.id);
         if ((obj.material.userData.axisPaintTexture || null) !== (mesh.paintLayer?.texture || null)) this.updateObjectMaterial(mesh.id);
       }
     }

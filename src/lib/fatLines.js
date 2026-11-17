@@ -5,38 +5,23 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 
 const _size = new THREE.Vector2();
 
-// Share of its distance from the camera by which a line is drawn nearer the
-// camera, so it shows over the faces it lies on. A fixed polygon offset did
-// this before, but that offset grows with distance faster than the gaps
-// between surfaces do, so zoomed out, edges behind faces showed through them.
-const LINE_PULL = 0.002;
+// Lines get no depth offset of their own: faces are already drawn slightly
+// behind their edges (their polygon offset), which keeps every edge visible on
+// its own faces. Any offset added to lines as well grows with distance, so
+// zoomed out it let edges under nearby faces show through them.
 
-// The line shader, with the pull above and optional thinning with distance.
+// The line shader, with optional thinning with distance.
 function patchLineShader(mat) {
   Object.assign(mat.uniforms, {
-    axisPull: { value: LINE_PULL },
     axisOrthoDepth: { value: 1 },
     axisReference: { value: 0 },
     axisMinWidth: { value: 1 },
   });
   mat.vertexShader = mat.vertexShader
     .replace('uniform float linewidth;', `uniform float linewidth;
-		uniform float axisPull;
 		uniform float axisOrthoDepth;
 		uniform float axisReference;
 		uniform float axisMinWidth;`)
-    .replace('vec4 end = modelViewMatrix * vec4( instanceEnd, 1.0 );', `vec4 end = modelViewMatrix * vec4( instanceEnd, 1.0 );
-
-			// Draw nearer the camera by a share of the distance: along the view
-			// ray in perspective (the line stays where it is on screen), straight
-			// towards the camera in orthographic.
-			if ( projectionMatrix[ 2 ][ 3 ] == - 1.0 ) {
-				start.xyz *= 1.0 - axisPull;
-				end.xyz *= 1.0 - axisPull;
-			} else {
-				start.z += axisPull * axisOrthoDepth;
-				end.z += axisPull * axisOrthoDepth;
-			}`)
     .replace('offset *= linewidth;', `float axisWidth = linewidth;
 				// Thinner beyond the reference distance, as the model itself gets
 				// smaller, but never below the minimum width.
@@ -66,7 +51,7 @@ export function makeFatSegments(positions, color, widthPx, renderer) {
 
   const seg = new LineSegments2(geo, mat);
   seg.computeLineDistances();
-  // The orthographic view's depth for the pull and thinning: its orbit distance.
+  // The orthographic view's depth for thinning: its orbit distance.
   seg.onBeforeRender = (r, scene, camera) => {
     mat.uniforms.axisOrthoDepth.value = camera.userData?.viewDistance ?? 1;
   };
