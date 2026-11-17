@@ -25,6 +25,7 @@ import { applyBooleanPair } from '@/lib/booleanTools';
 import ModelLoading from '@/components/modeler/ModelLoading';
 import LogoLoader from '@/components/LogoLoader';
 import RadialArrayPanel from '@/components/modeler/RadialArrayPanel';
+import LinearArrayPanel from '@/components/modeler/LinearArrayPanel';
 import FreeTransformPanel from '@/components/modeler/FreeTransformPanel';
 import SnapPanel from '@/components/modeler/SnapPanel';
 import PrecisionPanel from '@/components/modeler/PrecisionPanel';
@@ -155,6 +156,7 @@ export default function Modeler() {
   // A saved model is being opened (shows the loading arrows).
   const [modelLoading, setModelLoading] = useState(() => !!new URLSearchParams(window.location.search).get('id'));
   const [radialArrayOpen, setRadialArrayOpen] = useState(false);
+  const [linearArrayOpen, setLinearArrayOpen] = useState(false);
   const [snapPanelOpen, setSnapPanelOpen] = useState(false);
   const [precision, setPrecision] = useState(false);
   const [precisionPanelOpen, setPrecisionPanelOpen] = useState(false);
@@ -450,6 +452,14 @@ export default function Modeler() {
     return true;
   }, [radialArrayOpen]);
 
+  // Linear array uses the same preview as Radial array, so the same cancel.
+  const cancelOpenLinearArray = useCallback(() => {
+    if (!linearArrayOpen) return false;
+    managerRef.current?.cancelRadialArray();
+    setLinearArrayOpen(false);
+    return true;
+  }, [linearArrayOpen]);
+
   const cancelOpenSnapPanel = useCallback(() => {
     if (!snapPanelOpen) return false;
     setSnapPanelOpen(false);
@@ -478,6 +488,7 @@ export default function Modeler() {
     if (selectionPattern) { setSelectionPattern(null); return true; }
     if (cancelOpenBevel()) return true;
     if (cancelOpenRadialArray()) return true;
+    if (cancelOpenLinearArray()) return true;
     if (cancelOpenSnapPanel()) return true;
     if (cancelOpenFreeTransformPanel()) return true;
     if (menuOpen) { setMenuOpen(false); return true; }
@@ -492,7 +503,7 @@ export default function Modeler() {
     if (orientationOpen) { setOrientationOpen(false); return true; }
     if (sculptOpen) { closeSculpt(); return true; }
     return false;
-  }, [cancelOpenAddVertex, selectionPattern, cancelOpenBevel, cancelOpenRadialArray, cancelOpenSnapPanel, cancelOpenFreeTransformPanel, menuOpen, guideOpen, transformDrawerOpen, libraryOpen, lightingOpen, orientationOpen, sculptOpen, closeSculpt]);
+  }, [cancelOpenAddVertex, selectionPattern, cancelOpenBevel, cancelOpenRadialArray, cancelOpenLinearArray, cancelOpenSnapPanel, cancelOpenFreeTransformPanel, menuOpen, guideOpen, transformDrawerOpen, libraryOpen, lightingOpen, orientationOpen, sculptOpen, closeSculpt]);
 
   // Device back button closes ONE layer at a time: menu sub-panels first (via
   // the drawer's own back handler), then open tool bars, then the same chain a
@@ -510,7 +521,7 @@ export default function Modeler() {
   }, [menuOpen, helpOpen, segmentsOpen, toolsOpen, modeToolsOpen, booleanPanel, closeOpenBoolean, cancelOpenBoolean, handleCanvasBack]);
 
   const anyPanelOpen = menuOpen || libraryOpen || materialsOpen || sculptOpen || transformDrawerOpen || guideOpen || lightingOpen || helpOpen
-    || toolsOpen || modeToolsOpen || segmentsOpen || radialArrayOpen || snapPanelOpen || freeTransformPanelOpen || orientationOpen || !!selectionPattern || !!addVertex || !!booleanPanel;
+    || toolsOpen || modeToolsOpen || segmentsOpen || radialArrayOpen || linearArrayOpen || snapPanelOpen || freeTransformPanelOpen || orientationOpen || !!selectionPattern || !!addVertex || !!booleanPanel;
   useBackDismiss(anyPanelOpen, handleBackStep);
 
   const handleRedo = useCallback(() => {
@@ -559,10 +570,11 @@ export default function Modeler() {
     if (keep !== 'select_loop' && keep !== 'select_ring') setSelectionPattern(null);
     if (keep !== 'bevel') cancelOpenBevel();
     if (keep !== 'radial_array') cancelOpenRadialArray();
+    if (keep !== 'linear_array') cancelOpenLinearArray();
     if (!BOOLEAN_OPERATION_IDS.has(keep)) closeOpenBoolean();
     if (keep !== 'measure') stopMeasure();
     if (keep !== 'protractor') stopAngle();
-  }, [cancelOpenAddVertex, cancelOpenBevel, cancelOpenRadialArray, closeOpenBoolean, stopMeasure, stopAngle, closeMaterials, closeSculpt]);
+  }, [cancelOpenAddVertex, cancelOpenBevel, cancelOpenRadialArray, cancelOpenLinearArray, closeOpenBoolean, stopMeasure, stopAngle, closeMaterials, closeSculpt]);
 
   // Measure and Protractor are used with the general tools panel open; closing
   // that panel, by any route, turns them off, so no tool stays active outside
@@ -574,27 +586,28 @@ export default function Modeler() {
   }, [toolsOpen, stopMeasure, stopAngle]);
 
   // Undo closes whatever panel or tool bar is open. A panel holding an edit
-  // that was never applied (Bevel, Radial array, Add vertex) is cancelled,
+  // that was never applied (Bevel, Radial or Linear array, Add vertex) is cancelled,
   // which takes that edit back; otherwise the last step is undone.
   const handleUndo = useCallback(() => {
-    const cancelled = cancelOpenAddVertex() || cancelOpenBevel() || cancelOpenRadialArray();
+    const cancelled = cancelOpenAddVertex() || cancelOpenBevel() || cancelOpenRadialArray() || cancelOpenLinearArray();
     if (transformDrawerOpen) transformApplyRef.current?.();
     dismissActiveTool();
     setHelpOpen(false);
     setModeToolsOpen(false);
     setToolsOpen(false);
     if (!cancelled && managerRef.current && !managerRef.current.undo()) notifyUnavailable('Nothing left to undo');
-  }, [cancelOpenAddVertex, cancelOpenBevel, cancelOpenRadialArray, dismissActiveTool, transformDrawerOpen]);
+  }, [cancelOpenAddVertex, cancelOpenBevel, cancelOpenRadialArray, cancelOpenLinearArray, dismissActiveTool, transformDrawerOpen]);
   undoActionRef.current = handleUndo;
 
-  // Radial array works on one selected object: once nothing is selected the
-  // panel closes and its preview copies go away.
+  // Radial and Linear array work on one selected object: once nothing is
+  // selected the panel closes and its preview copies go away.
   useEffect(() => {
-    if (!radialArrayOpen || selectedMeshId) return;
+    if (!(radialArrayOpen || linearArrayOpen) || selectedMeshId) return;
     managerRef.current?.cancelRadialArray();
     managerRef.current?.clearSelection();
     setRadialArrayOpen(false);
-  }, [radialArrayOpen, selectedMeshId]);
+    setLinearArrayOpen(false);
+  }, [radialArrayOpen, linearArrayOpen, selectedMeshId]);
 
   // Material and Texture edit whole objects: entering them switches to Object
   // mode, converting the current selection to its object so nothing is lost.
@@ -780,6 +793,19 @@ export default function Modeler() {
       setModeToolsOpen(false);
       setToolsOpen(false);
       setRadialArrayOpen(true);
+      return;
+    }
+    if (toolId === 'linear_array') {
+      const values = { ...toolMemory.linearArray };
+      const initialValues = managerRef.current?.beginLinearArray(values);
+      if (!initialValues) {
+        showToolPrompt('Select one unlocked object first');
+        return;
+      }
+      toolMemory.linearArray = { ...toolMemory.linearArray, ...initialValues };
+      setModeToolsOpen(false);
+      setToolsOpen(false);
+      setLinearArrayOpen(true);
       return;
     }
     if (toolId === 'select_loop' || toolId === 'select_ring') {
@@ -1264,6 +1290,7 @@ export default function Modeler() {
             : addVertex ? 'addVertex'
             : bevelOpen ? 'bevel'
             : radialArrayOpen ? 'radialArray'
+            : linearArrayOpen ? 'linearArray'
             : selectionPattern ? 'selectionPattern'
             : draw?.active ? 'drawFace'
             : measureMode ? 'measure'
@@ -1294,7 +1321,7 @@ export default function Modeler() {
       {/* Labels and prompts stack in this same column under the HUD, so they can never overlap it or each other. */}
       <div ref={promptsRef} className="w-full flex flex-col items-center gap-1" style={{ visibility: promptsCovered ? 'hidden' : undefined }}>
       <MultiSelectLabel active={multiSelect} />
-      <ToolAnnouncement suppressed={multiSelect} toolActive={!!(draw?.active || cut || addVertex || selectionPattern || bevelOpen || booleanPanel || radialArrayOpen || measureMode || angleMode || materialsOpen || sculptOpen || transformDrawerOpen)} />
+      <ToolAnnouncement suppressed={multiSelect} toolActive={!!(draw?.active || cut || addVertex || selectionPattern || bevelOpen || booleanPanel || radialArrayOpen || linearArrayOpen || measureMode || angleMode || materialsOpen || sculptOpen || transformDrawerOpen)} />
       <PaintToolFlash suppressed={multiSelect} />
       {toolPrompt && (
         <div
@@ -1637,6 +1664,14 @@ export default function Modeler() {
           onPreview={(options) => managerRef.current?.updateRadialArray(options)}
           onApply={() => { managerRef.current?.commitRadialArray(); setRadialArrayOpen(false); }}
           onCancel={() => { managerRef.current?.cancelRadialArray(); setRadialArrayOpen(false); }}
+        />
+      )}
+
+      {linearArrayOpen && (
+        <LinearArrayPanel
+          onPreview={(options) => managerRef.current?.updateLinearArray(options)}
+          onApply={() => { managerRef.current?.commitRadialArray(); setLinearArrayOpen(false); }}
+          onCancel={() => { managerRef.current?.cancelRadialArray(); setLinearArrayOpen(false); }}
         />
       )}
 

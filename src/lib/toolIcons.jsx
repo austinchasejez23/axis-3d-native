@@ -151,6 +151,18 @@ export function RadialArrayIcon(props) {
   );
 }
 
+export function LinearArrayIcon(props) {
+  const hl = useHl();
+  return (
+    <Svg {...props}>
+      <path d="M2.5 18.5 H21.5" strokeDasharray="2 2" />
+      <rect x="2" y="8" width="5" height="5" rx="0.5" />
+      <rect x="9.5" y="8" width="5" height="5" rx="0.5" stroke={hl} />
+      <rect x="17" y="8" width="5" height="5" rx="0.5" stroke={hl} />
+    </Svg>
+  );
+}
+
 export function LockIcon(props) {
   return (
     <Svg {...props}>

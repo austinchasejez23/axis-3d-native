@@ -46,22 +46,93 @@ function around(center, transform) {
     .multiply(new THREE.Matrix4().makeTranslation(-center.x, -center.y, -center.z));
 }
 
+// Put the original object back to its starting shape and place (plus any
+// group edits made during the preview), and remove the previous copies.
+function resetPreview(manager, state, source) {
+  for (const id of state.previewIds) manager.removeMesh(id);
+  state.previewIds = [];
+  const base = state.sourceBase;
+  source.vertices = base.vertices.map((vertex) => ({ ...vertex }));
+  source.position.copy(base.position);
+  source.rotation.copy(base.rotation);
+  source.scale.copy(base.scale);
+  source.invalidateCache();
+  applyPreviewAdjustment(source, state.adjustment);
+  manager.rebuildThreeMesh(source.id);
+}
+
 export function applySceneRadialArray(SceneManager) {
   const P = SceneManager.prototype;
 
-  P.beginRadialArray = /** @this {import("./SceneManager").SceneManager} */ function (options) {
-    const mesh = this.getMesh(this.selection.meshId);
-    if (!mesh || this.selection.type !== 'object' || this.isGroupMode() || mesh.locked) return false;
-    this.cancelRadialArray();
-    this._radialArray = {
+  // Radial and Linear array share one preview (the original object plus its
+  // copies), the same group editing and the same Apply / Cancel.
+  const startArray = (manager) => {
+    const mesh = manager.getMesh(manager.selection.meshId);
+    if (!mesh || manager.selection.type !== 'object' || manager.isGroupMode() || mesh.locked) return false;
+    manager.cancelRadialArray();
+    manager._radialArray = {
       sourceId: mesh.id,
       sourceBase: mesh.clone(),
-      before: this.captureSnapshot(),
+      before: manager.captureSnapshot(),
       previewIds: [],
       adjustment: new THREE.Matrix4(),
     };
+    return true;
+  };
+
+  P.beginRadialArray = /** @this {import("./SceneManager").SceneManager} */ function (options) {
+    if (!startArray(this)) return false;
     this.updateRadialArray({ radius: 3, ...options });
     return this._radialArray?.options || false;
+  };
+
+  P.beginLinearArray = /** @this {import("./SceneManager").SceneManager} */ function (options) {
+    if (!startArray(this)) return false;
+    this.updateLinearArray(options);
+    return this._radialArray?.options || false;
+  };
+
+  // Copies in a straight line along X, Y or Z (or the reverse way). Distance
+  // between is the space between neighbouring copies: 0 puts them side by
+  // side, touching.
+  P.updateLinearArray = /** @this {import("./SceneManager").SceneManager} */ function ({ count = 5, axis = 'x', distance = 0.5, reverse = false } = {}) {
+    const state = this._radialArray;
+    const source = state ? this.getMesh(state.sourceId) : null;
+    if (!state || !source) return false;
+    resetPreview(this, state, source);
+
+    const base = state.sourceBase;
+    const total = Math.max(2, Math.min(64, Math.round(count)));
+    const key = AXES[axis] ? axis : 'x';
+    const gap = Math.max(0, Number.isFinite(Number(distance)) ? Number(distance) : 0);
+    // The object's own length along the direction, in the world.
+    const matrix = worldMatrix(base);
+    const point = new THREE.Vector3();
+    let min = Infinity, max = -Infinity;
+    for (const vertex of base.vertices) {
+      point.set(vertex.x, vertex.y, vertex.z).applyMatrix4(matrix);
+      min = Math.min(min, point[key]);
+      max = Math.max(max, point[key]);
+    }
+    const length = max > min ? max - min : 0;
+    const step = AXES[key].clone().multiplyScalar((length + gap) * (reverse ? -1 : 1));
+
+    const idBase = Date.now() * 100;
+    for (let i = 1; i < total; i++) {
+      const clone = base.clone();
+      clone.id = idBase + i;
+      clone.paintLayer = clonePaintLayer(base.paintLayer);
+      clone.name = `${base.name} array ${i + 1}`;
+      clone.position.copy(base.position).addScaledVector(step, i);
+      applyPreviewAdjustment(clone, state.adjustment);
+      this.meshes.push(clone);
+      this.buildThreeMesh(clone);
+      state.previewIds.push(clone.id);
+    }
+
+    state.options = { count: total, axis: key, distance: gap, reverse: !!reverse };
+    this.radialArraySelectPreview();
+    return true;
   };
 
   P.radialArraySelectPreview = /** @this {import("./SceneManager").SceneManager} */ function () {
@@ -96,8 +167,9 @@ export function applySceneRadialArray(SceneManager) {
 
     // Rebuild from the unmodified starting shape. The edits recorded during
     // the preview are applied afterwards, never committed while the panel is open.
-    for (const id of state.previewIds) this.removeMesh(id);
-    state.previewIds = [];
+    // Index zero is ALWAYS the original mesh, at its original position. The
+    // array's pivot is relative to it, not the world origin or grid center.
+    resetPreview(this, state, source);
 
     const base = state.sourceBase;
     const total = Math.max(2, Math.min(64, Math.round(count)));
@@ -109,16 +181,6 @@ export function applySceneRadialArray(SceneManager) {
     const sourcePosition = base.position.clone();
     const sourceQuaternion = new THREE.Quaternion().setFromEuler(base.rotation);
     const pivot = sourcePosition.clone().addScaledVector(radialDirection, -safeRadius);
-
-    // Index zero is ALWAYS the original mesh, at its original position. The
-    // array's pivot is relative to it, not the world origin or grid center.
-    source.vertices = base.vertices.map((vertex) => ({ ...vertex }));
-    source.position.copy(base.position);
-    source.rotation.copy(base.rotation);
-    source.scale.copy(base.scale);
-    source.invalidateCache();
-    applyPreviewAdjustment(source, state.adjustment);
-    this.rebuildThreeMesh(source.id);
 
     const idBase = Date.now() * 100;
     for (let i = 1; i < total; i++) {

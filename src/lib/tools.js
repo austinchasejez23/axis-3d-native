@@ -1,6 +1,6 @@
 import {
   MergeCloseIcon, MirrorIcon, SoftNormalsIcon, CombineIcon, SeparateIcon,
-  DivideIcon, SmoothIcon, CloneIcon, RadialArrayIcon, LockIcon, DeleteIcon,
+  DivideIcon, SmoothIcon, CloneIcon, RadialArrayIcon, LinearArrayIcon, LockIcon, DeleteIcon,
   BooleanIcon, SubtractIcon, UnionIcon, IntersectIcon,
   DrawFaceIcon, DetachIcon, ExtrudeIcon, FaceCloneIcon, FaceExtrudeIcon,
   CreateFaceBorderIcon, SplitIcon, DrawCutIcon, BevelIcon, EdgeBridgeIcon, FaceBridgeIcon,
@@ -25,6 +25,7 @@ export const TOOLS = {
       { id: 'smooth', label: 'Smooth', icon: SmoothIcon },
       { id: 'clone', label: 'Clone', icon: CloneIcon },
       { id: 'radial_array', label: 'Radial array', icon: RadialArrayIcon },
+      { id: 'linear_array', label: 'Linear array', icon: LinearArrayIcon },
       { id: 'lock', label: 'Lock', icon: LockIcon },
       { id: 'delete', label: 'Delete', icon: DeleteIcon },
     ]],

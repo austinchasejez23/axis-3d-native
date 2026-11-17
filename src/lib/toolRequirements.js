@@ -2,7 +2,7 @@ import { countVisualFaces } from './dissolveTools';
 
 const OBJECT_TOOLS = new Set([
   'merge', 'mirror', 'soft_normals', 'separate', 'divide', 'smooth',
-  'clone', 'radial_array', 'delete',
+  'clone', 'radial_array', 'linear_array', 'delete',
 ]);
 const FACE_TOOLS = new Set(['detach', 'clone', 'extrude', 'delete']);
 const EDGE_TOOLS = new Set([

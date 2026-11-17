@@ -78,7 +78,7 @@ export const DEFAULT_LAYOUTS = {
   ],
   object: [
     ...stack().slice(0, STACK_ROWS - 1),
-    ['boolean', VOID, VOID, VOID, VOID, null],
+    ['boolean', VOID, VOID, VOID, VOID, 'linear_array'],
     ['radial_array', 'lock', 'smooth', 'divide', 'merge', 'soft_normals'],
     ['combine', 'separate', 'mirror', 'clone', 'segments', 'delete'],
   ],
@@ -120,7 +120,7 @@ const EARLIER_DEFAULTS = {
 };
 
 const DEFAULT_HIDDEN = {
-  object: ['boolean', 'radial_array', 'lock', 'smooth', 'divide', 'merge', 'soft_normals'],
+  object: ['boolean', 'radial_array', 'linear_array', 'lock', 'smooth', 'divide', 'merge', 'soft_normals'],
   edge: ['split', 'select_ring', 'draw_cut', 'bridge'],
 };
 
@@ -220,6 +220,9 @@ export function loadToolLayout(mode) {
     const previousShape = JSON.stringify(rows);
     if (mode === 'face' || mode === 'edge' || mode === 'vertex') placeMissing(rows, mode, 'dissolve');
     if (mode === 'vertex') placeMissing(rows, mode, 'bevel');
+    // Linear array joins saved object grids as an expanded-only tool, like Radial array.
+    const linearAdded = mode === 'object' && Array.isArray(rows) && !allIds(rows).includes('linear_array');
+    if (mode === 'object') placeMissing(rows, mode, 'linear_array');
     if (matchesDefault(rows, mode)) {
       const hidden = Array.isArray(all[mode].hidden) ? all[mode].hidden.filter((id) => allIds(rows).includes(id)) : [];
       const defaultHidden = [...(DEFAULT_HIDDEN[mode] || [])].sort();
@@ -232,9 +235,10 @@ export function loadToolLayout(mode) {
         && (hidden.length === 0 || JSON.stringify([...hidden].sort()) === JSON.stringify([...PREVIOUS_HIDDEN[mode]].sort()))) {
         return { rows: DEFAULT_LAYOUTS[mode], hidden: [...DEFAULT_HIDDEN[mode]] };
       }
-      if (mode === 'object' && hidden.length === 0 && JSON.stringify(rows) === JSON.stringify(widenStack(LEGACY_OBJECT_LAYOUT))) {
+      if (mode === 'object' && hidden.length === 0 && previousShape === JSON.stringify(widenStack(LEGACY_OBJECT_LAYOUT))) {
         return { rows: DEFAULT_LAYOUTS.object, hidden: [...DEFAULT_HIDDEN.object] };
       }
+      if (linearAdded && !hidden.includes('linear_array')) hidden.push('linear_array');
       return { rows, hidden };
     }
   } catch { /* ignore unreadable storage */ }

@@ -196,6 +196,8 @@ declare module './SceneManager.js' {
     beginExtrudeDrag(): any;
     /** Implemented by sceneRadialArray.js */
     beginRadialArray(options: any): any;
+    /** Implemented by sceneRadialArray.js */
+    beginLinearArray(options: any): any;
     /** Implemented by sceneLights.js */
     beginSceneLightControl(): any;
     /** Implemented by sceneLights.js */
@@ -461,6 +463,8 @@ declare module './SceneManager.js' {
     updateMarquee(): any;
     /** Implemented by sceneRadialArray.js */
     updateRadialArray(options?: { count?: number; axis?: 'x' | 'y' | 'z'; follow?: boolean; radius?: number }): void;
+    /** Implemented by sceneRadialArray.js */
+    updateLinearArray(options?: { count?: number; axis?: 'x' | 'y' | 'z'; distance?: number; reverse?: boolean }): boolean;
     /** Implemented by sceneReflections.js */
     updateReflections(): any;
     /** Implemented by sceneLights.js */
