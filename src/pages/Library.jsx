@@ -69,7 +69,7 @@ export default function Library() {
           width={48}
           spinning={refreshing}
           className="mt-2"
-          style={{ transform: refreshing ? undefined : `rotate(${pull * 4}deg)` }}
+          turn={pull * 4}
         />
       </div>
       <div className="fixed inset-0 z-0 pointer-events-none opacity-25">

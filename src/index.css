@@ -315,6 +315,13 @@
 }
 @keyframes modeling-caret-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 
+/* Loading cube: turns in place about its upright axis. */
+@keyframes axis-cube-turn {
+  from { transform: rotateY(0deg); }
+  to { transform: rotateY(360deg); }
+}
+.axis-cube-turn { animation: axis-cube-turn 2.8s linear infinite; }
+
 /* Information button hint: fades in and out of the highlight color three
    times within five seconds. */
 @keyframes axis-help-flash {
