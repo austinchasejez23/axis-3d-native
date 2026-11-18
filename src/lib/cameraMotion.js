@@ -50,30 +50,45 @@ function speedBoost(manager, kind, amount, now) {
 }
 
 // Zoom and pan speed come from how far away the geometry in front of the
-// camera is: the orbit distance, or the nearest surface under the fingers (or
-// the mouse) when that is closer. Next to an object that isn't selected, with
-// the pivot far beyond it, the steps then stay as small as they are next to the
-// selection instead of leaping into and through the object. The speed floor
-// still keeps the camera moving through anything it reaches.
+// camera is: the surface there, or the orbit distance when there is none.
+// Next to an object that isn't selected, with the pivot far beyond it, the
+// steps then stay small instead of leaping into and through the object. The
+// speed floor still keeps the camera moving through anything it reaches.
+// Pan uses the surface under the fingers (or the mouse), so what is under them
+// follows them. Zoom moves the camera straight ahead, so it uses the surface
+// straight ahead (the middle of the view): a wall right beside or below the
+// fingers that the camera isn't heading into no longer slows the zoom to a crawl.
 const SURFACE_SAMPLE_MS = 100;
 const _surfaceNdc = new THREE.Vector2();
+
+function surfaceDistance(manager, meshes, x, y) {
+  _surfaceNdc.set(x, y);
+  manager.raycaster.setFromCamera(_surfaceNdc, manager.camera);
+  const hit = manager.raycaster.intersectObjects(meshes, false)[0];
+  return hit ? hit.distance : Infinity;
+}
 
 export function sampleCameraSurface(manager, clientX, clientY, fresh = false) {
   if (manager.camera?.isOrthographicCamera) { manager._cameraSurface = null; return; }
   const now = performance.now();
   if (!fresh && manager._cameraSurface && now - manager._cameraSurface.at < SURFACE_SAMPLE_MS) return;
   const rect = manager.renderer.domElement.getBoundingClientRect();
-  _surfaceNdc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
-  manager.raycaster.setFromCamera(_surfaceNdc, manager.camera);
   const meshes = [];
   for (const obj of manager.threeObjects.values()) if (obj.mesh.visible) meshes.push(obj.mesh);
-  const hit = manager.raycaster.intersectObjects(meshes, false)[0];
-  manager._cameraSurface = { at: now, distance: hit ? hit.distance : Infinity };
+  manager._cameraSurface = {
+    at: now,
+    distance: surfaceDistance(manager, meshes, ((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1),
+    ahead: surfaceDistance(manager, meshes, 0, 0),
+  };
 }
 
-function speedDistance(manager) {
-  const surface = manager._cameraSurface?.distance;
-  const dist = Number.isFinite(surface) ? Math.min(manager.cameraDist, surface) : manager.cameraDist;
+// The surface sets the pace whenever there is one, nearer or farther than the
+// orbit pivot: after zooming past the pivot it sits right at the camera, and
+// pacing by it held every move to the slowest speed.
+function speedDistance(manager, key = 'distance') {
+  const surface = manager._cameraSurface?.[key];
+  const ahead = manager._cameraSurface?.ahead;
+  const dist = Number.isFinite(surface) ? surface : Number.isFinite(ahead) ? ahead : manager.cameraDist;
   return Math.max(dist, SPEED_FLOOR);
 }
 
@@ -83,10 +98,10 @@ function speedDistance(manager) {
 // the camera passes straight through whatever is there.
 function zoomCamera(manager, zoom) {
   const dist = manager.cameraDist;
-  const travel = speedDistance(manager) * (1 - Math.exp(zoom));
+  const travel = speedDistance(manager, 'ahead') * (1 - Math.exp(zoom));
   // The surface ahead comes nearer by the same amount (until it is sampled again).
   const surface = manager._cameraSurface;
-  if (surface && Number.isFinite(surface.distance)) surface.distance = Math.max(0, surface.distance - travel);
+  if (surface && Number.isFinite(surface.ahead)) surface.ahead = Math.max(0, surface.ahead - travel);
   const next = dist - travel;
   if (next >= MIN_DISTANCE) {
     manager.cameraDist = Math.min(next, MAX_DISTANCE);
