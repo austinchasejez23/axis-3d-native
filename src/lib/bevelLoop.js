@@ -1047,7 +1047,7 @@ export function bevelLoopEdges(sm, options = {}) {
   // last ring, and the one facing the bevel takes the arc, split back into
   // flat triangles.
   const capPlan = new Map(); // face index -> { ring } | { entry }
-  const planBentCap = (i, fiset) => {
+  const planBentCap = (i, fiset, flat = false) => {
     const V = order[i];
     const endEdge = i === 0 ? 0 : walk.length - 1;
     const faceA = sides[endEdge].a, faceB = sides[endEdge].b;
@@ -1083,7 +1083,7 @@ export function bevelLoopEdges(sm, options = {}) {
       const score = d.lengthSq() > 1e-16 ? d.normalize().dot(toward.clone().normalize()) : -Infinity;
       if (score > best) { best = score; h = j; }
     });
-    ordered.forEach((c, j) => capPlan.set(c.fi, j < h ? { ring: 0 } : j > h ? { ring: segments } : { entry: c.entry }));
+    ordered.forEach((c, j) => capPlan.set(c.fi, j < h ? { ring: 0 } : j > h ? { ring: segments } : { entry: c.entry, flat }));
     return true;
   };
 
@@ -1115,6 +1115,20 @@ export function bevelLoopEdges(sm, options = {}) {
       const capNormal = mesh.getFaceNormal([...fiset][0]);
       const bent = [...fiset].some((fi) => mesh.getFaceNormal(fi).dot(capNormal) < 0.9995);
       if (bent && planBentCap(i, fiset)) continue;
+      // Separate faces meeting at the end (a Y or T junction's top: each arm
+      // and the center are their own faces, with real edges between them)
+      // stay separate faces. Merging them into one polygon took those edges
+      // away, and the merged polygon could come out facing the wrong way, so
+      // the top and bottom disappeared. Each face keeps its own edges; the
+      // one facing the bevel takes the arc.
+      const realEdgeBetween = [...fiset].some((fi) => {
+        const f = mesh.faces[fi];
+        return f.some((a, j) => {
+          const b = f[(j + 1) % f.length];
+          return shownEdges.has(edgeKey(a, b)) && (edgeFaceMap.get(edgeKey(a, b)) || []).some((g) => g !== fi && fiset.has(g));
+        });
+      });
+      if (realEdgeBetween && planBentCap(i, fiset, !bent)) continue;
       // Boundary edges of the union appear once; shared (internal) edges twice.
       const ecount = new Map();
       for (const fi of fiset) {
@@ -1154,6 +1168,16 @@ export function bevelLoopEdges(sm, options = {}) {
           if (rep < 0) rep = fi;
           else mesh.faces[fi] = []; // consumed by the merge
         }
+        // Keep the merged cap facing the same way as the faces it replaces;
+        // the boundary walk can run either way round.
+        const merged = new THREE.Vector3();
+        for (let j = 0; j < poly.length; j++) {
+          const p = P(poly[j]), q = P(poly[(j + 1) % poly.length]);
+          merged.x += (p.y - q.y) * (p.z + q.z);
+          merged.y += (p.z - q.z) * (p.x + q.x);
+          merged.z += (p.x - q.x) * (p.y + q.y);
+        }
+        if (merged.dot(capNormal) < 0) poly.reverse();
         mesh.faces[rep] = poly;
       }
     }
@@ -1175,6 +1199,12 @@ export function bevelLoopEdges(sm, options = {}) {
       for (let s = 0; s <= segments; s++) arc.push(rings[s][i]);
       if (f[(k - 1 + f.length) % f.length] !== planned.entry) arc.reverse();
       const poly = [...f.slice(0, k), ...arc, ...f.slice(k + 1)];
+      // A flat face stays one face with the arc in its outline.
+      if (planned.flat) {
+        mesh.faces[fi] = poly;
+        arcUsedAt.add(i);
+        continue;
+      }
       // Fan the polygon from the corner farthest from the bevel so every
       // piece is a flat triangle; the fan lines stay hidden.
       const pv = P(order[i]);
