@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { sampleCameraSurface } from '@/lib/cameraMotion';
 
 // Desktop mouse controls, kept separate from the touch gesture code.
 //
@@ -157,7 +156,6 @@ export function applySceneMouse(SceneManager) {
     if (m.mode === 'orbit') {
       if (m.moved) this.queueCameraMove('orbit', dx, dy);
     } else if (m.mode === 'pan') {
-      sampleCameraSurface(this, e.clientX, e.clientY);
       this.queueCameraMove('pan', dx, dy);
     } else if (m.mode === 'move_pending') {
       if (m.moved) {
@@ -343,7 +341,6 @@ export function applySceneMouse(SceneManager) {
       return;
     }
     e.preventDefault();
-    sampleCameraSurface(this, e.clientX, e.clientY);
     this.zoom(e.deltaY > 0 ? 1.1 : 1 / 1.1);
   };
 }

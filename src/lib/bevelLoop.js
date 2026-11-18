@@ -1258,12 +1258,32 @@ export function bevelLoopEdges(sm, options = {}) {
       arcUsedAt.add(i);
       const arc = [];
       for (let s = 0; s <= segments; s++) arc.push(rings[s][i]);
-      // Orient the arc to match the face's winding: its first point should be
-      // the one nearer the previous boundary vertex.
-      const prev = mesh.getVertex(f[(j - 1 + f.length) % f.length]);
-      if (prev) {
-        const pv = V3(prev);
-        if (pv.distanceToSquared(P(arc[arc.length - 1])) < pv.distanceToSquared(P(arc[0]))) arc.reverse();
+      // Orient the arc to match the face's winding. The face across each of
+      // this corner's two edges already moved its corner to one side's ring,
+      // so the arc starts with the ring that the face before it uses. Going by
+      // which end was nearer the previous corner picked the wrong way round
+      // when that corner was far off (the head of a window: the cap folded
+      // into a bow tie and drew spikes across the opening).
+      const prevVid = f[(j - 1 + f.length) % f.length];
+      const nextVid = f[(j + 1) % f.length];
+      const ringAcross = (w) => {
+        for (const g of edgeFaceMap.get(edgeKey(w, vid)) || []) {
+          if (g === fi) continue;
+          const plan = capPlan.get(g);
+          if (plan?.ring != null) return plan.ring;
+          if (onA[g] || sideA.has(g)) return 0;
+          if (onB[g] || sideB.has(g)) return segments;
+        }
+        return null;
+      };
+      const before = ringAcross(prevVid), after = ringAcross(nextVid);
+      if (before === segments || after === 0) arc.reverse();
+      else if (before == null && after == null) {
+        const prev = mesh.getVertex(prevVid);
+        if (prev) {
+          const pv = V3(prev);
+          if (pv.distanceToSquared(P(arc[arc.length - 1])) < pv.distanceToSquared(P(arc[0]))) arc.reverse();
+        }
       }
       out.push(...arc);
     }
