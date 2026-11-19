@@ -121,12 +121,23 @@ export function classifySides(mesh, loopEdges, blocked) {
 }
 
 // In-plane direction leaving edge `e` across face `fi`, perpendicular to the edge.
+// The face's own winding says which side of the edge it lies on: going round
+// the face the inside is always on the left. Pointing toward the face's center
+// instead went the wrong way on a curved, hollowed-out face (a C-shaped side,
+// whose center sits off past the curve), so the bevel grew outward from the
+// face as a flange and its faces came out inside out.
 function outDir(mesh, fi, v1, v2) {
   const A = mesh.getVertex(v1), B = mesh.getVertex(v2);
   const t = new THREE.Vector3(B.x - A.x, B.y - A.y, B.z - A.z).normalize();
   const d = new THREE.Vector3().crossVectors(mesh.getFaceNormal(fi), t);
   if (d.lengthSq() < 1e-16) return null;
   d.normalize();
+  const f = mesh.faces[fi];
+  for (let j = 0; j < f.length; j++) {
+    const p = f[j], q = f[(j + 1) % f.length];
+    if (p === v1 && q === v2) return d;
+    if (p === v2 && q === v1) return d.negate();
+  }
   const mid = new THREE.Vector3((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2);
   const c = mesh.getFaceCenter(fi).sub(mid);
   if (d.dot(c) < 0) d.negate();
