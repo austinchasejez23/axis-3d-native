@@ -8,6 +8,20 @@ import { mergeHiddenDiagonals, reconstructImportedQuads } from './quadMerge';
 let nextId = 1;
 const genId = () => nextId++;
 
+// True when two of a face's triangles meet past the soft-normal angle (a real
+// fold). Degenerate triangles (no normal) are left out.
+function trianglesFoldPast(normals, softCos) {
+  for (let i = 0; i < normals.length; i++) {
+    const a = normals[i];
+    if (a.lengthSq() < 0.5) continue;
+    for (let j = i + 1; j < normals.length; j++) {
+      const b = normals[j];
+      if (b.lengthSq() >= 0.5 && a.dot(b) < softCos) return true;
+    }
+  }
+  return false;
+}
+
 export class EditableMesh {
   constructor(name = 'Object') {
     this.id = genId();
@@ -675,16 +689,25 @@ export class EditableMesh {
       const face = this.faces[fi];
       const faceColor = this.faceColors[fi] ? new THREE.Color(this.faceColors[fi]) : null;
       const fn = faceNormals ? null : this.getFaceNormal(fi);
-      for (const tri of this.getFaceTriangleIndices(fi)) {
-        // Keep the original normals on a folded surface after dissolving its
-        // dividing edge, instead of flattening the whole polygon's shading.
-        let preservedNormal = null;
-        if (this.faceRenderTriangles?.[fi]) {
+      const tris = this.getFaceTriangleIndices(fi);
+      // Keep the original normals on a folded surface after dissolving its
+      // dividing edge, instead of flattening the whole polygon's shading.
+      let keptNormals = null;
+      if (this.faceRenderTriangles?.[fi]) {
+        keptNormals = tris.map((tri) => {
           const a = this.getVertexVector(face[tri[0]]);
           const b = this.getVertexVector(face[tri[1]]);
           const c = this.getVertexVector(face[tri[2]]);
-          preservedNormal = b.sub(a).cross(c.sub(a)).normalize();
-        }
+          return b.sub(a).cross(c.sub(a)).normalize();
+        });
+        // Moving vertices keeps every polygon's triangles too. With soft
+        // normals, a kept face only keeps its triangle normals where it folds
+        // past the soft angle; otherwise it shades soft like any other face.
+        if (faceNormals && !trianglesFoldPast(keptNormals, softCos)) keptNormals = null;
+      }
+      for (let ti = 0; ti < tris.length; ti++) {
+        const tri = tris[ti];
+        const preservedNormal = keptNormals ? keptNormals[ti] : null;
         for (const vi of tri) {
           const vid = face[vi];
           const v = this.getVertex(vid);

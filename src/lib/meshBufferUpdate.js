@@ -72,6 +72,7 @@ function buildLayout(mesh) {
     faceStart, faceVid, faceVi, preservedRefs,
     cornerK: Int32Array.from(cornerK),
     triPreserved: Uint8Array.from(triPreserved),
+    anyPreserved: triPreserved.includes(1),
     incStart, incFaces,
     positionDependent,
   };
@@ -145,28 +146,62 @@ export function updateGeometryInPlace(mesh, geometry) {
   const softCos = Math.cos(60 * (Math.PI / 180));
   const pos = posAttr.array;
   const nor = normAttr.array;
+  const triCount = cornerK.length / 3;
+  // Normals of preserved triangles, and (with soft normals) whether each face
+  // with preserved triangles folds past the soft angle, as the full builder
+  // decides it.
+  let tn = null, folded = null;
+  if (layout.anyPreserved) {
+    tn = layout.triNormals || (layout.triNormals = new Float64Array(triCount * 3));
+    for (let t = 0; t < triCount; t++) {
+      if (!triPreserved[t]) continue;
+      const c = t * 3;
+      const a = verts[faceVi[cornerK[c]]], b = verts[faceVi[cornerK[c + 1]]], d = verts[faceVi[cornerK[c + 2]]];
+      const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
+      const vx = d.x - a.x, vy = d.y - a.y, vz = d.z - a.z;
+      let px = uy * vz - uz * vy, py = uz * vx - ux * vz, pz = ux * vy - uy * vx;
+      const inv = 1 / (Math.sqrt(px * px + py * py + pz * pz) || 1);
+      px *= inv; py *= inv; pz *= inv;
+      tn[c] = px; tn[c + 1] = py; tn[c + 2] = pz;
+    }
+    if (incStart) {
+      folded = layout.faceFolded || (layout.faceFolded = new Uint8Array(faceCount));
+      let f = 0;
+      for (let t = 0; t < triCount;) {
+        while (cornerK[t * 3] >= faceStart[f + 1]) f++;
+        let end = t + 1;
+        while (end < triCount && cornerK[end * 3] < faceStart[f + 1]) end++;
+        let fold = 0;
+        if (triPreserved[t]) {
+          for (let i = t; i < end && !fold; i++) {
+            const ax = tn[i * 3], ay = tn[i * 3 + 1], az = tn[i * 3 + 2];
+            if (ax * ax + ay * ay + az * az < 0.5) continue;
+            for (let j = i + 1; j < end; j++) {
+              const bx = tn[j * 3], by = tn[j * 3 + 1], bz = tn[j * 3 + 2];
+              if (bx * bx + by * by + bz * bz >= 0.5 && ax * bx + ay * by + az * bz < softCos) { fold = 1; break; }
+            }
+          }
+        }
+        folded[f] = fold;
+        t = end;
+      }
+    }
+  }
   let fi = 0;
   for (let c = 0; c < cornerK.length; c += 3) {
     const k0 = cornerK[c];
     while (k0 >= faceStart[fi + 1]) fi++;
     const tri = c / 3;
-    let px = 0, py = 0, pz = 0;
-    if (triPreserved[tri]) {
-      // Folded polygons keep a normal per preserved triangle.
-      const a = verts[faceVi[k0]], b = verts[faceVi[cornerK[c + 1]]], d = verts[faceVi[cornerK[c + 2]]];
-      const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
-      const vx = d.x - a.x, vy = d.y - a.y, vz = d.z - a.z;
-      px = uy * vz - uz * vy; py = uz * vx - ux * vz; pz = ux * vy - uy * vx;
-      const inv = 1 / (Math.sqrt(px * px + py * py + pz * pz) || 1);
-      px *= inv; py *= inv; pz *= inv;
-    }
+    // Folded polygons keep a normal per preserved triangle. With soft
+    // normals, only faces that fold past the soft angle do.
+    const keep = triPreserved[tri] && (!incStart || folded[fi]);
     for (let j = 0; j < 3; j++) {
       const vi = faceVi[cornerK[c + j]];
       const v = verts[vi];
       const o = (c + j) * 3;
       pos[o] = v.x; pos[o + 1] = v.y; pos[o + 2] = v.z;
-      if (triPreserved[tri]) {
-        nor[o] = px; nor[o + 1] = py; nor[o + 2] = pz;
+      if (keep) {
+        nor[o] = tn[c]; nor[o + 1] = tn[c + 1]; nor[o + 2] = tn[c + 2];
       } else if (incStart) {
         // Soft normals: blend only with incident faces inside 60 degrees.
         const bx = fn[fi * 3], by = fn[fi * 3 + 1], bz = fn[fi * 3 + 2];
