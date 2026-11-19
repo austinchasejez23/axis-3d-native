@@ -33,6 +33,7 @@ import { mergeVerticesWithin, weldCoincidentVertices, edgeKey } from './meshTopo
 import { notifyUnavailable } from './unavailable';
 import { cleanupCommittedTopology, dissolveSharedBoundary, adjacentFacesForBoundary, removeFaceByIndex, resolveLegacyDeletedBorders } from './meshTopologyInvariants';
 import { updateGeometryInPlace } from './meshBufferUpdate';
+import { rememberLiveWireframe, moveLiveWireframe, rememberLiveFaceHighlight, moveLiveFaceHighlight } from './liveEditDisplay';
 import { syncObjectHighlightTransforms, refreshTransformHighlights } from './highlightFollow';
 import { intersectSelection, subtractSelection, unionSelection } from './booleanTools';
 import { snapAngleDelta, uniformScaleSnapFactor, axisScaleSnapFactor } from './snapping';
@@ -1237,10 +1238,19 @@ export class SceneManager {
   }
 
   _refreshWireframe(obj, mesh) {
-    const wireGeo = mesh.toEdgesGeometry();
-    replaceFatSegmentPositions(obj.wireframe, Array.from(wireGeo.getAttribute('position').array));
-    wireGeo.dispose();
     obj.wireframeStale = false;
+    // While a gesture moves vertices, the same edges stay on screen: move
+    // them instead of working the wireframe out again every frame.
+    if (this._liveEdit && moveLiveWireframe(obj, mesh)) return;
+    const ids = mesh.edgeSegmentIds();
+    const positions = new Array(ids.length * 3);
+    for (let i = 0; i < ids.length; i++) {
+      const v = mesh.getVertex(ids[i]);
+      positions[i * 3] = v.x; positions[i * 3 + 1] = v.y; positions[i * 3 + 2] = v.z;
+    }
+    replaceFatSegmentPositions(obj.wireframe, Array.from(new Float32Array(positions)));
+    if (this._liveEdit) rememberLiveWireframe(obj, mesh, ids);
+    else obj.liveWire = null;
   }
 
   // Bring any wireframe that was skipped while hidden back in sync.
@@ -1259,9 +1269,13 @@ export class SceneManager {
     // Live-edit mode is independent of the detail-hiding setting and of mesh
     // size: it only swaps the per-frame geometry rebuild for an in-place buffer
     // write, which looks identical.
+    // Called on every frame of a gesture; the mesh and the setting can't
+    // change mid-gesture, so whether it is heavy is decided once, at the start.
+    const starting = !this._liveEdit;
+    if (starting) this._transformLocked?.clear();
     this._liveEdit = true;
     if (!this._liveEditIds) this._liveEditIds = new Set();
-    if (this._heavyEdit || !theme.hideDetailWhileEditing) return;
+    if (!starting || this._heavyEdit || !theme.hideDetailWhileEditing) return;
     const mesh = this.getMesh(meshId ?? this.selection.meshId);
     if (!mesh || mesh.getTriangleCount() < HEAVY_EDIT_TRIANGLES) return;
     this._heavyEdit = true;
@@ -1270,15 +1284,36 @@ export class SceneManager {
     if (this.selection.type !== 'object' && !this.isGroupMode()) this.highlightGroup.visible = false;
   }
 
+  // Keep each face's current triangles and hidden diagonals while its
+  // vertices move. Both look at the whole mesh, so during a gesture they run
+  // once, on its first frame (and the diagonals once more at its end), not on
+  // every frame.
+  _lockForTransform(mesh) {
+    if (this._liveEdit) {
+      // Again whenever the gesture changes the faces (an extrusion adds them).
+      const topology = `${mesh.faces.length},${mesh.vertices.length}`;
+      if (!this._transformLocked) this._transformLocked = new Map();
+      if (this._transformLocked.get(mesh.id) === topology) return;
+      this._transformLocked.set(mesh.id, topology);
+    }
+    mesh.lockFaceRenderTriangles(); mesh.lockTriangulationDiagonals();
+  }
+
   // Gesture over: put the detail back and rebuild whatever was skipped.
   endHeavyEdit() {
     // Gesture over: leave live-edit mode and do one authoritative full rebuild
     // of every mesh that was updated in place, so nothing can drift.
     if (this._liveEdit) {
       this._liveEdit = false;
+      this._liveFaceHighlight = null;
+      // Classify the edges once more where the gesture left the vertices,
+      // as locking on every frame used to.
+      for (const id of this._transformLocked?.keys() || []) this.getMesh(id)?.lockTriangulationDiagonals();
+      this._transformLocked?.clear();
       const ids = this._liveEditIds ? [...this._liveEditIds] : [];
       this._liveEditIds?.clear();
       for (const id of ids) this.rebuildThreeMesh(id);
+      for (const obj of this.threeObjects.values()) obj.liveWire = null;
     }
     if (!this._heavyEdit) return;
     this._heavyEdit = false;
@@ -1320,12 +1355,19 @@ export class SceneManager {
     // a heavy gesture; object transforms reuse the existing local outline.
     if (this._heavyEdit && !force) { this._highlightsStale = true; return; }
     this._highlightReference = this._sceneFitDistance();
+    // A gesture moving the selected faces: the same faces stay highlighted,
+    // so move the existing highlight with them rather than rebuilding it.
+    if (this._liveEdit && !force && !(this.highlightsSuppressed && !this._revealing) &&
+        moveLiveFaceHighlight(this)) return;
+    this._liveFaceHighlight = null;
     while (this.highlightGroup.children.length > 0) {
       const child = this.highlightGroup.children[0];
       this.highlightGroup.remove(child);
       if (child instanceof THREE.Mesh || child instanceof THREE.Line || child instanceof THREE.Points) {
         child.geometry?.dispose();
-        for (const material of (Array.isArray(child.material) ? child.material : [child.material])) material?.dispose();
+        for (const material of (Array.isArray(child.material) ? child.material : [child.material])) {
+          if (material) (this._retiredMaterials || (this._retiredMaterials = [])).push(material);
+        }
       }
     }
 
@@ -1446,6 +1488,9 @@ export class SceneManager {
       }
       const positions = [];
       const borderPositions = [];
+      // Which vertex each highlight point is, so a live gesture can move it.
+      const fillIds = [];
+      const borderIds = [];
       for (const idx of selected) {
         const face = mesh.faces[idx];
         if (!face) continue;
@@ -1455,6 +1500,7 @@ export class SceneManager {
             if (!v) continue;
             const wp = new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(wm);
             positions.push(wp.x, wp.y, wp.z);
+            fillIds.push(face[vi]);
           }
         }
         for (let i = 0; i < face.length; i++) {
@@ -1468,24 +1514,27 @@ export class SceneManager {
           const wa = new THREE.Vector3(a.x, a.y, a.z).applyMatrix4(wm);
           const wb = new THREE.Vector3(b.x, b.y, b.z).applyMatrix4(wm);
           borderPositions.push(wa.x, wa.y, wa.z, wb.x, wb.y, wb.z);
+          borderIds.push(ai, bi);
         }
       }
+      let fill = null, border = null;
       if (positions.length) {
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
         geo.computeVertexNormals();
         const faceColor = new THREE.Color(hl).lerp(new THREE.Color(0xffffff), 0.55);
         const mat = new THREE.MeshBasicMaterial({ color: faceColor, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthTest: false, depthWrite: false, toneMapped: false });
-        const fill = new THREE.Mesh(geo, mat);
+        fill = new THREE.Mesh(geo, mat);
         fill.renderOrder = 998;
         this.highlightGroup.add(fill);
       }
       if (borderPositions.length) {
-        const border = this._highlightLines(borderPositions, 2.25);
+        border = this._highlightLines(borderPositions, 2.25);
         border.material.depthTest = false;
         border.renderOrder = 999;
         this.highlightGroup.add(border);
       }
+      if (this._liveEdit && (fill || border)) rememberLiveFaceHighlight(this, mesh, fill, fillIds, border, borderIds);
     }
 
     this.cb.onSelectionChange?.(true);
@@ -1629,7 +1678,7 @@ export class SceneManager {
       // Keep each face's current triangles while its vertices move, as
       // rotation does: re-triangulating a face that the move bends sharply
       // drops the triangles that fold past its normal and opens holes.
-      mesh.lockFaceRenderTriangles(); mesh.lockTriangulationDiagonals();
+      this._lockForTransform(mesh);
       const vids = this.getSelectedVertexIds();
       mesh.translateVertexIds(vids, this.worldToLocalDelta(mesh, worldDelta));
       const correction = this.snapCorrection(this.getSelectionCenter());
@@ -1677,7 +1726,7 @@ export class SceneManager {
       this.updateObjectTransform(mesh.id);
     } else {
       const center = this.getSelectionCenter();
-      mesh.lockFaceRenderTriangles(); mesh.lockTriangulationDiagonals();
+      this._lockForTransform(mesh);
       const wm = this.getWorldMatrix(mesh);
       const vids = this.getSelectedVertexIds();
       for (const vid of vids) {
@@ -1759,7 +1808,7 @@ export class SceneManager {
       this.updateObjectTransform(mesh.id);
     } else {
       const center = this.rotatePivot || this.getSelectionCenter();
-      mesh.lockFaceRenderTriangles(); mesh.lockTriangulationDiagonals();
+      this._lockForTransform(mesh);
       const wm = this.getWorldMatrix(mesh);
       const vids = this.getSelectedVertexIds();
       const rotAxis = axis === 'x' ? new THREE.Vector3(1, 0, 0) : axis === 'y' ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
@@ -1794,7 +1843,7 @@ export class SceneManager {
       this.updateObjectTransform(mesh.id);
     } else {
       const center = this.getSelectionCenter();
-      mesh.lockFaceRenderTriangles(); mesh.lockTriangulationDiagonals();
+      this._lockForTransform(mesh);
       const wm = this.getWorldMatrix(mesh);
       const vids = this.getSelectedVertexIds();
       for (const vid of vids) {
@@ -1833,7 +1882,7 @@ export class SceneManager {
       // Pivot stays pinned to where the selection was when the gesture started,
       // so a sub-object rotation can never drift off its own center.
       const center = this.rotatePivot || this.getSelectionCenter();
-      mesh.lockFaceRenderTriangles(); mesh.lockTriangulationDiagonals();
+      this._lockForTransform(mesh);
       const wm = this.getWorldMatrix(mesh);
       // A face can share positions with separately indexed wall vertices.
       // Rotate those coincident seam vertices together to prevent visible gaps.
@@ -2635,6 +2684,8 @@ export class SceneManager {
     // stays black forever. Check the context directly every frame instead.
     if (this._checkContextHealth()) return;
     try {
+      // A two-finger transform waiting for this frame.
+      this.flushManipulate?.();
       updateCameraMotion(this);
       updateSceneShadowBounds(this);
       this.updateReflections?.();
@@ -2649,6 +2700,7 @@ export class SceneManager {
       syncObjectHighlightTransforms(this);
       this._fitOrthoDepth();
       this.renderer.render(this.scene, this.camera);
+      this._disposeRetiredMaterials();
     } catch (err) {
       this._reportGraphicsError(err?.message || String(err));
     }
@@ -2809,8 +2861,19 @@ export class SceneManager {
     this.updateStats();
   }
 
+  // Disposing a material frees its shader program once nothing else uses it,
+  // so the replacement highlight (same settings, built straight after) had to
+  // compile the same shader again. Old highlight materials are freed only
+  // after a frame has drawn their replacements, which reuse the program.
+  _disposeRetiredMaterials() {
+    if (!this._retiredMaterials?.length) return;
+    for (const material of this._retiredMaterials) material.dispose();
+    this._retiredMaterials.length = 0;
+  }
+
   dispose() {
     this._disposed = true;
+    this._disposeRetiredMaterials();
     if (this._themeUnsub) this._themeUnsub();
     cancelAnimationFrame(this._rafId);
     this.stopCameraMotion();

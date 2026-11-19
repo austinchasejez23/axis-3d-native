@@ -84,3 +84,17 @@ export function replaceFatSegmentPositions(lineSegments, positions) {
 
   if (oldGeometry) oldGeometry.dispose();
 }
+
+// Move the existing segments to new end points without making a new geometry:
+// the same number of segments, written straight into the buffer the shader
+// already reads. Returns false (nothing changed) when the count differs.
+export function moveFatSegmentPositions(lineSegments, positions) {
+  const geometry = lineSegments.geometry;
+  const buffer = geometry?.attributes?.instanceStart?.data;
+  if (!buffer || buffer.array.length !== positions.length) return false;
+  buffer.array.set(positions);
+  buffer.needsUpdate = true;
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return true;
+}

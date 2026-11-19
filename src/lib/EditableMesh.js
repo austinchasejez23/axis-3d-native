@@ -781,18 +781,29 @@ export class EditableMesh {
   // edges where the two adjacent faces meet at an angle.
   // Coplanar triangulation diagonals (angle 0) are excluded so they don't render.
   toEdgesGeometry() {
+    const ids = this.edgeSegmentIds();
+    const positions = new Array(ids.length * 3);
+    for (let i = 0; i < ids.length; i++) {
+      const v = this.getVertex(ids[i]);
+      positions[i * 3] = v.x; positions[i * 3 + 1] = v.y; positions[i * 3 + 2] = v.z;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    return geo;
+  }
+
+  // The vertex ids of every displayed wireframe segment, two per segment, in
+  // drawing order. toEdgesGeometry draws exactly these.
+  edgeSegmentIds() {
     if (this.paintWireEdges?.length) {
-      const positions = [];
+      const ids = [];
       for (const edge of this.paintWireEdges) {
-        const a = this.getVertex(edge.v1), b = this.getVertex(edge.v2);
-        if (a && b) positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+        if (this.getVertex(edge.v1) && this.getVertex(edge.v2)) ids.push(edge.v1, edge.v2);
       }
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      return geometry;
+      return ids;
     }
     const edgeMap = this._ensureEdgeFaceMap();
-    const positions = [];
+    const ids = [];
     // In explicit crease-only mode, filter by 25 degrees. Do not use that
     // filter for geometry-only imported wireframes: smooth curved surfaces
     // (e.g. spheres) would otherwise disappear entirely.
@@ -831,23 +842,19 @@ export class EditableMesh {
         this.visibleEdges.push({ v1, v2 });
         visible.add(key);
       }
-      const va = this.getVertex(v1), vb = this.getVertex(v2);
-      positions.push(va.x, va.y, va.z, vb.x, vb.y, vb.z);
+      ids.push(v1, v2);
       shownKeys.add(key);
     }
     for (const e of this.explicitEdges) {
       const key = `${Math.min(e.v1, e.v2)},${Math.max(e.v1, e.v2)}`;
       // Never render a detached line; visible borders already come from faces.
       if (!edgeMap.has(key) || shownKeys.has(key)) continue;
-      const va = this.getVertex(e.v1), vb = this.getVertex(e.v2);
-      if (va && vb) {
-        positions.push(va.x, va.y, va.z, vb.x, vb.y, vb.z);
+      if (this.getVertex(e.v1) && this.getVertex(e.v2)) {
+        ids.push(e.v1, e.v2);
         shownKeys.add(key);
       }
     }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    return geo;
+    return ids;
   }
 
   clone() {

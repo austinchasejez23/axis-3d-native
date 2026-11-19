@@ -30,7 +30,13 @@ try {
       assert.equal(JSON.stringify(mesh.faces), topology, 'rotation must preserve editable topology');
       assert.deepEqual(mesh.vertices.slice(0, sides), base, 'opposite end must stay fixed');
     }
-    assert.equal(updateGeometryInPlace(mesh, initial), false, 'preserved folded faces must use per-triangle normals from the full builder');
+    // The in-place writer must give the full builder's buffers exactly,
+    // including the per-triangle normals of preserved folded faces.
+    const full = mesh.toBufferGeometry();
+    assert.equal(updateGeometryInPlace(mesh, initial), true, 'a transform keeps the same buffer layout');
+    for (const name of ['position', 'normal']) {
+      assert.deepEqual(Array.from(initial.getAttribute(name).array), Array.from(full.getAttribute(name).array), `${method} ${axis}: in-place ${name}s match the full builder`);
+    }
     const copy = EditableMesh.deserialize(mesh.serialize());
     assert.equal(copy.getTriangleCount(), expected, 'saving and reopening must retain the complete surface');
   }

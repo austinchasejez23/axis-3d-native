@@ -164,6 +164,7 @@ export function applySceneGestures(SceneManager) {
   };
 
   P.onPointerDown = /** @this {import("./SceneManager").SceneManager} */ function (e) {
+    this.flushManipulate();
     // Armed eyedropper: the first finger (or left click) is a color pick, not
     // a paint stroke, selection or camera move. It resolves on release.
     if (this.eyedropper && !this._eyedropDown && this.pointers.size === 0 && (e.pointerType !== 'mouse' || e.button === 0)) {
@@ -669,6 +670,24 @@ export function applySceneGestures(SceneManager) {
     } else if (this.pointers.size === 2 && this.gesture === 'camera_two') {
       this.scheduleCameraTwoFinger();
     } else if (this.pointers.size === 2 && this.gesture === 'manipulate') {
+      // Once the gesture is recognised, apply it once per drawn frame (just
+      // before the render) instead of once per finger event: both fingers
+      // report on every frame, and each application changes the selection's
+      // geometry and display.
+      if (this.gestureData.mode) { this._manipulatePending = true; return; }
+      this._applyManipulate();
+    }
+  };
+
+  // The latest finger positions, applied to the selection now.
+  P.flushManipulate = /** @this {import("./SceneManager").SceneManager} */ function () {
+    if (!this._manipulatePending) return;
+    this._manipulatePending = false;
+    this._applyManipulate();
+  };
+
+  P._applyManipulate = /** @this {import("./SceneManager").SceneManager} */ function () {
+    if (this.pointers.size === 2 && this.gesture === 'manipulate' && this.gestureData) {
       const pts = [...this.pointers.values()];
       const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
       const midX = (pts[0].x + pts[1].x) / 2;
@@ -886,6 +905,7 @@ export function applySceneGestures(SceneManager) {
   };
 
   P.onPointerUp = /** @this {import("./SceneManager").SceneManager} */ function (e) {
+    this.flushManipulate();
     if (this._eyedropDown && e.pointerId === this._eyedropDown.id) {
       const d = this._eyedropDown;
       this._eyedropDown = null;
