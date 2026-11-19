@@ -43,6 +43,7 @@ import PaintToolFlash from '@/components/modeler/PaintToolFlash';
 import MultiSelectLabel from '@/components/modeler/MultiSelectLabel';
 import GraphicsErrorBanner from '@/components/modeler/GraphicsErrorBanner';
 import HintsController from '@/components/modeler/HintsController';
+import { setHudValues, useHud, useHudAction } from '@/lib/hudStore';
 import TriangleCounter from '@/components/modeler/TriangleCounter';
 import ViewGizmo from '@/components/modeler/ViewGizmo';
 import SelectionPatternPanel from '@/components/modeler/SelectionPatternPanel';
@@ -70,6 +71,24 @@ import useKeyboardViewport from '@/hooks/use-keyboard-viewport';
 const BOOLEAN_OPERATION_IDS = new Set(['subtract', 'union', 'intersect']);
 // Tools that start working on the canvas instead of changing geometry at once.
 const INTERACTIVE_TOOL_IDS = new Set(['extrude', 'cut_loop', 'draw_cut', 'draw_face', 'add_vertex']);
+
+// The parts of the screen that show the transform readout's values read them
+// from the HUD store, so a transform updating them every frame re-renders
+// only these, not the whole screen.
+function LivePositionHud(props) {
+  const hud = useHud();
+  return <PositionHud hud={hud} {...props} />;
+}
+
+function LiveHintsController(props) {
+  const action = useHudAction();
+  return <HintsController {...props} action={action} />;
+}
+
+function LiveTransformDrawer(props) {
+  const hud = useHud();
+  return <TransformDrawer {...props} hud={hud} />;
+}
 
 export default function Modeler() {
   const navigate = useNavigate();
@@ -110,7 +129,6 @@ export default function Modeler() {
   const [lightingState, setLightingState] = useState(null);
   // New shapes are created with the segment count last used on a shape.
   const [segments, setSegments] = useState(toolMemory.primitiveSegments);
-  const [hud, setHud] = useState({ action: 'idle', x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, label: 'Pos. (in)', activeAxis: null });
   const [marquee, setMarquee] = useState(null);
   const [draw, setDraw] = useState(null);
   const [drawAxis, setDrawAxis] = useState('y');
@@ -939,7 +957,13 @@ export default function Modeler() {
   }, [closeMaterials, closeSculpt, dismissActiveTool, showToolPrompt]);
 
   const applySegmentValues = (next) => {
-    if (!next.primitiveType && segmentSnapshotRef.current) managerRef.current?.restoreSnapshot(segmentSnapshotRef.current);
+    // Only the edited object changes while the panel is open, so only it is
+    // put back before the new segments are applied (changeSegments then
+    // refreshes the highlights and stats).
+    const segmentSnapshot = segmentSnapshotRef.current;
+    if (!next.primitiveType && segmentSnapshot) {
+      managerRef.current?.restoreSnapshotObject(segmentSnapshot, segmentSnapshot.selection?.meshId, { refresh: false });
+    }
     managerRef.current?.changeSegments(next.x, next.y, next.z, next.primitiveParams);
     if (!isPro && totalTriangles(managerRef.current) > FREE_TRIANGLE_LIMIT) {
       if (segmentSnapshotRef.current) managerRef.current?.restoreSnapshot(segmentSnapshotRef.current);
@@ -1176,7 +1200,7 @@ export default function Modeler() {
     >
       <ThreeViewport
         ref={managerRef}
-        onHudChange={setHud}
+        onHudChange={setHudValues}
         onTriangleCountChange={setSelectionMetric}
         onMarqueeChange={setMarquee}
         onSelectionChange={() => {
@@ -1304,8 +1328,7 @@ export default function Modeler() {
       />
       </div>
       <div ref={hudPillRef} data-hint="transform-values" className="w-fit max-w-full overflow-hidden rounded-xl" style={{ background: 'rgba(9,13,22,0.26)', border: '1px solid rgba(255,255,255,0.07)', visibility: hudCovered ? 'hidden' : undefined }}>
-      <PositionHud
-        hud={hud}
+      <LivePositionHud
         onOpenTransform={(target) => {
           const meshId = managerRef.current?.selection.meshId || selectedMeshId;
           if (!meshId) { showToolPrompt('Select geometry to edit its transform values'); return; }
@@ -1354,14 +1377,13 @@ export default function Modeler() {
       <ViewGizmo managerRef={managerRef} coverRef={gizmoRef} hidden={gizmoCovered} />
       </>)}
 
-      <HintsController
+      <LiveHintsController
         managerRef={managerRef}
         selectionMode={selectionMode}
         modeToolsOpen={modeToolsOpen}
         toolGridOpen={modeToolsOpen || toolsOpen}
         idle={!anyPanelOpen}
         hasSelection={!!selectedMeshId}
-        action={hud.action}
         multiSelect={multiSelect}
         settingsOpen={snapPanelOpen || precisionPanelOpen || freeTransformPanelOpen}
         libraryOpen={libraryOpen}
@@ -1687,11 +1709,10 @@ export default function Modeler() {
       {precisionPanelOpen && precision && <PrecisionPanel intensity={precisionIntensity} onChange={setPrecisionIntensity} onClose={() => setPrecisionPanelOpen(false)} />}
 
       {transformDrawerOpen && (
-        <TransformDrawer
+        <LiveTransformDrawer
           meshId={transformDrawerMeshId}
           managerRef={managerRef}
           focus={transformFocus}
-          hud={hud}
           onRegisterApply={(fn) => { transformApplyRef.current = fn; }}
           onClose={() => { setTransformDrawerOpen(false); setTransformFocus(null); }}
         />

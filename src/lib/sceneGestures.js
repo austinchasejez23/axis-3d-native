@@ -150,9 +150,17 @@ export function applySceneGestures(SceneManager) {
       const worldDelta = this.screenToWorldDrag(stroke.startScreen.x, stroke.startScreen.y, x, y, stroke.hitWorld);
       sculptGrabMove(this, mesh, stroke.grabbed, worldDelta, stroke.intensity, stroke.axes);
     } else {
+      // Only the stroke's own object can be sculpted, so only it is tested:
+      // the nearest hit on it is the same one a ray through the whole scene
+      // finds for it.
       const ndc = this.screenToNDC(x, y);
-      const hits = this.raycastMeshes(ndc.x, ndc.y);
-      const hit = hits.find(h => this.findMeshIdByObject(h.object) === stroke.meshId);
+      const obj = this.threeObjects.get(stroke.meshId);
+      let hit;
+      if (obj?.mesh.visible && !mesh.locked) {
+        this.pointer.set(ndc.x, ndc.y);
+        this.raycaster.setFromCamera(this.pointer, this.camera);
+        hit = this.raycaster.intersectObject(obj.mesh, false)[0];
+      }
       if (hit) {
         const wm = this.getWorldMatrix(mesh);
         const inv = new THREE.Matrix4().copy(wm).invert();

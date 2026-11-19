@@ -28,15 +28,66 @@ const SURFACE_KEYS = ['vertices', 'faces', 'faceRenderTriangles', 'color', 'smoo
   'visibleEdges', 'importedFeatureEdges', 'importedWireframeOnly', 'importedQuadsMerged'];
 const sameSurface = (a, b) => !!a && !!b && SURFACE_KEYS.every((k) => sameValue(a[k], b[k]));
 
+// Plain data compared by value like sameValue, without allocating.
+function sameData(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (!sameData(a[i], b[i])) return false;
+    return true;
+  }
+  if (Object.getPrototypeOf(a) !== Object.prototype || Object.getPrototypeOf(b) !== Object.prototype) return false;
+  let count = 0;
+  for (const k in a) {
+    count++;
+    if (!Object.prototype.hasOwnProperty.call(b, k) || !sameData(a[k], b[k])) return false;
+  }
+  for (const _k in b) count--;
+  return count === 0;
+}
+
+// The live object is still exactly what `copy` (a clone of it) holds, in
+// every field a clone carries. Caches (underscore fields) don't count.
+function sameMeshState(live, copy) {
+  for (const key in copy) {
+    if (key.charCodeAt(0) === 95 && key !== '_paintDense') continue;
+    const a = live[key], b = copy[key];
+    if (a === b) continue;
+    if (a && b && ((a.isVector3 && b.isVector3) || (a.isEuler && b.isEuler))) {
+      if (!a.equals(b)) return false;
+      continue;
+    }
+    if (!sameData(a, b)) return false;
+  }
+  return true;
+}
+
 export function applySceneUndo(SceneManager) {
   const P = SceneManager.prototype;
+
+  // Undo steps share the copy of an object that hasn't changed since its last
+  // copy (copies are never edited), instead of every step copying every
+  // object in the scene.
+  P._meshCopies = /** @this {import("./SceneManager").SceneManager} */ function () {
+    const previous = this._undoMeshCopies || new Map();
+    const next = new Map();
+    const copies = this.meshes.map((mesh) => {
+      const last = previous.get(mesh.id);
+      const copy = last && sameMeshState(mesh, last) ? last : mesh.clone();
+      next.set(mesh.id, copy);
+      return copy;
+    });
+    this._undoMeshCopies = next;
+    return copies;
+  };
 
   // deferMeshes: for selection-only changes. The mesh and light copies are
   // skipped here and made by pushUndoSnapshot, and only if the selection
   // actually changed (selecting never edits a mesh, so the copy is identical).
   P.captureSnapshot = /** @this {import("./SceneManager").SceneManager} */ function (deferMeshes = false) {
     return {
-      meshes: deferMeshes ? null : this.meshes.map((m) => m.clone()),
+      meshes: deferMeshes ? null : this._meshCopies(),
       selection: { ...this.selection, indices: [...this.selection.indices] },
       selectedMeshIds: [...this.selectedMeshIds],
       multiSelect: this.multiSelect,
@@ -48,7 +99,7 @@ export function applySceneUndo(SceneManager) {
 
   P.materializeSnapshot = /** @this {import("./SceneManager").SceneManager} */ function (snapshot) {
     if (snapshot.meshes === null) {
-      snapshot.meshes = this.meshes.map((m) => m.clone());
+      snapshot.meshes = this._meshCopies();
       snapshot.lights = this.serializeSceneLights?.() || [];
     }
     return snapshot;
@@ -82,12 +133,20 @@ export function applySceneUndo(SceneManager) {
   P.restoreSnapshot = /** @this {import("./SceneManager").SceneManager} */ function (snapshot) {
     this.editVersion = (this.editVersion || 0) + 1;
     const before = new Map(this.meshes.map((m) => [m.id, m]));
-    this.meshes = snapshot.meshes.map((m) => m.clone());
+    // An object already exactly as the step has it stays as it is; only the
+    // others are copied back.
+    const copies = new Map();
+    this.meshes = snapshot.meshes.map((copy) => {
+      copies.set(copy.id, copy);
+      const live = before.get(copy.id);
+      return live && sameMeshState(live, copy) ? live : copy.clone();
+    });
+    this._undoMeshCopies = copies;
     for (const mesh of this.meshes) {
       if (!this.threeObjects.has(mesh.id)) this.buildThreeMesh(mesh);
       else {
         const obj = this.threeObjects.get(mesh.id);
-        if (sameSurface(before.get(mesh.id), mesh)) {
+        if (before.get(mesh.id) === mesh || sameSurface(before.get(mesh.id), mesh)) {
           // Same shape: only where it sits and whether it shows can differ.
           obj.mesh.position.copy(mesh.position);
           obj.mesh.rotation.copy(mesh.rotation);
@@ -115,6 +174,41 @@ export function applySceneUndo(SceneManager) {
     }
     this.updateHighlights();
     this.updateStats();
+    this.updateHud();
+    this.cb.onMultiSelectChange?.(this.multiSelect);
+  };
+
+  // Put back only one object as a snapshot has it, plus the selection: for
+  // panels that change nothing but that object (Segments on an edited object
+  // restored and compared the whole scene on every slider step).
+  // `refresh: false` leaves highlights and stats to the caller, which updates
+  // them straight after.
+  P.restoreSnapshotObject = /** @this {import("./SceneManager").SceneManager} */ function (snapshot, meshId, { refresh = true } = {}) {
+    const saved = snapshot.meshes?.find((m) => m.id === meshId);
+    const index = this.meshes.findIndex((m) => m.id === meshId);
+    if (!saved || index < 0 || !this.threeObjects.has(meshId)) { this.restoreSnapshot(snapshot); return; }
+    this.editVersion = (this.editVersion || 0) + 1;
+    const live = this.meshes[index];
+    if (!sameMeshState(live, saved)) {
+      const mesh = saved.clone();
+      this.meshes[index] = mesh;
+      const obj = this.threeObjects.get(meshId);
+      if (sameSurface(live, mesh)) {
+        obj.mesh.position.copy(mesh.position);
+        obj.mesh.rotation.copy(mesh.rotation);
+        obj.mesh.scale.copy(mesh.scale);
+        obj.mesh.visible = mesh.visible;
+      } else this.rebuildThreeMesh(meshId);
+      if ((obj.material.userData.axisPaintTexture || null) !== (mesh.paintLayer?.texture || null)) this.updateObjectMaterial(meshId);
+      this._undoMeshCopies?.set(meshId, saved);
+    }
+    this.selection = snapshot.selection;
+    this.selectedMeshIds = snapshot.selectedMeshIds ? [...snapshot.selectedMeshIds] : (this.selection.meshId ? [this.selection.meshId] : []);
+    this.multiSelect = !!snapshot.multiSelect;
+    if (refresh) {
+      this.updateHighlights();
+      this.updateStats();
+    }
     this.updateHud();
     this.cb.onMultiSelectChange?.(this.multiSelect);
   };

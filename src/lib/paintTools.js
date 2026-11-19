@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createPaintLayer, paintDab, beginPaintStroke, finishPaintStroke } from './paintLayer';
+import { createPaintLayer, paintDab, beginPaintStroke, finishPaintStroke, uploadPaintChanges } from './paintLayer';
 import fillEdges from '@/lib/fillEdges';
 import { viewDistance } from './viewDistance';
 
@@ -107,12 +107,18 @@ export function paintAt(sm, clientX, clientY) {
   if (!hit) return;
   const mesh = sm.getMesh(sm.findMeshIdByObject(hit.object));
   if (!mesh) return;
-  const target = paintTarget(sm, mesh);
+  // The selection and the surface can't change during a stroke, so what it
+  // may paint is worked out once per stroke (and object), not on every dab.
+  const cached = sm._paintTargetCache;
+  const target = cached && sm._paintStroke && cached.stroke === sm._paintStroke && cached.selection === sm.selection &&
+    cached.meshId === mesh.id && cached.faces === mesh.faces ? cached.target : paintTarget(sm, mesh);
+  sm._paintTargetCache = { stroke: sm._paintStroke, selection: sm.selection, meshId: mesh.id, faces: mesh.faces, target };
   if (target.faces && target.faces.size === 0) return;
 
   // Brush size is a fraction of the object's apparent size; it is fixed for
   // the whole stroke (the camera cannot move while one finger paints).
   const stroke = sm._paintStroke || (sm._paintStroke = beginPaintStroke(sm.paintSizeToScreenPixels(tool.size)));
+  if (sm._paintTargetCache && !sm._paintTargetCache.stroke) sm._paintTargetCache.stroke = stroke;
   const layer = ensurePaintLayer(sm, mesh);
 
   // Screen radius → world radius at the touched depth → local radius.
@@ -145,7 +151,14 @@ export function paintAt(sm, clientX, clientY) {
     softness: spray ? 0.5 + 0.5 * softness : softness,
     faces: target.faces,
     influenceEdges: target.edges,
+    brush: true,
   });
+}
+
+// The pixels brush dabs changed since the last frame go to the GPU just
+// before it draws.
+export function uploadPaintStrokes(sm) {
+  for (const mesh of sm.meshes) if (mesh.paintLayer?.dirty) uploadPaintChanges(mesh.paintLayer, sm.renderer);
 }
 
 // Finger/mouse lifted: the pixels the stroke overwrote become part of the undo

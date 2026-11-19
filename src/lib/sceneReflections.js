@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FrameChanges } from './frameChanges';
 
 // Real-time surface reflections via per-object CubeCamera + PMREM.
 //
@@ -172,10 +173,28 @@ export function applySceneReflections(SceneManagerClass) {
       || this.gesture === 'orbit' || this.mouse?.mode === 'orbit' || this.mouse?.mode === 'pan';
     if (navigating) return;
 
-    const sig = this._reflectionSceneSignature();
-    if (sig !== this._lastReflectionSig) this._reflectionDirty = true;
+    // The signature is built from these values; while none of them changed
+    // since the last frame it is the same, so it isn't built again.
+    const inputs = this._reflectionInputs || (this._reflectionInputs = new FrameChanges());
+    inputs.begin();
+    for (const m of this.meshes) {
+      inputs.push(m.id);
+      inputs.push(m.position.x); inputs.push(m.position.y); inputs.push(m.position.z);
+      inputs.push(m.rotation.x); inputs.push(m.rotation.y); inputs.push(m.rotation.z);
+      inputs.push(m.scale.x); inputs.push(m.scale.y); inputs.push(m.scale.z);
+    }
+    inputs.push(this.ambientLight.intensity); inputs.push(this.dirLight.intensity);
+    inputs.push(this.dirLight.position.x); inputs.push(this.dirLight.position.y); inputs.push(this.dirLight.position.z);
+    inputs.push(this.cameraTarget.x); inputs.push(this.cameraTarget.y); inputs.push(this.cameraTarget.z);
+    const bg = this.scene.background;
+    inputs.push(bg);
+    if (bg?.isColor) { inputs.push(bg.r); inputs.push(bg.g); inputs.push(bg.b); }
+    if (inputs.changed()) {
+      const sig = this._reflectionSceneSignature();
+      if (sig !== this._lastReflectionSig) this._reflectionDirty = true;
+      this._lastReflectionSig = sig;
+    }
     if (!this._reflectionDirty) return;
-    this._lastReflectionSig = sig;
     this._reflectionDirty = false;
 
     const hlVisible = this.highlightGroup.visible;
@@ -199,7 +218,15 @@ export function applySceneReflections(SceneManagerClass) {
       // whatever it was: a hidden object (Display selected) must stay hidden.
       const wasVisible = obj.mesh.visible;
       obj.mesh.visible = false;
+      // The capture draws shadow maps for the scene without this object, as
+      // every render did when shadow maps were redrawn on every frame; the
+      // next frame then draws them again with it.
+      const shadowMap = this.renderer.shadowMap;
+      const autoUpdate = shadowMap.autoUpdate;
+      shadowMap.autoUpdate = true;
       rig.cam.update(this.renderer, this.scene);
+      shadowMap.autoUpdate = autoUpdate;
+      if (shadowMap.enabled) shadowMap.needsUpdate = true;
       obj.mesh.visible = wasVisible;
       // PMREM-process the cube so roughness selects a blurred mip.
       // Keep the render target itself so its framebuffer/texture resources can

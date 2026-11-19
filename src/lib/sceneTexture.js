@@ -273,10 +273,10 @@ export function applySceneTexture(SceneManagerClass) {
     const mesh = this.getMesh(meshId);
     if (!mesh) return;
     mesh.textureTransform = { ...(mesh.textureTransform || { rotation: 0 }), scale };
-    if (mesh.mapTexture) {
-      mesh.mapTexture.repeat.set(scale, scale);
-      mesh.mapTexture.needsUpdate = true;
-    }
+    // Scale and rotation reach the shader through the texture's transform,
+    // which three.js refreshes every frame: the image itself doesn't need
+    // sending to the GPU again for every slider step.
+    if (mesh.mapTexture) mesh.mapTexture.repeat.set(scale, scale);
   };
 
   SceneManagerClass.prototype.setTextureRotation = function (meshId, rad) {
@@ -286,7 +286,6 @@ export function applySceneTexture(SceneManagerClass) {
     if (mesh.mapTexture) {
       mesh.mapTexture.center.set(0.5, 0.5);
       mesh.mapTexture.rotation = rad;
-      mesh.mapTexture.needsUpdate = true;
     }
   };
 

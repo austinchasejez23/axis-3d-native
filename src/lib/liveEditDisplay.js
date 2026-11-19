@@ -79,47 +79,68 @@ export function moveLiveWireframe(obj, mesh) {
   return moveFatSegmentPositions(obj.wireframe, live.positions);
 }
 
-// --- Face selection highlight ---------------------------------------------
+// --- Selection highlight -------------------------------------------------
 
-export function rememberLiveFaceHighlight(manager, mesh, fill, fillIds, border, borderIds) {
-  const fillSlots = fill ? vertexSlots(mesh, fillIds) : null;
-  const borderSlots = border ? vertexSlots(mesh, borderIds) : null;
-  if ((fill && !fillSlots) || (border && !borderSlots)) { manager._liveFaceHighlight = null; return; }
-  manager._liveFaceHighlight = {
-    selection: manager.selection,
-    indices: manager.selection.indices,
-    count: manager.selection.indices.length,
+// Remember which vertex every point of the face, edge or vertex highlight
+// belongs to. `parts` are the drawn objects: { object, ids, kind } where kind
+// is 'fill' (a mesh's position attribute), 'lines' (fat segments) or 'dots'
+// (vertex dots); 'localLines' are fat segments in the object's own space.
+export function rememberLiveHighlight(manager, mesh, parts) {
+  const remembered = [];
+  for (const part of parts) {
+    if (!part.object) continue;
+    const slots = vertexSlots(mesh, part.ids);
+    if (!slots) { manager._liveHighlight = null; return; }
+    remembered.push({
+      ...part, slots,
+      scratch: part.kind === 'lines' || part.kind === 'localLines' ? new Float32Array(part.ids.length * 3) : null,
+    });
+  }
+  const sel = manager.selection;
+  manager._liveHighlight = {
+    selection: sel,
+    type: sel.type,
+    indices: sel.indices,
+    count: sel.indices.length,
     meshId: mesh.id,
     state: edgeState(mesh),
-    fill, fillIds, fillSlots,
-    border, borderIds, borderSlots,
-    borderPositions: border ? new Float32Array(borderIds.length * 3) : null,
+    parts: remembered,
   };
 }
 
-// Move the highlighted faces and their outline with the vertices. False when
-// the selection or anything besides positions changed.
-export function moveLiveFaceHighlight(manager) {
-  const live = manager._liveFaceHighlight;
+// Move the highlight with the vertices. False when the selection or anything
+// besides positions changed; then it is built again.
+export function moveLiveHighlight(manager) {
+  const live = manager._liveHighlight;
   const sel = manager.selection;
-  if (!live || sel !== live.selection || sel.type !== 'face' || sel.indices !== live.indices ||
+  if (!live || sel !== live.selection || sel.type !== live.type || sel.indices !== live.indices ||
       sel.indices.length !== live.count || sel.meshId !== live.meshId) return false;
   const mesh = manager.getMesh(sel.meshId);
   if (!mesh || live.state !== edgeState(mesh)) return false;
   const group = manager.highlightGroup;
-  if ((live.fill && live.fill.parent !== group) || (live.border && live.border.parent !== group)) return false;
-  if (live.fill && !slotsCurrent(mesh, live.fillIds, live.fillSlots)) return false;
-  if (live.border && !slotsCurrent(mesh, live.borderIds, live.borderSlots)) return false;
-  const wm = manager.getWorldMatrix(mesh);
-  if (live.fill) {
-    const attr = live.fill.geometry.getAttribute('position');
-    writePositions(attr.array, mesh, live.fillSlots, wm);
-    attr.needsUpdate = true;
-    live.fill.geometry.computeBoundingSphere();
+  for (const part of live.parts) {
+    if (part.object.parent !== group || !slotsCurrent(mesh, part.ids, part.slots)) return false;
   }
-  if (live.border) {
-    writePositions(live.borderPositions, mesh, live.borderSlots, wm);
-    if (!moveFatSegmentPositions(live.border, live.borderPositions)) return false;
+  const wm = manager.getWorldMatrix(mesh);
+  for (const part of live.parts) {
+    if (part.kind === 'fill') {
+      const attr = part.object.geometry.getAttribute('position');
+      writePositions(attr.array, mesh, part.slots, wm);
+      attr.needsUpdate = true;
+      part.object.geometry.computeBoundingSphere();
+    } else if (part.kind === 'lines' || part.kind === 'localLines') {
+      // Object outlines are drawn in the object's own space.
+      writePositions(part.scratch, mesh, part.slots, part.kind === 'lines' ? wm : null);
+      if (!moveFatSegmentPositions(part.object, part.scratch)) return false;
+      if (part.kind === 'localLines') {
+        part.object.position.copy(mesh.position);
+        part.object.rotation.copy(mesh.rotation);
+        part.object.scale.copy(mesh.scale);
+      }
+    } else if (part.kind === 'dots') {
+      writePositions(part.object.userData.axisDotCenters, mesh, part.slots, wm);
+      part.object.userData.axisDotsMoved = true;
+    }
   }
   return true;
 }

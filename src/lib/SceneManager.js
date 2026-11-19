@@ -9,7 +9,7 @@ import { theme } from './theme';
 import { createMaterial as buildMaterial, applyShadows as applyShadowsFn, applyShine as applyShineFn, applyWireframe as applyWireframeFn, updateObjectMaterial as updateObjectMaterialFn } from './materials';
 import { subdivideMesh as subdivideMeshTool } from './subdivideTool';
 import { segmentEditedMesh } from './axisSegments';
-import { fillSelection as fillPaintSelection, paintAt as applyPaintAt, endPaintStroke as finishPaintStroke } from './paintTools';
+import { fillSelection as fillPaintSelection, paintAt as applyPaintAt, endPaintStroke as finishPaintStroke, uploadPaintStrokes } from './paintTools';
 import { applyPaintPatches, samplePaintLayer } from './paintLayer';
 import { clonePaintLayer, clearPaintLayer } from './paintLayer';
 import { sculptSmooth, sculptDisplace } from './sculptTools';
@@ -33,7 +33,10 @@ import { mergeVerticesWithin, weldCoincidentVertices, edgeKey } from './meshTopo
 import { notifyUnavailable } from './unavailable';
 import { cleanupCommittedTopology, dissolveSharedBoundary, adjacentFacesForBoundary, removeFaceByIndex, resolveLegacyDeletedBorders } from './meshTopologyInvariants';
 import { updateGeometryInPlace } from './meshBufferUpdate';
-import { rememberLiveWireframe, moveLiveWireframe, rememberLiveFaceHighlight, moveLiveFaceHighlight } from './liveEditDisplay';
+import { rememberLiveWireframe, moveLiveWireframe, rememberLiveHighlight, moveLiveHighlight } from './liveEditDisplay';
+import { makeVertexDots, sizeVertexDots } from './vertexDots';
+import { coincidentVertexIds } from './coincidentVertices';
+import { updateShadowMapNeeds } from './shadowMapUpdates';
 import { syncObjectHighlightTransforms, refreshTransformHighlights } from './highlightFollow';
 import { intersectSelection, subtractSelection, unionSelection } from './booleanTools';
 import { snapAngleDelta, uniformScaleSnapFactor, axisScaleSnapFactor } from './snapping';
@@ -240,6 +243,8 @@ export class SceneManager {
       requestAnimationFrame(() => {
         this.handleResize();
         this.renderer.resetState();
+        updateShadowMapNeeds(this);
+        if (this.renderer.shadowMap.enabled) this.renderer.shadowMap.needsUpdate = true;
         this.renderer.render(this.scene, this.camera);
       });
     };
@@ -921,7 +926,7 @@ export class SceneManager {
   // vertices along the hit face's local-space normal (pull = outward, push = inward).
   applySculptBrush(mesh, stroke, hit) {
     if (stroke.tool === 'smooth') {
-      sculptSmooth(this, mesh, stroke.localCenter, stroke.size, stroke.intensity, stroke.axes);
+      sculptSmooth(this, mesh, stroke.localCenter, stroke.size, stroke.intensity, stroke.axes, stroke);
     } else if (stroke.tool === 'push' || stroke.tool === 'pull') {
       const n = (hit && hit.face && hit.face.normal) ? hit.face.normal.clone().normalize() : new THREE.Vector3(0, 1, 0);
       sculptDisplace(this, mesh, stroke.localCenter, n, stroke.size, stroke.intensity, stroke.tool === 'pull' ? 1 : -1, stroke.axes);
@@ -1305,7 +1310,7 @@ export class SceneManager {
     // of every mesh that was updated in place, so nothing can drift.
     if (this._liveEdit) {
       this._liveEdit = false;
-      this._liveFaceHighlight = null;
+      this._liveHighlight = null;
       // Classify the edges once more where the gesture left the vertices,
       // as locking on every frame used to.
       for (const id of this._transformLocked?.keys() || []) this.getMesh(id)?.lockTriangulationDiagonals();
@@ -1355,11 +1360,12 @@ export class SceneManager {
     // a heavy gesture; object transforms reuse the existing local outline.
     if (this._heavyEdit && !force) { this._highlightsStale = true; return; }
     this._highlightReference = this._sceneFitDistance();
-    // A gesture moving the selected faces: the same faces stay highlighted,
-    // so move the existing highlight with them rather than rebuilding it.
+    // A gesture moving the selected faces, edges or vertices: the same ones
+    // stay highlighted, so move the highlight with them rather than
+    // rebuilding it.
     if (this._liveEdit && !force && !(this.highlightsSuppressed && !this._revealing) &&
-        moveLiveFaceHighlight(this)) return;
-    this._liveFaceHighlight = null;
+        moveLiveHighlight(this)) return;
+    this._liveHighlight = null;
     while (this.highlightGroup.children.length > 0) {
       const child = this.highlightGroup.children[0];
       this.highlightGroup.remove(child);
@@ -1409,40 +1415,41 @@ export class SceneManager {
     const wm = this.getWorldMatrix(mesh);
 
     if (sel.type === 'object') {
-      const wireGeo = mesh.toEdgesGeometry();
-      const wirePositions = Array.from(wireGeo.getAttribute('position').array);
-      const wire = this._highlightLines(wirePositions, 2);
-      wireGeo.dispose();
+      // The same segments toEdgesGeometry draws, with their vertex ids kept so
+      // a sculpt stroke can move the outline instead of rebuilding it.
+      const ids = mesh.edgeSegmentIds();
+      const local = new Float32Array(ids.length * 3);
+      for (let i = 0; i < ids.length; i++) {
+        const v = mesh.getVertex(ids[i]);
+        local[i * 3] = v.x; local[i * 3 + 1] = v.y; local[i * 3 + 2] = v.z;
+      }
+      const wire = this._highlightLines(Array.from(local), 2);
       wire.position.copy(mesh.position);
       wire.rotation.copy(mesh.rotation);
       wire.scale.copy(mesh.scale);
       wire.renderOrder = 999;
       wire.userData.axisFollowMeshId = mesh.id;
       this.highlightGroup.add(wire);
+      if (this._liveEdit) rememberLiveHighlight(this, mesh, [{ object: wire, ids, kind: 'localLines' }]);
     } else if (sel.type === 'vertex') {
+      const centers = [];
+      const ids = [];
       for (const idx of sel.indices) {
         const v = mesh.vertices[idx];
         if (!v) continue;
         const wp = new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(wm);
-        // Unit sphere scaled per frame by its distance to the camera, so a
-        // selected vertex is always the SAME small dot on screen — a fixed
-        // world radius looked tiny when zoomed out and huge when zoomed in.
-        const geo = new THREE.SphereGeometry(1, 10, 10);
-        const mat = new THREE.MeshBasicMaterial({ color: hl, depthTest: false, toneMapped: false });
-        const sph = new THREE.Mesh(geo, mat);
-        sph.position.copy(wp);
-        sph.renderOrder = 999;
-        sph.onBeforeRender = (renderer, scene, camera) => {
-          const d = viewDistance(camera, sph.position);
-          const s = Math.max(1e-4, d * 0.0055);
-          sph.scale.set(s, s, s);
-          sph.updateMatrixWorld();
-        };
-        this.highlightGroup.add(sph);
+        centers.push(wp.x, wp.y, wp.z);
+        ids.push(v.id);
+      }
+      if (centers.length) {
+        const dots = makeVertexDots(Float64Array.from(centers), hl);
+        this.highlightGroup.add(dots);
+        if (this._liveEdit) rememberLiveHighlight(this, mesh, [{ object: dots, ids, kind: 'dots' }]);
       }
     } else if (sel.type === 'edge') {
       const edges = mesh.getEdges();
       const positions = [];
+      const ids = [];
       for (const idx of sel.indices) {
         const e = edges[idx];
         if (!e) continue;
@@ -1451,11 +1458,13 @@ export class SceneManager {
         const wa = new THREE.Vector3(va.x, va.y, va.z).applyMatrix4(wm);
         const wb = new THREE.Vector3(vb.x, vb.y, vb.z).applyMatrix4(wm);
         positions.push(wa.x, wa.y, wa.z, wb.x, wb.y, wb.z);
+        ids.push(e.v1, e.v2);
       }
       if (positions.length > 0) {
         const line = this._highlightLines(positions, 2);
         line.renderOrder = 999;
         this.highlightGroup.add(line);
+        if (this._liveEdit) rememberLiveHighlight(this, mesh, [{ object: line, ids, kind: 'lines' }]);
       }
     } else if (sel.type === 'face') {
       // Imported meshes frequently store one visible surface as two or more
@@ -1534,7 +1543,12 @@ export class SceneManager {
         border.renderOrder = 999;
         this.highlightGroup.add(border);
       }
-      if (this._liveEdit && (fill || border)) rememberLiveFaceHighlight(this, mesh, fill, fillIds, border, borderIds);
+      if (this._liveEdit && (fill || border)) {
+        rememberLiveHighlight(this, mesh, [
+          { object: fill, ids: fillIds, kind: 'fill' },
+          { object: border, ids: borderIds, kind: 'lines' },
+        ]);
+      }
     }
 
     this.cb.onSelectionChange?.(true);
@@ -1683,7 +1697,9 @@ export class SceneManager {
       mesh.translateVertexIds(vids, this.worldToLocalDelta(mesh, worldDelta));
       const correction = this.snapCorrection(this.getSelectionCenter());
       if (correction.lengthSq() > 0) mesh.translateVertexIds(vids, this.worldToLocalDelta(mesh, correction));
-      mesh.invalidateCache();
+      // Only positions changed: the edge list and the edge/face/vertex maps
+      // depend on the faces alone, so they stay valid (working them out again
+      // every frame made edge transforms rebuild the whole edge list).
       this.rebuildThreeMesh(mesh.id);
     }
     this.refreshInteractionFeedback();
@@ -1737,7 +1753,9 @@ export class SceneManager {
         const localOffset = this.worldToLocalDelta(mesh, newWorld.clone().sub(vWorld));
         v.x += localOffset.x; v.y += localOffset.y; v.z += localOffset.z;
       }
-      mesh.invalidateCache();
+      // Only positions changed: the edge list and the edge/face/vertex maps
+      // depend on the faces alone, so they stay valid (working them out again
+      // every frame made edge transforms rebuild the whole edge list).
       this.rebuildThreeMesh(mesh.id);
     }
     this.applyScaleSnap(null);
@@ -1822,7 +1840,9 @@ export class SceneManager {
         const delta = this.worldToLocalDelta(mesh, newWorld.clone().sub(vWorld));
         v.x += delta.x; v.y += delta.y; v.z += delta.z;
       }
-      mesh.invalidateCache();
+      // Only positions changed: the edge list and the edge/face/vertex maps
+      // depend on the faces alone, so they stay valid (working them out again
+      // every frame made edge transforms rebuild the whole edge list).
       this.rebuildThreeMesh(mesh.id);
     }
     refreshTransformHighlights(this);
@@ -1855,7 +1875,9 @@ export class SceneManager {
         const delta = this.worldToLocalDelta(mesh, newWorld.clone().sub(vWorld));
         v.x += delta.x; v.y += delta.y; v.z += delta.z;
       }
-      mesh.invalidateCache();
+      // Only positions changed: the edge list and the edge/face/vertex maps
+      // depend on the faces alone, so they stay valid (working them out again
+      // every frame made edge transforms rebuild the whole edge list).
       this.rebuildThreeMesh(mesh.id);
     }
     this.applyScaleSnap(axis);
@@ -1891,12 +1913,7 @@ export class SceneManager {
         .map(v => ({ x: v.x, y: v.y, z: v.z }));
       const vids = new Set(selectedIds);
       if (sel.type === 'face' && positions.length) {
-        const epsilon = 1e-7;
-        for (const v of mesh.vertices) {
-          if (positions.some(p => Math.abs(v.x - p.x) <= epsilon &&
-            Math.abs(v.y - p.y) <= epsilon &&
-            Math.abs(v.z - p.z) <= epsilon)) vids.add(v.id);
-        }
+        for (const id of coincidentVertexIds(mesh, positions, 1e-7)) vids.add(id);
       }
       for (const vid of vids) {
         const v = mesh.getVertex(vid);
@@ -1907,7 +1924,9 @@ export class SceneManager {
         const delta = this.worldToLocalDelta(mesh, newWorld.clone().sub(vWorld));
         v.x += delta.x; v.y += delta.y; v.z += delta.z;
       }
-      mesh.invalidateCache();
+      // Only positions changed: the edge list and the edge/face/vertex maps
+      // depend on the faces alone, so they stay valid (working them out again
+      // every frame made edge transforms rebuild the whole edge list).
       this.rebuildThreeMesh(mesh.id);
     }
     refreshTransformHighlights(this);
@@ -2169,9 +2188,10 @@ export class SceneManager {
     if (old) {
       this.scene.remove(old.mesh);
       old.mesh.geometry.dispose();
-      old.material.dispose();
+      // Freed after the next frame, so the rebuilt object's material reuses
+      // its shader program instead of compiling it again on every step.
+      (this._retiredMaterials || (this._retiredMaterials = [])).push(old.material, old.wireframe.material);
       old.wireframe.geometry.dispose();
-      old.wireframe.material.dispose();
       this.threeObjects.delete(newMesh.id);
     }
     newMesh.invalidateCache();
@@ -2630,10 +2650,17 @@ export class SceneManager {
     const wm = this.getWorldMatrix(mesh);
     const minBounds = new THREE.Vector3(Infinity, Infinity, Infinity);
     const maxBounds = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+    // Runs every frame of a transform: the same math as applyMatrix4 and
+    // min/max, without a new vector per vertex.
+    const e = wm.elements;
     for (const vertex of mesh.vertices) {
-      const world = new THREE.Vector3(vertex.x, vertex.y, vertex.z).applyMatrix4(wm);
-      minBounds.min(world);
-      maxBounds.max(world);
+      const vx = vertex.x, vy = vertex.y, vz = vertex.z;
+      const w = 1 / (e[3] * vx + e[7] * vy + e[11] * vz + e[15]);
+      const x = (e[0] * vx + e[4] * vy + e[8] * vz + e[12]) * w;
+      const y = (e[1] * vx + e[5] * vy + e[9] * vz + e[13]) * w;
+      const z = (e[2] * vx + e[6] * vy + e[10] * vz + e[14]) * w;
+      minBounds.x = Math.min(minBounds.x, x); minBounds.y = Math.min(minBounds.y, y); minBounds.z = Math.min(minBounds.z, z);
+      maxBounds.x = Math.max(maxBounds.x, x); maxBounds.y = Math.max(maxBounds.y, y); maxBounds.z = Math.max(maxBounds.z, z);
     }
     const rawSize = mesh.vertices.length
       ? { sx: maxBounds.x - minBounds.x, sy: maxBounds.y - minBounds.y, sz: maxBounds.z - minBounds.z }
@@ -2699,6 +2726,9 @@ export class SceneManager {
       }
       syncObjectHighlightTransforms(this);
       this._fitOrthoDepth();
+      sizeVertexDots(this.highlightGroup, this.camera);
+      updateShadowMapNeeds(this);
+      uploadPaintStrokes(this);
       this.renderer.render(this.scene, this.camera);
       this._disposeRetiredMaterials();
     } catch (err) {
@@ -2787,6 +2817,9 @@ export class SceneManager {
     /** @type {Array<[THREE.Group, boolean]>} */
     const arrows = [...(this.objectAxisArrows?.values() || [])].map((group) => [group, group.visible]);
     for (const [group] of arrows) group.visible = false;
+    // Called between frames too: bring the shadow maps and paint up to date first.
+    updateShadowMapNeeds(this);
+    uploadPaintStrokes(this);
     this.renderer.render(this.scene, this.camera);
     const src = this.renderer.domElement;
     const canvas = document.createElement('canvas');

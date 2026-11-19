@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { theme } from './theme';
+import { FrameChanges } from './frameChanges';
 
 // Direction default lighting's key light shines in: from above and to the
 // left, so shadows fall out to the side where they can be seen.
@@ -13,8 +14,9 @@ export default function updateSceneShadowBounds(manager) {
   if (defaultMode && theme.shadowsEnabled && manager.dirLight) {
     lights = [{ id: 'default-key', type: 'directional', range: 20, object: manager.dirLight, target: manager.dirLight.target, direction: DEFAULT_KEY_DIRECTION }];
   }
+  const changes = manager._shadowBoundsChanges || (manager._shadowBoundsChanges = new FrameChanges());
   if (!lights.length) {
-    manager._shadowBoundsSignature = null;
+    changes.reset();
     return;
   }
 
@@ -22,31 +24,38 @@ export default function updateSceneShadowBounds(manager) {
   // its bounding box. Skip that work on idle frames when neither geometry,
   // transforms, visibility nor shadow-light settings changed.
   if (!manager._liveEdit) {
-    const meshSignature = [...manager.threeObjects.entries()].map(([id, entry]) => {
+    // The same values the old signature string held, compared directly.
+    changes.begin();
+    for (const [id, entry] of manager.threeObjects) {
       const mesh = entry.mesh;
       const p = mesh.position, r = mesh.rotation, s = mesh.scale;
-      return `${id}:${mesh.visible ? 1 : 0}:${mesh.geometry.uuid}:${p.x},${p.y},${p.z}:${r.x},${r.y},${r.z}:${s.x},${s.y},${s.z}`;
-    }).join('|');
-    const lightSignature = lights.map((record) =>
-      `${record.id}:${record.type}:${record.range}:${record.direction ? 'key' : record.rotation.join(',')}:${record.type === 'spot' ? record.position.join(',') : ''}:${record.object.shadow.mapSize.x}x${record.object.shadow.mapSize.y}`
-    ).join('|');
-    const signature = `${meshSignature}#${lightSignature}`;
-    if (signature === manager._shadowBoundsSignature) return;
-    manager._shadowBoundsSignature = signature;
+      changes.push(id); changes.push(mesh.visible); changes.push(mesh.geometry.uuid);
+      changes.push(p.x); changes.push(p.y); changes.push(p.z);
+      changes.push(r.x); changes.push(r.y); changes.push(r.z);
+      changes.push(s.x); changes.push(s.y); changes.push(s.z);
+    }
+    for (const record of lights) {
+      changes.push(record.id); changes.push(record.type); changes.push(record.range);
+      if (record.direction) changes.push('key'); else changes.pushArray(record.rotation);
+      if (record.type === 'spot') changes.pushArray(record.position); else changes.push('');
+      changes.push(record.object.shadow.mapSize.x); changes.push(record.object.shadow.mapSize.y);
+    }
+    if (!changes.changed()) return;
   } else {
     // Live vertex deformation reuses the same BufferGeometry, so its UUID
     // cannot represent the changing bounds. Refit every live-edit frame and
     // force one final cached calculation after the edit ends.
-    manager._shadowBoundsSignature = null;
+    changes.reset();
   }
 
   const bounds = new THREE.Box3();
   let smallest = Infinity;
-  for (const { mesh } of manager.threeObjects.values()) {
+  for (const [id, { mesh }] of manager.threeObjects) {
     if (!mesh.visible) continue;
     mesh.updateMatrixWorld(true);
-    // Live vertex edits can invalidate the cached geometry bounds.
-    if (!mesh.geometry.boundingBox || manager._liveEdit) mesh.geometry.computeBoundingBox();
+    // Live vertex edits change the bounds of the meshes being edited; the
+    // rest keep theirs.
+    if (!mesh.geometry.boundingBox || (manager._liveEdit && manager._liveEditIds?.has(id))) mesh.geometry.computeBoundingBox();
     const box = mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld);
     if (box.isEmpty()) continue;
     bounds.union(box);

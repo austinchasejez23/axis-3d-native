@@ -381,6 +381,18 @@ declare module './SceneManager.js' {
     restoreSceneLights(saved: any, selectedId: any): any;
     /** Implemented by sceneUndo.js */
     restoreSnapshot(snapshot: SceneSnapshot): void;
+    /** Implemented by sceneUndo.js */
+    restoreSnapshotObject(snapshot: SceneSnapshot, meshId: any, options?: { refresh?: boolean }): void;
+    /** Implemented by sceneUndo.js */
+    _meshCopies(): any[];
+    /** Copies of each object kept by undo steps, by id (sceneUndo.js). */
+    _undoMeshCopies?: Map<any, any>;
+    /** Implemented by sceneGestures.js */
+    flushManipulate(): void;
+    /** Implemented by sceneGestures.js */
+    _applyManipulate(): void;
+    /** A two-finger transform waiting for the next frame (sceneGestures.js). */
+    _manipulatePending?: boolean;
     /** Implemented by sceneLights.js */
     rotateSelectedSceneLight(angle: number): any;
     /** Implemented by sceneGestures.js */

@@ -287,7 +287,9 @@ export function applyShine(sm) {
   for (const [id, obj] of sm.threeObjects) {
     const mesh = sm.getMesh(id);
     if (!mesh) continue;
-    obj.material.dispose();
+    // Freed after the next frame, so materials of the same kind reuse its
+    // shader program instead of compiling it again.
+    (sm._retiredMaterials || (sm._retiredMaterials = [])).push(obj.material);
     obj.material = createMaterial(mesh, sm.viewportDisplayMode);
     obj.mesh.material = obj.material;
     // Imported geometry keeps its neutral visible surface with or without wires.
@@ -311,7 +313,10 @@ export function updateObjectMaterial(sm, meshId) {
   const obj = sm.threeObjects.get(meshId);
   const mesh = sm.getMesh(meshId);
   if (!obj || !mesh) return;
-  obj.material.dispose();
+  // Freed after the next frame has drawn the new material: disposing it first
+  // let its shader program go, so a slider step that made an identical kind
+  // of material compiled the same shader again.
+  if (obj.material) (sm._retiredMaterials || (sm._retiredMaterials = [])).push(obj.material);
   obj.material = createMaterial(mesh);
   obj.mesh.material = obj.material;
   // Changing a material must not hide the imported mesh surface.

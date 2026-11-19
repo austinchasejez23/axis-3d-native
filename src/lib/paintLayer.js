@@ -196,7 +196,9 @@ export function applyPaintPatches(sm, patches) {
 // center/normal are in the mesh's LOCAL space, radius in local units.
 // softness 0 = hard disc, 1 = fades from the very center. faces = Set of face
 // indices allowed to receive paint (null = every face).
-export function paintDab(layer, mesh, { meshId, stroke, center, normal, radius, color, opacity, softness, faces, influenceEdges }) {
+// `brush`: a dab of a brush or spray stroke, many of which follow each other;
+// its changed pixels are sent with uploadPaintChanges.
+export function paintDab(layer, mesh, { meshId, stroke, center, normal, radius, color, opacity, softness, faces, influenceEdges, brush = false }) {
   const { size, data, stamp, bounds } = layer;
   // One stamp id per dab: a texel on an edge shared by two triangles is only
   // blended once, so shared edges never show up as darker seam lines.
@@ -231,10 +233,20 @@ export function paintDab(layer, mesh, { meshId, stroke, center, normal, radius, 
   // selected.
   const faceIndices = faces ? Array.from(faces) : null;
   const faceCount = faceIndices ? faceIndices.length : mesh.faces.length;
+  // During a stroke the surface can't change, so every face's center and
+  // reach are worked out once for the stroke instead of on every dab.
+  const reach = brush && stroke ? strokeFaceReach(stroke, meshId, mesh) : null;
+  // Pixels this dab wrote, per triangle, so only those reach the GPU.
+  const dirty = brush && stroke ? dirtyRects(layer) : null;
   for (let facePos = 0; facePos < faceCount; facePos++) {
     const fi = faceIndices ? faceIndices[facePos] : facePos;
     const face = mesh.faces[fi];
     if (face.length < 3) continue;
+    if (reach) {
+      if (!reach.ok[fi]) continue;
+      const cx = reach.c[fi * 3], cy = reach.c[fi * 3 + 1], cz = reach.c[fi * 3 + 2];
+      if (Math.hypot(center.x - cx, center.y - cy, center.z - cz) > radius + reach.r[fi]) continue;
+    }
     let bad = false;
     const verts = new Array(face.length);
     let cx = 0, cy = 0, cz = 0;
@@ -272,6 +284,7 @@ export function paintDab(layer, mesh, { meshId, stroke, center, normal, radius, 
       const det = (bx - ax) * (qy - ay) - (qx - ax) * (by - ay);
       if (Math.abs(det) < 1e-9) continue;
       if (stroke) saveBlocks(stroke, meshId, layer, minX, minY, maxX, maxY);
+      let triChanged = false;
       for (let py = minY; py <= maxY; py++) {
         const y = py + 0.5;
         for (let px = minX; px <= maxX; px++) {
@@ -308,12 +321,98 @@ export function paintDab(layer, mesh, { meshId, stroke, center, normal, radius, 
           data[i + 2] = data[i + 2] * keep + cb * s + 0.5;
           data[i + 3] = data[i + 3] * keep + 255 * s + 0.5;
           changed = true;
+          triChanged = true;
+        }
+      }
+      if (triChanged && dirty) {
+        // One area per tile: everything changed in a tile is sent together.
+        const o = t.tile * 4;
+        if (dirty[o] > dirty[o + 2]) { dirty[o] = minX; dirty[o + 1] = minY; dirty[o + 2] = maxX; dirty[o + 3] = maxY; }
+        else {
+          dirty[o] = Math.min(dirty[o], minX); dirty[o + 1] = Math.min(dirty[o + 1], minY);
+          dirty[o + 2] = Math.max(dirty[o + 2], maxX); dirty[o + 3] = Math.max(dirty[o + 3], maxY);
         }
       }
     }
   }
-  if (changed) markChanged(layer);
+  if (changed) {
+    if (dirty) { layer.painted = true; layer.version++; }
+    else markChanged(layer);
+  }
   return changed;
+}
+
+// Each face's center and the farthest of its corners from it, for a stroke.
+function strokeFaceReach(stroke, meshId, mesh) {
+  if (!stroke.faceReach) stroke.faceReach = new Map();
+  let reach = stroke.faceReach.get(meshId);
+  if (reach && reach.faces === mesh.faces && reach.count === mesh.faces.length) return reach;
+  const count = mesh.faces.length;
+  reach = { faces: mesh.faces, count, c: new Float64Array(count * 3), r: new Float64Array(count), ok: new Uint8Array(count) };
+  for (let fi = 0; fi < count; fi++) {
+    const face = mesh.faces[fi];
+    if (face.length < 3) continue;
+    let bad = false;
+    let cx = 0, cy = 0, cz = 0;
+    for (let i = 0; i < face.length; i++) {
+      const v = mesh.getVertex(face[i]);
+      if (!v) { bad = true; break; }
+      cx += v.x; cy += v.y; cz += v.z;
+    }
+    if (bad) continue;
+    cx /= face.length; cy /= face.length; cz /= face.length;
+    let fr = 0;
+    for (let i = 0; i < face.length; i++) {
+      const v = mesh.getVertex(face[i]);
+      fr = Math.max(fr, Math.hypot(v.x - cx, v.y - cy, v.z - cz));
+    }
+    reach.c[fi * 3] = cx; reach.c[fi * 3 + 1] = cy; reach.c[fi * 3 + 2] = cz;
+    reach.r[fi] = fr;
+    reach.ok[fi] = 1;
+  }
+  stroke.faceReach.set(meshId, reach);
+  return reach;
+}
+
+// The changed area of each of the six tiles (x0, y0, x1, y1; empty while
+// x0 > x1), kept until the next upload.
+function dirtyRects(layer) {
+  if (!layer.dirtyRects) {
+    layer.dirtyRects = new Int32Array(COLS * ROWS * 4);
+    for (let i = 0; i < COLS * ROWS; i++) { layer.dirtyRects[i * 4] = 1; layer.dirtyRects[i * 4 + 2] = 0; }
+  }
+  layer.dirty = true;
+  return layer.dirtyRects;
+}
+
+// Send the pixels brush dabs changed since the last upload to the GPU: only
+// those areas (one per tile), not the whole 2048×2048 atlas. Runs once per
+// frame. Without a renderer the whole texture is re-sent.
+export function uploadPaintChanges(layer, renderer) {
+  if (!layer?.dirty) return;
+  layer.dirty = false;
+  const rects = layer.dirtyRects;
+  const areas = [];
+  for (let i = 0; i < COLS * ROWS; i++) {
+    const o = i * 4;
+    if (rects[o] <= rects[o + 2]) areas.push(rects[o], rects[o + 1], rects[o + 2], rects[o + 3]);
+    rects[o] = 1; rects[o + 2] = 0;
+  }
+  if (!areas.length) return;
+  if (!renderer?.copyTextureToTexture) { layer.texture.needsUpdate = true; return; }
+  // A texture object over the same pixels that is never sent to the GPU
+  // itself: copying from it uploads straight from the layer's pixel array.
+  if (!layer.uploadView || layer.uploadView.image.data !== layer.data) {
+    layer.uploadView = new THREE.DataTexture(layer.data, layer.size, layer.size, THREE.RGBAFormat, THREE.UnsignedByteType);
+  }
+  const region = new THREE.Box2();
+  const at = new THREE.Vector2();
+  for (let i = 0; i < areas.length; i += 4) {
+    region.min.set(areas[i], areas[i + 1]);
+    region.max.set(areas[i + 2] + 1, areas[i + 3] + 1);
+    at.set(areas[i], areas[i + 1]);
+    renderer.copyTextureToTexture(layer.uploadView, layer.texture, region, at);
+  }
 }
 
 // ── Material hookup ─────────────────────────────────────────────────────────

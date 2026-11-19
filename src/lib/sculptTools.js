@@ -46,27 +46,50 @@ export function sculptGrabMove(sm, mesh, grabbed, worldDelta, intensity, axes = 
     v.y = g.start.y + localDelta.y * w;
     v.z = g.start.z + localDelta.z * w;
   }
-  mesh.invalidateCache();
+  // Only positions changed: the mesh's edge and vertex lookups stay valid.
   sm.rebuildThreeMesh(mesh.id);
 }
 
 // Smooth brush: one pass of Laplacian smoothing over the vertices within the
 // brush radius — each moves toward the average of its face-neighbors, weighted
 // by the falloff and intensity. Operates in the mesh's local space.
-export function sculptSmooth(sm, mesh, localCenter, radius, intensity, axes = []) {
-  const affected = brushVertices(mesh, localCenter, radius);
-  if (affected.length === 0) return;
+// Where each vertex sits in the faces (face, corner), in face order. A stroke
+// never changes the faces, so this is worked out once per stroke.
+function faceCorners(mesh, cache) {
+  if (cache?.corners && cache.corners.faces === mesh.faces && cache.corners.faceCount === mesh.faces.length &&
+      cache.corners.vertexCount === mesh.vertices.length) return cache.corners;
   const idToIndex = new Map();
   for (let i = 0; i < mesh.vertices.length; i++) idToIndex.set(mesh.vertices[i].id, i);
-  const affectedSet = new Set(affected.map(a => a.idx));
-  // Accumulate one-ring neighbor position sums for affected vertices only.
-  const sums = new Map();
-  for (const a of affected) sums.set(a.idx, { x: 0, y: 0, z: 0, n: 0 });
-  for (const face of mesh.faces) {
+  const lists = new Array(mesh.vertices.length);
+  for (let fi = 0; fi < mesh.faces.length; fi++) {
+    const face = mesh.faces[fi];
     for (let j = 0; j < face.length; j++) {
       const ci = idToIndex.get(face[j]);
-      if (ci === undefined || !affectedSet.has(ci)) continue;
-      const acc = sums.get(ci);
+      if (ci === undefined) continue;
+      (lists[ci] || (lists[ci] = [])).push(fi, j);
+    }
+  }
+  const corners = { faces: mesh.faces, faceCount: mesh.faces.length, vertexCount: mesh.vertices.length, lists };
+  if (cache) cache.corners = corners;
+  return corners;
+}
+
+// `cache`: an object kept for the length of one stroke.
+export function sculptSmooth(sm, mesh, localCenter, radius, intensity, axes = [], cache = null) {
+  const affected = brushVertices(mesh, localCenter, radius);
+  if (affected.length === 0) return;
+  const { lists } = faceCorners(mesh, cache);
+  // Accumulate one-ring neighbor position sums for affected vertices only,
+  // adding the neighbors in the same order as a pass over every face would.
+  const sums = new Map();
+  for (const a of affected) sums.set(a.idx, { x: 0, y: 0, z: 0, n: 0 });
+  for (const a of affected) {
+    const list = lists[a.idx];
+    if (!list) continue;
+    const acc = sums.get(a.idx);
+    for (let m = 0; m < list.length; m += 2) {
+      const face = mesh.faces[list[m]];
+      const j = list[m + 1];
       for (let k = 0; k < face.length; k++) {
         if (k === j) continue;
         const nv = mesh.getVertex(face[k]);
@@ -92,7 +115,7 @@ export function sculptSmooth(sm, mesh, localCenter, radius, intensity, axes = []
     v.y += delta.y;
     v.z += delta.z;
   }
-  mesh.invalidateCache();
+  // Only positions changed: the mesh's edge and vertex lookups stay valid.
   sm.rebuildThreeMesh(mesh.id);
 }
 
@@ -117,6 +140,6 @@ export function sculptDisplace(sm, mesh, localCenter, localNormal, radius, inten
     v.y += n.y * step * a.w;
     v.z += n.z * step * a.w;
   }
-  mesh.invalidateCache();
+  // Only positions changed: the mesh's edge and vertex lookups stay valid.
   sm.rebuildThreeMesh(mesh.id);
 }
