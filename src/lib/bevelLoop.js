@@ -1012,6 +1012,18 @@ export function bevelLoopEdges(sm, options = {}) {
       edgeFaceMap.get(k).push(fi);
     }
   }
+  // An end of an open chain on the surface's open border (an edge there
+  // belongs to one face only) stays open after the bevel, like the surface it
+  // is on: no new face is added at that end to box the bevel in.
+  const onOpenBorder = (vid) => {
+    for (const [k, fs] of edgeFaceMap) {
+      if (fs.length !== 1) continue;
+      const [a, b] = k.split(',').map(Number);
+      if (a === vid || b === vid) return true;
+    }
+    return false;
+  };
+  const openEnds = new Set(closed ? [] : [0, N - 1].filter((i) => onOpenBorder(order[i])));
   const coplanar = (fi, nfi) => {
     const a = mesh.getFaceNormal(fi), b = mesh.getFaceNormal(nfi);
     if (Math.abs(a.dot(b)) < 0.9999) return false;
@@ -1320,11 +1332,12 @@ export function bevelLoopEdges(sm, options = {}) {
     }
   }
 
-  // Open chain: close the two exposed ends with one polygon each — unless a
-  // surrounding face already wrapped that end via the arc insertion above.
+  // Open chain: close an exposed end inside a closed surface with one polygon
+  // — unless a surrounding face already wrapped that end via the arc insertion
+  // above. An end on the surface's open border is left open.
   if (!closed) {
     for (const i of [0, N - 1]) {
-      if (arcUsedAt.has(i)) continue;
+      if (arcUsedAt.has(i) || openEnds.has(i)) continue;
       const col = [];
       for (let s = 0; s <= segments; s++) col.push(rings[s][i]);
       if (col.length < 3) continue;

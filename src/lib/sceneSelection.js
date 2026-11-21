@@ -48,7 +48,8 @@ export function applySceneSelection(SceneManager) {
     const selectionChanged = !prev || prev.meshId !== sel.meshId || prev.type !== sel.type
       || prevIdx.length !== nextIdx.length || nextIdx.some((v, i) => v !== prevIdx[i]);
     this.selection = sel;
-    this.subRotation = { x: 0, y: 0, z: 0 };
+    // A new selection starts its rotation record from zero.
+    if (selectionChanged) this.subRotationQ = null;
     if (sel.meshId) {
       const focus = this.getSelectionCenter();
       const bounds = this.getSelectionBounds();
@@ -96,7 +97,7 @@ export function applySceneSelection(SceneManager) {
     this.targetMergePair = null;
     this.selection = { meshId: null, type: this.selectionMode, indices: [] };
     this.selectedMeshIds = [];
-    this.subRotation = { x: 0, y: 0, z: 0 };
+    this.subRotationQ = null;
     this.updateHighlights();
     this.updateStats();
   };

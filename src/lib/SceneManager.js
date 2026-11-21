@@ -641,22 +641,36 @@ export class SceneManager {
     syncObjectHighlightTransforms(this);
   }
 
+  // The turn a vertex / edge / face selection has had since it was selected,
+  // as world X, Y, Z angles in degrees. Twists, free rotation and typed values
+  // all add to the same record (subRotationQ), so the HUD and the Transform
+  // values always show the rotation the selection actually has.
+  subRotationDegrees() {
+    const q = this.subRotationQ;
+    if (!q) return { x: 0, y: 0, z: 0 };
+    const e = new THREE.Euler().setFromQuaternion(q, 'XYZ');
+    const deg = (r) => {
+      const d = r * 180 / Math.PI;
+      return Math.abs(d) < 1e-9 ? 0 : d;
+    };
+    return { x: deg(e.x), y: deg(e.y), z: deg(e.z) };
+  }
+
   // HUD rotation while vertices/edges/faces are selected rotates ONLY that
-  // selection, around its own center. The typed angles are tracked per
-  // selection (subRotation) instead of being compared to the object's own
-  // rotation — comparing against the object made the whole object spin.
+  // selection, around its own center, to the typed angles (measured from where
+  // the selection was when it was selected), never the object around it.
+  // Typed angles are exact: rotation snapping does not round them.
   rotateSubSelectionTo(rxDeg, ryDeg, rzDeg) {
-    const cur = this.subRotation || (this.subRotation = { x: 0, y: 0, z: 0 });
-    const target = { x: rxDeg * Math.PI / 180, y: ryDeg * Math.PI / 180, z: rzDeg * Math.PI / 180 };
-    this.rotatePivot = this.rotatePivot || this.getSelectionCenter();
-    for (const axis of ['x', 'y', 'z']) {
-      const delta = target[axis] - cur[axis];
-      if (Math.abs(delta) > 1e-6) {
-        this.rotateSelection(delta, axis);
-        cur[axis] = target[axis];
-      }
+    const D = Math.PI / 180;
+    const target = new THREE.Quaternion().setFromEuler(new THREE.Euler(rxDeg * D, ryDeg * D, rzDeg * D, 'XYZ'));
+    const cur = this.subRotationQ || new THREE.Quaternion();
+    const delta = target.clone().multiply(cur.clone().invert());
+    if (1 - Math.abs(delta.w) > 1e-12) {
+      this.rotatePivot = this.rotatePivot || this.getSelectionCenter();
+      this._rotateSubSelection(delta);
+      this.rotatePivot = null;
     }
-    this.rotatePivot = null;
+    this.subRotationQ = target;
   }
 
   // Manual transform entry from the HUD (object mode only).
@@ -1901,36 +1915,46 @@ export class SceneManager {
       mesh.rotation.setFromQuaternion(curQ);
       this.updateObjectTransform(mesh.id);
     } else {
-      // Pivot stays pinned to where the selection was when the gesture started,
-      // so a sub-object rotation can never drift off its own center.
-      const center = this.rotatePivot || this.getSelectionCenter();
-      this._lockForTransform(mesh);
-      const wm = this.getWorldMatrix(mesh);
-      // A face can share positions with separately indexed wall vertices.
-      // Rotate those coincident seam vertices together to prevent visible gaps.
-      const selectedIds = this.getSelectedVertexIds();
-      const positions = selectedIds.map(id => mesh.getVertex(id)).filter(Boolean)
-        .map(v => ({ x: v.x, y: v.y, z: v.z }));
-      const vids = new Set(selectedIds);
-      if (sel.type === 'face' && positions.length) {
-        for (const id of coincidentVertexIds(mesh, positions, 1e-7)) vids.add(id);
-      }
-      for (const vid of vids) {
-        const v = mesh.getVertex(vid);
-        const vWorld = new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(wm);
-        const offset = vWorld.clone().sub(center);
-        offset.applyQuaternion(q);
-        const newWorld = center.clone().add(offset);
-        const delta = this.worldToLocalDelta(mesh, newWorld.clone().sub(vWorld));
-        v.x += delta.x; v.y += delta.y; v.z += delta.z;
-      }
-      // Only positions changed: the edge list and the edge/face/vertex maps
-      // depend on the faces alone, so they stay valid (working them out again
-      // every frame made edge transforms rebuild the whole edge list).
-      this.rebuildThreeMesh(mesh.id);
+      this._rotateSubSelection(q);
     }
     refreshTransformHighlights(this);
     this.updateHud();
+  }
+
+  // Turns the vertex / edge / face selection by quaternion `q` (world space)
+  // and adds the turn to its rotation record.
+  _rotateSubSelection(q) {
+    const sel = this.selection;
+    const mesh = this.getMesh(sel.meshId);
+    if (!mesh || mesh.locked) return;
+    // Pivot stays pinned to where the selection was when the gesture started,
+    // so a sub-object rotation can never drift off its own center.
+    const center = this.rotatePivot || this.getSelectionCenter();
+    this._lockForTransform(mesh);
+    const wm = this.getWorldMatrix(mesh);
+    // A face can share positions with separately indexed wall vertices.
+    // Rotate those coincident seam vertices together to prevent visible gaps.
+    const selectedIds = this.getSelectedVertexIds();
+    const positions = selectedIds.map(id => mesh.getVertex(id)).filter(Boolean)
+      .map(v => ({ x: v.x, y: v.y, z: v.z }));
+    const vids = new Set(selectedIds);
+    if (sel.type === 'face' && positions.length) {
+      for (const id of coincidentVertexIds(mesh, positions, 1e-7)) vids.add(id);
+    }
+    for (const vid of vids) {
+      const v = mesh.getVertex(vid);
+      const vWorld = new THREE.Vector3(v.x, v.y, v.z).applyMatrix4(wm);
+      const offset = vWorld.clone().sub(center);
+      offset.applyQuaternion(q);
+      const newWorld = center.clone().add(offset);
+      const delta = this.worldToLocalDelta(mesh, newWorld.clone().sub(vWorld));
+      v.x += delta.x; v.y += delta.y; v.z += delta.z;
+    }
+    this.subRotationQ = q.clone().multiply(this.subRotationQ || new THREE.Quaternion());
+    // Only positions changed: the edge list and the edge/face/vertex maps
+    // depend on the faces alone, so they stay valid (working them out again
+    // every frame made edge transforms rebuild the whole edge list).
+    this.rebuildThreeMesh(mesh.id);
   }
 
   rotateGroupAroundAxis(angle, axisVec) {
@@ -2631,16 +2655,10 @@ export class SceneManager {
     const mesh = this.getMesh(sel.meshId);
     if (!mesh) return;
     let rot;
-    if (action === 'rotate' && sel.type !== 'object' && this.activeRotationAxis) {
-      const deg = toDeg(this.activeRotation || 0);
-      rot = {
-        rx: this.activeRotationAxis === 'x' ? deg : 0,
-        ry: this.activeRotationAxis === 'y' ? deg : 0,
-        rz: this.activeRotationAxis === 'z' ? deg : 0,
-      };
-    } else if (sel.type !== 'object') {
-      const s = this.subRotation || { x: 0, y: 0, z: 0 };
-      rot = { rx: toDeg(s.x), ry: toDeg(s.y), rz: toDeg(s.z) };
+    if (sel.type !== 'object') {
+      // The rotation the selection actually has, during a twist and after it.
+      const s = this.subRotationDegrees();
+      rot = { rx: q3(s.x), ry: q3(s.y), rz: q3(s.z) };
     } else {
       rot = { rx: toDeg(mesh.rotation.x), ry: toDeg(mesh.rotation.y), rz: toDeg(mesh.rotation.z) };
     }

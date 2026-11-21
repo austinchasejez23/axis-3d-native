@@ -89,6 +89,7 @@ export function applySceneUndo(SceneManager) {
     return {
       meshes: deferMeshes ? null : this._meshCopies(),
       selection: { ...this.selection, indices: [...this.selection.indices] },
+      subRotation: this.subRotationQ ? this.subRotationQ.toArray() : null,
       selectedMeshIds: [...this.selectedMeshIds],
       multiSelect: this.multiSelect,
       selectionMode: this.selectionMode,
@@ -165,6 +166,7 @@ export function applySceneUndo(SceneManager) {
       if (!existingIds.has(id)) this.removeMesh(id);
     }
     this.selection = snapshot.selection;
+    this.subRotationQ = snapshot.subRotation ? new THREE.Quaternion().fromArray(snapshot.subRotation) : null;
     this.selectedMeshIds = snapshot.selectedMeshIds ? [...snapshot.selectedMeshIds] : (this.selection.meshId ? [this.selection.meshId] : []);
     this.multiSelect = !!snapshot.multiSelect;
     if (snapshot.lights) this.restoreSceneLights?.(snapshot.lights, snapshot.selectedLightId);
@@ -203,6 +205,7 @@ export function applySceneUndo(SceneManager) {
       this._undoMeshCopies?.set(meshId, saved);
     }
     this.selection = snapshot.selection;
+    this.subRotationQ = snapshot.subRotation ? new THREE.Quaternion().fromArray(snapshot.subRotation) : null;
     this.selectedMeshIds = snapshot.selectedMeshIds ? [...snapshot.selectedMeshIds] : (this.selection.meshId ? [this.selection.meshId] : []);
     this.multiSelect = !!snapshot.multiSelect;
     if (refresh) {
@@ -291,11 +294,10 @@ export function applySceneUndo(SceneManager) {
       return transform;
     }
     const center = this.getDisplayCenter();
-    const rotation = this.subRotation || { x: 0, y: 0, z: 0 };
-    const toDeg = (r) => (r * 180) / Math.PI;
+    const rotation = this.subRotationDegrees();
     return {
       position: [center.x, center.y, center.z],
-      rotation: [toDeg(rotation.x), toDeg(rotation.y), toDeg(rotation.z)],
+      rotation: [rotation.x, rotation.y, rotation.z],
       scale: [1, 1, 1],
     };
   };
