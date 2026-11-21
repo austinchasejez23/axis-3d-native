@@ -4,10 +4,11 @@ import ResistanceIcon from './ResistanceIcon';
 import OrientationResetIcon from './OrientationResetIcon';
 import { useTheme } from '@/lib/theme';
 import { helpIntercept } from '@/lib/helpMode';
+import { releasedOver } from '@/lib/buttonTaps';
 
-// A deliberate tap toggles a viewport option. Free Transform and Snapping
-// open their settings panels on double-tap; dragging across the stack never
-// activates a button.
+// A tap toggles a viewport option. Free Transform and Snapping open their
+// settings panels on double-tap; a touch that ends off the button it began on
+// does nothing.
 const SNAP_HINT = 'Double-tap the Snapping icon for settings';
 const SNAP_HINT_WIDTH_REM = 12;
 const FREE_HINT = 'Double-tap the Free Transform icon for settings';
@@ -41,19 +42,16 @@ export default function RenderBoostButtons({ orientationOpen, onOrientationReset
     onPointerDown: (e) => {
       e.stopPropagation();
       e.currentTarget.setPointerCapture?.(e.pointerId);
-      pointerRef.current = { target, id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
+      pointerRef.current = { target, id: e.pointerId, rect: e.currentTarget.getBoundingClientRect() };
     },
-    onPointerMove: (e) => {
-      e.stopPropagation();
-      const p = pointerRef.current;
-      if (p?.target === target && p.id === e.pointerId && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 7) p.moved = true;
-    },
+    onPointerMove: (e) => { e.stopPropagation(); },
     onPointerCancel: (e) => { e.stopPropagation(); pointerRef.current = null; },
     onPointerUp: (e) => {
       e.stopPropagation();
       const p = pointerRef.current;
       pointerRef.current = null;
-      if (!p || p.target !== target || p.id !== e.pointerId || p.moved) return;
+      // Begun and ended on this button: a tap, however the finger shifted.
+      if (!p || p.target !== target || p.id !== e.pointerId || !releasedOver(e.currentTarget, e.clientX, e.clientY, p.rect)) return;
       if (helpIntercept({ id: target })) return;
       const now = performance.now();
       const dbl = doubleTapRef.current.target === target && now - doubleTapRef.current.at < 360;

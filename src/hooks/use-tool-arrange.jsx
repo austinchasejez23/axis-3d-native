@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { loadToolLayout, saveToolLayout } from '@/lib/toolLayout';
+import { claimTouch } from '@/lib/buttonTaps';
 
 const HOLD_MS = 450;
 const HOLD_DRIFT_PX = 20;
@@ -122,12 +123,13 @@ export function useToolArrange(mode) {
       window.removeEventListener('touchcancel', touchCancel);
       detach.current = null;
     };
-    start.current = { x: event.clientX, y: event.clientY, row, col };
+    start.current = { x: event.clientX, y: event.clientY, row, col, pointerId: event.pointerId };
     lastPoint.current = event;
     dragged.current = false;
     cancelHold();
     timer.current = setTimeout(() => {
       dragged.current = true;
+      claimTouch(start.current.pointerId);
       heldRef.current = { row, col };
       setHeld(heldRef.current);
       setOver(heldRef.current);
@@ -138,14 +140,11 @@ export function useToolArrange(mode) {
 
   const onPointerMove = (event) => {
     if (!heldRef.current) {
-      // Movement before the hold completes cancels arranging. It must never
-      // pick up or move a tool, and the release must not activate that tool.
+      // Movement before the hold completes cancels arranging, so it never
+      // picks up or moves a tool. Released on the same tool, it is a tap.
       if (timer.current && start.current) {
         const moved = Math.hypot(event.clientX - start.current.x, event.clientY - start.current.y);
-        if (moved > HOLD_DRIFT_PX) {
-          cancelHold();
-          dragged.current = true;
-        }
+        if (moved > HOLD_DRIFT_PX) cancelHold();
       }
       return;
     }

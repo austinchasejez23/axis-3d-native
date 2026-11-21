@@ -66,6 +66,7 @@ import useCoveredBy from '@/hooks/use-covered-by';
 import useAutoSave from '@/hooks/use-autosave';
 import { isRadialPrimitive } from '@/lib/primitives';
 import useKeyboardViewport from '@/hooks/use-keyboard-viewport';
+import { installButtonTaps } from '@/lib/buttonTaps';
 
 // Boolean tools that open their own panel.
 const BOOLEAN_OPERATION_IDS = new Set(['subtract', 'union', 'intersect']);
@@ -186,6 +187,9 @@ export default function Modeler() {
   useEffect(() => { if (!precision) setPrecisionPanelOpen(false); }, [precision]);
   useEffect(() => { if (managerRef.current) managerRef.current.precisionFactor = precision ? 1 - precisionIntensity / 100 : 1; }, [precision, precisionIntensity]);
   const [selectionPattern, setSelectionPattern] = useState(null);
+  // A touch that begins and ends on the same button is a tap, however the
+  // finger shifted in between.
+  useEffect(() => installButtonTaps(), []);
   // Select Loop / Select Ring close on any touch outside their panel (or its
   // keypad), tap or gesture. A tap that closed one does nothing else.
   const selectionPatternRef = useRef(null);

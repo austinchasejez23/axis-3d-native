@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Globe, Scan } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
 import { helpIntercept } from '@/lib/helpMode';
+import { releasedOver } from '@/lib/buttonTaps';
 
 // `row`: laid out side by side (the sideways side-controls row), with each
 // button's name shown under it instead of beside it.
@@ -18,18 +19,15 @@ export default function ViewportModeButtons({ clay, transparent, onClay, onTrans
     action();
   };
   const tapProps = (target, action) => ({
-    onPointerDown: (e) => { e.stopPropagation(); e.currentTarget.setPointerCapture?.(e.pointerId); pointerRef.current = { target, id: e.pointerId, x: e.clientX, y: e.clientY, moved: false }; },
-    onPointerMove: (e) => {
-      e.stopPropagation();
-      const p = pointerRef.current;
-      if (p?.target === target && p.id === e.pointerId && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 7) p.moved = true;
-    },
+    onPointerDown: (e) => { e.stopPropagation(); e.currentTarget.setPointerCapture?.(e.pointerId); pointerRef.current = { target, id: e.pointerId, rect: e.currentTarget.getBoundingClientRect() }; },
+    onPointerMove: (e) => { e.stopPropagation(); },
     onPointerCancel: (e) => { e.stopPropagation(); pointerRef.current = null; },
     onPointerUp: (e) => {
       e.stopPropagation();
       const p = pointerRef.current;
       pointerRef.current = null;
-      if (p && p.target === target && p.id === e.pointerId && !p.moved) {
+      // Begun and ended on this button: a tap, however the finger shifted.
+      if (p && p.target === target && p.id === e.pointerId && releasedOver(e.currentTarget, e.clientX, e.clientY, p.rect)) {
         if (helpIntercept({ id: target })) return;
         action();
       }

@@ -1,9 +1,10 @@
 import { Children, forwardRef, useCallback, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import ScrollerTunnelShadows from './ScrollerTunnelShadows';
+import { claimTouch } from '@/lib/buttonTaps';
 
 const COPIES = 5;
 const MIDDLE = 2;
-const DRAG_START = 6;      // px of sideways travel before a touch becomes a swipe
+const DRAG_START = 12;     // px of sideways travel before a touch becomes a swipe
 const FRICTION = 0.995;    // momentum decay per ms
 const MIN_SPEED = 0.02;    // px/ms where momentum stops
 
@@ -162,13 +163,17 @@ const LoopingScroller = forwardRef(/** @param {import('react').PropsWithChildren
       if (Math.abs(dx) > DRAG_START && Math.abs(dx) > Math.abs(e.clientY - d.y0)) {
         d.active = true;
         busy.current = true;
+        // A swipe is not a tap on the button it started on. The strip picks
+        // up from here, so it doesn't jump by the distance already travelled.
+        claimTouch(e.pointerId);
+        d.x0 += Math.sign(dx) * DRAG_START;
         el.style.scrollSnapType = 'none';
         try { el.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
       } else {
         return;
       }
     }
-    el.scrollLeft = d.s0 - dx;
+    el.scrollLeft = d.s0 - (e.clientX - d.x0);
     d.s0 += wrap();
     const dt = e.timeStamp - d.lastT;
     if (dt > 0) d.v = 0.8 * ((e.clientX - d.lastX) / dt) + 0.2 * d.v;

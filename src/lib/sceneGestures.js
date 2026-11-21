@@ -507,21 +507,9 @@ export function applySceneGestures(SceneManager) {
     if (e.pointerType === 'mouse') return this.onMouseMove(e);
     if (!this.pointers.has(e.pointerId)) return;
     if (this.cameraGesture && this._cameraTouchFrozen) return;
-    // Touch can remain captured by the canvas while the finger glides across
-    // a toolbar or a tool-name label. Don't orbit the scene under that UI.
-    // This only pauses camera motion, not an intentional modeling drag.
-    if (this.cameraGesture && typeof document !== 'undefined') {
-      const ui = document.elementFromPoint(e.clientX, e.clientY)?.closest?.(
-        'button, input, [role="button"], [role="textbox"], .modeling-panel'
-      );
-      if (ui) {
-        const current = this.pointers.get(e.pointerId);
-        current.x = e.clientX;
-        current.y = e.clientY;
-        this.stopCameraMotion();
-        return;
-      }
-    }
+    // A touch that began on the canvas stays with the canvas: gliding across a
+    // toolbar, a label or a panel carries on with the camera move, zoom or
+    // edit, and the tools under the finger take no part in it.
     const ptr = this.pointers.get(e.pointerId);
     const dx = e.clientX - ptr.x;
     const dy = e.clientY - ptr.y;
