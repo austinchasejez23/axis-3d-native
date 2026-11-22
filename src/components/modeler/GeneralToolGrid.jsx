@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Eye, EyeOff, Palette, Hand,
-  ArrowLeftRight, Box, Hexagon, Spline, Circle, Move3D, ImagePlus,
+  ArrowLeftRight, Box, Hexagon, Circle, Move3D, ImagePlus,
 } from 'lucide-react';
 import { ProtractorIcon, MeasureIcon } from '@/lib/toolIcons';
 import { VOID, isStackRow } from '@/lib/toolLayout';
@@ -11,6 +11,15 @@ import GridToolButton from './GridToolButton';
 import GlassToolRow from './GlassToolRow';
 import ToolGridActions from './ToolGridActions';
 import ToolDragGhost from './ToolDragGhost';
+
+// Convert → Edge: a straight edge at an angle, as on the Edge mode button.
+function EdgeLineIcon({ className = '', strokeWidth = 2 }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" aria-hidden="true">
+      <line x1="5" y1="19" x2="19" y2="5" />
+    </svg>
+  );
+}
 
 export default function GeneralToolGrid({
   onClose,
@@ -54,7 +63,7 @@ export default function GeneralToolGrid({
   const convertItems = [
     { label: 'Object', icon: Box, onClick: () => run('convert_object', () => onConvert?.('object')) },
     { label: 'Face', icon: Hexagon, onClick: () => run('convert_face', () => onConvert?.('face')) },
-    { label: 'Edge', icon: Spline, onClick: () => run('convert_edge', () => onConvert?.('edge')) },
+    { label: 'Edge', icon: EdgeLineIcon, onClick: () => run('convert_edge', () => onConvert?.('edge')) },
     { label: 'Vertex', icon: Circle, onClick: () => run('convert_vertex', () => onConvert?.('vertex')) },
   ];
 
@@ -120,7 +129,8 @@ export default function GeneralToolGrid({
               >
                 <GridToolButton fullWidth mode="general" icon={tool.icon} label={tool.label} active={isSelected || tool.active} locked={tool.locked} onClick={() => (selecting ? arrange.toggleSelected(cell) : tool.onClick())} />
                 {cell === 'convert' && convertOpen && (
-                  <div className="absolute right-0 bottom-[calc(100%+0.25rem)] z-30 w-full flex flex-col pointer-events-auto">
+                  // Same surface as the tool panel behind it.
+                  <div className="absolute right-0 bottom-[calc(100%+0.25rem)] z-30 w-full flex flex-col rounded-lg pointer-events-auto" style={{ background: 'rgba(9,13,22,0.38)' }}>
                     {convertItems.map((item) => (
                       <GridToolButton key={item.label} fullWidth icon={item.icon} iconClassName="w-5 h-5" label={item.label} onClick={item.onClick} />
                     ))}

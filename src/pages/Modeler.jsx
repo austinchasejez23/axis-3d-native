@@ -106,6 +106,9 @@ export default function Modeler() {
   const menuBackRef = useRef(null);
   const transformApplyRef = useRef(null);
   const sculptSessionSnapshotRef = useRef(null);
+  // The newest undo step from before Sculpt opened: the Sculpt panel's own
+  // Undo only takes back steps added after it (its strokes).
+  const sculptUndoMarkRef = useRef(null);
   const { uiColor, highlightColor, unit, snapToGrid, gridVisible } = useTheme();
   const { isPro, openUpgrade } = useProAccess();
   const { height: workspaceHeight } = useKeyboardViewport();
@@ -428,6 +431,19 @@ export default function Modeler() {
     setSculptPanelOpen(false);
     setSculptTuning(false);
     window.dispatchEvent(new CustomEvent('axis-tool-closed', { detail: { label: 'Sculpt' } }));
+  }, []);
+
+  // Sculpt panel Undo: takes back the last stroke made in this Sculpt session
+  // and leaves the panel open. Nothing from before Sculpt opened is undone.
+  const undoSculptStroke = useCallback(() => {
+    const manager = managerRef.current;
+    const mark = sculptUndoMarkRef.current;
+    const top = manager?.undoStack.at(-1) ?? null;
+    if (!manager || !mark || !top || top === mark.top) {
+      notifyUnavailable('No sculpt strokes to undo');
+      return;
+    }
+    manager.undo();
   }, []);
 
   const collapseSculpt = useCallback(() => {
@@ -1476,6 +1492,7 @@ export default function Modeler() {
           closePaint();
           setToolsOpen(false);
           sculptSessionSnapshotRef.current = managerRef.current?.captureSnapshot() || null;
+          sculptUndoMarkRef.current = { top: managerRef.current?.undoStack.at(-1) ?? null };
           // Nothing stays selected while sculpting.
           managerRef.current?.clearSelection();
           setSelectedMeshId(null);
@@ -1613,6 +1630,7 @@ export default function Modeler() {
           onTuningChange={setSculptTuning}
           onCancel={closeSculpt}
           onApply={collapseSculpt}
+          onUndo={undoSculptStroke}
         />
       )}
       {sculptOpen && !sculptPanelOpen && (

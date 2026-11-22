@@ -6,15 +6,28 @@ const falloff = (d, radius) => {
   return t * t * (3 - 2 * t);
 };
 
-// Vertices (by local index) within `radius` (world units, tested in local space
-// against a world-space center converted to local) of `localCenter`, each with
-// a smoothstep weight 0..1.
+// How far apart brush dabs are along a stroke, as a share of the brush radius.
+// Dabs follow the distance the finger travels, not how often the screen
+// reports it, so a stroke builds up the same on any phone and holding still
+// adds nothing.
+export const SCULPT_DAB_SPACING = 0.25;
+// Push / Pull: depth of one dab at full intensity, as a share of the radius.
+// One pass over a spot lays down about four dabs (0.3 of the radius at 100%).
+const DISPLACE_PER_DAB = 0.075;
+// Smooth: share of the way to the neighbors' average one dab moves a vertex
+// at full intensity.
+const SMOOTH_PER_DAB = 0.5;
+
+// Vertices (by local index) within `radius` world units of `localCenter`, each
+// with a smoothstep weight 0..1. Distances are measured at the object's scale,
+// so the brush covers the same area on a scaled object as its size shows.
 function brushVertices(mesh, localCenter, radius) {
   const r2 = radius * radius;
+  const sx = mesh.scale?.x || 1, sy = mesh.scale?.y || 1, sz = mesh.scale?.z || 1;
   const out = [];
   for (let i = 0; i < mesh.vertices.length; i++) {
     const v = mesh.vertices[i];
-    const dx = v.x - localCenter.x, dy = v.y - localCenter.y, dz = v.z - localCenter.z;
+    const dx = (v.x - localCenter.x) * sx, dy = (v.y - localCenter.y) * sy, dz = (v.z - localCenter.z) * sz;
     const d2 = dx * dx + dy * dy + dz * dz;
     if (d2 <= r2) out.push({ idx: i, w: falloff(Math.sqrt(d2), radius) });
   }
@@ -103,7 +116,7 @@ export function sculptSmooth(sm, mesh, localCenter, radius, intensity, axes = []
     if (!acc || acc.n === 0) continue;
     const v = mesh.vertices[a.idx];
     const ax = acc.x / acc.n, ay = acc.y / acc.n, az = acc.z / acc.n;
-    const w = a.w * intensity;
+    const w = a.w * intensity * SMOOTH_PER_DAB;
     let delta = new THREE.Vector3((ax - v.x) * w, (ay - v.y) * w, (az - v.z) * w);
     if (axes.length > 0) {
       const q = new THREE.Quaternion().setFromEuler(mesh.rotation);
@@ -120,25 +133,26 @@ export function sculptSmooth(sm, mesh, localCenter, radius, intensity, axes = []
 }
 
 // Push / Pull brush: displace every vertex within the brush radius along the
-// surface normal at the hit point. Pull (direction +1) inflates outward;
-// Push (direction -1) depresses inward. Falloff weights the displacement so
-// the brush leaves a smooth dome, not a flat plateau.
-export function sculptDisplace(sm, mesh, localCenter, localNormal, radius, intensity, direction, axes = []) {
-  let n = localNormal.clone().normalize();
+// line to the camera. Pull (direction +1) draws the surface toward the camera;
+// Push (direction -1) presses it away. `towardCamera` is a world direction.
+// Falloff weights the displacement so the brush leaves a smooth dome, not a
+// flat plateau.
+export function sculptDisplace(sm, mesh, localCenter, towardCamera, radius, intensity, direction, axes = []) {
+  const dir = towardCamera.clone();
   if (axes.length > 0) {
-    const q = new THREE.Quaternion().setFromEuler(mesh.rotation);
-    const worldDirection = n.clone().multiply(mesh.scale).applyQuaternion(q);
-    for (const axis of ['x', 'y', 'z']) if (!axes.includes(axis)) worldDirection[axis] = 0;
-    n = sm.worldToLocalDelta(mesh, worldDirection).normalize();
+    for (const axis of ['x', 'y', 'z']) if (!axes.includes(axis)) dir[axis] = 0;
   }
+  if (dir.lengthSq() < 1e-12) return;
+  dir.normalize();
   const affected = brushVertices(mesh, localCenter, radius);
   if (affected.length === 0) return;
-  const step = radius * 0.3 * intensity * direction;
+  // One full-weight dab, in the object's own space.
+  const step = sm.worldToLocalDelta(mesh, dir.multiplyScalar(radius * DISPLACE_PER_DAB * intensity * direction));
   for (const a of affected) {
     const v = mesh.vertices[a.idx];
-    v.x += n.x * step * a.w;
-    v.y += n.y * step * a.w;
-    v.z += n.z * step * a.w;
+    v.x += step.x * a.w;
+    v.y += step.y * a.w;
+    v.z += step.z * a.w;
   }
   // Only positions changed: the mesh's edge and vertex lookups stay valid.
   sm.rebuildThreeMesh(mesh.id);

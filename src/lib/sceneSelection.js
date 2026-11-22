@@ -48,8 +48,8 @@ export function applySceneSelection(SceneManager) {
     const selectionChanged = !prev || prev.meshId !== sel.meshId || prev.type !== sel.type
       || prevIdx.length !== nextIdx.length || nextIdx.some((v, i) => v !== prevIdx[i]);
     this.selection = sel;
-    // A new selection starts its rotation record from zero.
-    if (selectionChanged) this.subRotationQ = null;
+    // A different selection shows the angle it was left at (0 if never turned).
+    if (selectionChanged) this.subRotationQ = this._storedSubRotation();
     if (sel.meshId) {
       const focus = this.getSelectionCenter();
       const bounds = this.getSelectionBounds();

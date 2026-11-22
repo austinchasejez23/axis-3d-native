@@ -641,10 +641,12 @@ export class SceneManager {
     syncObjectHighlightTransforms(this);
   }
 
-  // The turn a vertex / edge / face selection has had since it was selected,
-  // as world X, Y, Z angles in degrees. Twists, free rotation and typed values
-  // all add to the same record (subRotationQ), so the HUD and the Transform
-  // values always show the rotation the selection actually has.
+  // The angle a vertex / edge / face selection has been turned by, as world
+  // X, Y, Z angles in degrees. Twists, free rotation and typed values all add
+  // to the same record (subRotationQ), so the HUD and the Transform values
+  // always show the rotation the selection actually has. The record is kept
+  // on the object for that exact selection (its vertices), so selecting it
+  // again later, or reopening the project, shows the same angle.
   subRotationDegrees() {
     const q = this.subRotationQ;
     if (!q) return { x: 0, y: 0, z: 0 };
@@ -656,9 +658,37 @@ export class SceneManager {
     return { x: deg(e.x), y: deg(e.y), z: deg(e.z) };
   }
 
+  // Key of the current vertex / edge / face selection in its object's angle
+  // record: the selection type and its vertices.
+  _subRotationKey() {
+    const sel = this.selection;
+    if (!sel?.meshId || sel.type === 'object' || !sel.indices?.length) return null;
+    const ids = this.getSelectedVertexIds();
+    if (!ids.length) return null;
+    return `${sel.type}:${[...ids].sort((a, b) => a - b).join(',')}`;
+  }
+
+  // The angle the current selection was left at, from its object's record.
+  _storedSubRotation() {
+    const key = this._subRotationKey();
+    const q = key ? this.getMesh(this.selection.meshId)?.elementRotations?.[key] : null;
+    return q ? new THREE.Quaternion().fromArray(q) : null;
+  }
+
+  // Keep the current selection's angle on its object.
+  _storeSubRotation() {
+    const key = this._subRotationKey();
+    const mesh = key ? this.getMesh(this.selection.meshId) : null;
+    if (!mesh) return;
+    if (!mesh.elementRotations) mesh.elementRotations = {};
+    const q = this.subRotationQ;
+    if (!q || 1 - Math.abs(q.w) < 1e-12) delete mesh.elementRotations[key];
+    else mesh.elementRotations[key] = q.toArray();
+  }
+
   // HUD rotation while vertices/edges/faces are selected rotates ONLY that
   // selection, around its own center, to the typed angles (measured from where
-  // the selection was when it was selected), never the object around it.
+  // it sat before it was first turned), never the object around it.
   // Typed angles are exact: rotation snapping does not round them.
   rotateSubSelectionTo(rxDeg, ryDeg, rzDeg) {
     const D = Math.PI / 180;
@@ -671,6 +701,7 @@ export class SceneManager {
       this.rotatePivot = null;
     }
     this.subRotationQ = target;
+    this._storeSubRotation();
   }
 
   // Manual transform entry from the HUD (object mode only).
@@ -935,25 +966,32 @@ export class SceneManager {
   endPaintStroke() { finishPaintStroke(this); }
   setSculptTool(config) { this.sculptTool = config ? { ...config } : null; }
   exitSculptMode() { this.sculptTool = null; this.sculptStroke = null; }
-  // Dispatch the active sculpt brush (smooth / push / pull) at the stroke's
-  // current center. 'move' is handled separately (grab-drag). Push/pull displace
-  // vertices along the hit face's local-space normal (pull = outward, push = inward).
-  applySculptBrush(mesh, stroke, hit) {
+  // One dab of the active sculpt brush (smooth / push / pull) at the stroke's
+  // current center (`worldCenter`). 'move' is handled separately (grab-drag).
+  applySculptBrush(mesh, stroke, worldCenter) {
     if (stroke.tool === 'smooth') {
       sculptSmooth(this, mesh, stroke.localCenter, stroke.size, stroke.intensity, stroke.axes, stroke);
     } else if (stroke.tool === 'push' || stroke.tool === 'pull') {
-      const n = (hit && hit.face && hit.face.normal) ? hit.face.normal.clone().normalize() : new THREE.Vector3(0, 1, 0);
-      sculptDisplace(this, mesh, stroke.localCenter, n, stroke.size, stroke.intensity, stroke.tool === 'pull' ? 1 : -1, stroke.axes);
+      // Along the line from the dab to the camera, whichever way the surface faces.
+      const towardCamera = this.camera.isOrthographicCamera
+        ? this.camera.getWorldDirection(new THREE.Vector3()).negate()
+        : this.camera.position.clone().sub(worldCenter);
+      sculptDisplace(this, mesh, stroke.localCenter, towardCamera, stroke.size, stroke.intensity, stroke.tool === 'pull' ? 1 : -1, stroke.axes);
     }
   }
-  // World-space brush radius → screen pixels at the current orbit distance,
-  // used by the on-screen size-preview ring in the Sculpt panel.
+  // World-space brush radius → screen pixels, for the size ring shown in the
+  // middle of the screen while the Sculpt size slider moves. Measured at the
+  // depth of the surface in the middle of the screen, so the ring is the size
+  // the brush actually covers there.
   brushSizeToScreenPixels(size) {
-    const dist = this.cameraDist;
-    const fov = this.camera.fov * Math.PI / 180;
+    const cam = this.camera;
     const vh = this.renderer.domElement.clientHeight || window.innerHeight;
-    const worldHeight = 2 * dist * Math.tan(fov / 2);
-    return size * (vh / Math.max(1e-6, worldHeight));
+    if (cam.isOrthographicCamera) return size * vh * (cam.zoom || 1) / Math.max(1e-6, cam.top - cam.bottom);
+    let depth = this.cameraDist;
+    const hit = this.raycastMeshes(0, 0)[0];
+    if (hit) depth = hit.point.clone().sub(cam.position).dot(cam.getWorldDirection(new THREE.Vector3()));
+    const fov = cam.fov * Math.PI / 180;
+    return size * (vh / Math.max(1e-6, 2 * Math.max(depth, cam.near) * Math.tan(fov / 2)));
   }
   // Brush/spray size (a percentage of the object's apparent size) → screen
   // pixels, so the paint size preview ring matches the real stroke radius.
@@ -1951,6 +1989,7 @@ export class SceneManager {
       v.x += delta.x; v.y += delta.y; v.z += delta.z;
     }
     this.subRotationQ = q.clone().multiply(this.subRotationQ || new THREE.Quaternion());
+    this._storeSubRotation();
     // Only positions changed: the edge list and the edge/face/vertex maps
     // depend on the faces alone, so they stay valid (working them out again
     // every frame made edge transforms rebuild the whole edge list).

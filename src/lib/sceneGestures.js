@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { sculptGrabStart, sculptGrabMove } from './sculptTools';
+import { sculptGrabStart, sculptGrabMove, SCULPT_DAB_SPACING } from './sculptTools';
 import { theme } from './theme';
 import { beginFreeScale, updateFreeScale, updateFreeRotation } from '@/lib/freeTransforms';
 import { beginCameraTouch, endCameraTouch } from '@/lib/cameraTouchSession';
@@ -128,13 +128,14 @@ export function applySceneGestures(SceneManager) {
       intensity: this.sculptTool.intensity, axes: this.sculptTool.axes || [], localCenter, hitWorld,
       startScreen: { x, y }, grabbed: null,
       undone: this.sculptTool.tool === 'smooth',
+      lastDab: hitWorld.clone(),
     };
     this.sculptStroke = stroke;
     if (this.sculptTool.tool === 'move') {
       stroke.grabbed = sculptGrabStart(this, mesh, localCenter, this.sculptTool.size);
     } else {
       this.pushUndo();
-      this.applySculptBrush(mesh, stroke, hits[0]);
+      this.applySculptBrush(mesh, stroke, hitWorld);
       if (this.selection.meshId === meshId) this.updateHighlights();
     }
     return true;
@@ -162,10 +163,20 @@ export function applySceneGestures(SceneManager) {
         hit = this.raycaster.intersectObject(obj.mesh, false)[0];
       }
       if (hit) {
-        const wm = this.getWorldMatrix(mesh);
-        const inv = new THREE.Matrix4().copy(wm).invert();
-        stroke.localCenter = hit.point.clone().applyMatrix4(inv);
-        this.applySculptBrush(mesh, stroke, hit);
+        // Dabs are laid along the path the finger has covered on the surface,
+        // one every SCULPT_DAB_SPACING of the brush radius.
+        const spacing = Math.max(1e-6, stroke.size * SCULPT_DAB_SPACING);
+        const travelled = hit.point.distanceTo(stroke.lastDab);
+        if (travelled < spacing) return;
+        const inv = new THREE.Matrix4().copy(this.getWorldMatrix(mesh)).invert();
+        const dabs = Math.min(8, Math.floor(travelled / spacing));
+        const from = stroke.lastDab.clone();
+        for (let k = 1; k <= dabs; k++) {
+          const center = from.clone().lerp(hit.point, k === dabs ? 1 : (k * spacing) / travelled);
+          stroke.localCenter = center.clone().applyMatrix4(inv);
+          this.applySculptBrush(mesh, stroke, center);
+        }
+        stroke.lastDab.copy(hit.point);
       }
     }
     if (this.selection.meshId === stroke.meshId) this.updateHighlights();

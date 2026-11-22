@@ -8,6 +8,9 @@ import { mergeHiddenDiagonals, reconstructImportedQuads } from './quadMerge';
 let nextId = 1;
 const genId = () => nextId++;
 
+const copyElementRotations = (rotations) => Object.fromEntries(
+  Object.entries(rotations || {}).filter(([, q]) => Array.isArray(q) && q.length === 4).map(([k, q]) => [k, [...q]]));
+
 // True when two of a face's triangles meet past the soft-normal angle (a real
 // fold). Degenerate triangles (no normal) are left out.
 function trianglesFoldPast(normals, softCos) {
@@ -43,6 +46,9 @@ export class EditableMesh {
     // Rotations taken off by Orientation reset, newest last, so each reset
     // can be undone later without losing edits made in between.
     this.orientationResets = [];
+    // The angle each vertex / edge / face selection of this object has been
+    // turned by, kept with the object: selection key -> quaternion [x, y, z, w].
+    this.elementRotations = {};
     this.smoothShading = false;
     // Imported triangle meshes can display only feature/crease edges without
     // removing any underlying editable topology.
@@ -897,6 +903,7 @@ export class EditableMesh {
     m.segments = this.segments ? { ...this.segments } : null;
     m.primitiveParams = this.primitiveParams ? { ...this.primitiveParams } : null;
     m.orientationResets = (this.orientationResets || []).map((r) => [...r]);
+    m.elementRotations = copyElementRotations(this.elementRotations);
     m.smoothShading = this.smoothShading;
     m.importedFeatureEdges = this.importedFeatureEdges;
     m.importedWireframeOnly = this.importedWireframeOnly;
@@ -948,6 +955,7 @@ export class EditableMesh {
       visible: this.visible, locked: this.locked, color: this.color,
       primitiveType: this.primitiveType, segments: this.segments, primitiveParams: this.primitiveParams,
       orientationResets: (this.orientationResets || []).map((r) => [...r]),
+      elementRotations: copyElementRotations(this.elementRotations),
       smoothShading: this.smoothShading,
       importedFeatureEdges: this.importedFeatureEdges,
       importedWireframeOnly: this.importedWireframeOnly,
@@ -999,6 +1007,7 @@ export class EditableMesh {
     m.segments = data.segments || null;
     m.primitiveParams = data.primitiveParams || null;
     m.orientationResets = (data.orientationResets || []).map((r) => [...r]);
+    m.elementRotations = copyElementRotations(data.elementRotations);
     m.smoothShading = data.smoothShading || false;
     m.importedFeatureEdges = !!data.importedFeatureEdges;
     m.importedWireframeOnly = !!data.importedWireframeOnly;

@@ -1,4 +1,4 @@
-import { Check, Hand, X } from 'lucide-react';
+import { Check, Hand, Undo2, X } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
 import SculptAxisButtons from './SculptAxisButtons';
 import SculptToolButtons from './SculptToolButtons';
@@ -7,7 +7,7 @@ import SculptSliderRow from './SculptSliderRow';
 export default function SculptPanel({
   tool, size, intensity, activeAxes,
   onTool, onSize, onIntensity, onAxesChange,
-  onCancel, onApply, onTuningChange,
+  onCancel, onApply, onUndo, onTuningChange,
 }) {
   const { uiColor, highlightColor } = useTheme();
   const actionClass = 'modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95';
@@ -18,15 +18,21 @@ export default function SculptPanel({
       onPointerDown={(event) => event.stopPropagation()}
     >
       <div data-sculpt-panel className="modeling-panel modeling-sheet rounded-2xl">
-        <div className="flex items-center gap-1.5 px-2 pt-2 pb-1">
-          <div className="flex w-[4.75rem] shrink-0 items-center gap-1.5 pl-0.5" style={{ color: uiColor }}>
+        {/* Side columns share the leftover width, so the axis buttons stay
+            centered whenever there is room for that. */}
+        <div className="grid grid-cols-[minmax(max-content,1fr)_auto_minmax(max-content,1fr)] items-center gap-1.5 px-2 pt-2 pb-1">
+          <div className="flex shrink-0 items-center gap-1.5 pl-0.5" style={{ color: uiColor }}>
             <Hand className="h-5 w-5 shrink-0" strokeWidth={1.75} />
             <h2 className="text-[16px] font-bold tracking-tight leading-none">Sculpt</h2>
           </div>
-          <div className="flex-1 flex justify-center min-w-0">
+          <div className="flex justify-center min-w-0">
             <SculptAxisButtons activeAxes={activeAxes} onChange={onAxesChange} />
           </div>
-          <div className="flex w-[4.75rem] shrink-0 items-center justify-end gap-3">
+          <div className="flex shrink-0 items-center justify-end gap-3">
+            {/* Takes back the last sculpt stroke only; the panel stays open. */}
+            <button type="button" onClick={onUndo} aria-label="Undo sculpt stroke" className={actionClass} style={{ color: uiColor }}>
+              <Undo2 className="h-6 w-6" strokeWidth={2.5} />
+            </button>
             <button type="button" onClick={onCancel} aria-label="Cancel sculpt" className={actionClass} style={{ color: uiColor }}>
               <X className="h-6 w-6" strokeWidth={2.5} />
             </button>
