@@ -1,6 +1,8 @@
 // Per-mode tool grid arrangement. Every grid is 6 columns aligned 1:1 with the
 // bottom bar (Tools | Vertex | Edge | Face | Object | Library).
-//   'void' — nothing can go there (the bottom bar button shows through).
+//   'void' — nothing can go there. In the bottom row, the open mode's column is
+//            always 'void': that mode's button stays there while its tools are
+//            open, so it can be tapped again to close them.
 //   null   — a free empty slot a tool can be dragged into.
 // The rows above each grid are vertical stacks up the screen edges: the last
 // column is free in every row (seven slots up the right edge), and the first
@@ -14,6 +16,15 @@ const STACK_ROWS = 7;
 const LEFT_SLOTS = 4;
 const stackRow = (r) => [r >= STACK_ROWS - LEFT_SLOTS ? null : VOID, VOID, VOID, VOID, VOID, null];
 const stack = () => Array.from({ length: STACK_ROWS }, (_, r) => stackRow(r));
+// A stack with tools set in it: [[row, col, id], ...].
+const stackWith = (placed) => {
+  const rows = stack();
+  for (const [r, c, id] of placed) rows[r][c] = id;
+  return rows;
+};
+
+// Bottom-row column of each mode's own button (Tools | Vertex | Edge | Face | Object).
+export const MODE_COLUMN = { general: 0, vertex: 1, edge: 2, face: 3, object: 4 };
 // A stack row: only its edge cells can ever hold a tool.
 export const isStackRow = (row) => row.slice(1, 5).every((cell) => cell === VOID);
 
@@ -72,56 +83,103 @@ const PREVIOUS_HIDDEN = {
 
 export const DEFAULT_LAYOUTS = {
   general: [
-    ...stack(),
-    ['materials', null, null, null, null, 'reference'],
-    ['sculpt', 'free_transform', 'convert', 'display', 'measure', 'protractor'],
+    ...stackWith([[STACK_ROWS - 1, 0, 'materials']]),
+    ['sculpt', null, null, null, null, 'reference'],
+    [VOID, 'free_transform', 'convert', 'display', 'measure', 'protractor'],
   ],
   object: [
-    ...stack().slice(0, STACK_ROWS - 1),
-    ['boolean', VOID, VOID, VOID, VOID, 'linear_array'],
-    ['radial_array', 'lock', 'smooth', 'divide', 'merge', 'soft_normals'],
-    ['combine', 'separate', 'mirror', 'clone', 'segments', 'delete'],
+    ...stackWith([[STACK_ROWS - 3, 5, 'radial_array'], [STACK_ROWS - 2, 5, 'linear_array'], [STACK_ROWS - 1, 5, 'boolean']]),
+    ['lock', 'soft_normals', 'smooth', 'divide', 'segments', 'merge'],
+    ['separate', 'combine', 'mirror', 'clone', VOID, 'delete'],
   ],
   face: [
     ...stack(),
-    [null, null, null, null, null, 'dissolve'],
-    ['bridge', 'draw_face', 'detach', 'clone', 'extrude', 'delete'],
+    [null, null, null, null, 'clone', 'dissolve'],
+    ['bridge', 'draw_face', 'detach', VOID, 'extrude', 'delete'],
   ],
   edge: [
     ...stack(),
-    ['split', 'select_ring', 'draw_cut', 'bridge', null, 'dissolve'],
-    ['cut_loop', 'select_loop', 'create_face_border', 'extrude', 'bevel', 'delete'],
+    ['split', 'bridge', 'draw_cut', 'select_ring', 'cut_loop', 'dissolve'],
+    ['select_loop', 'create_face_border', VOID, 'extrude', 'bevel', 'delete'],
   ],
   vertex: [
     ...stack(),
-    ['bevel', null, null, null, null, 'dissolve'],
-    ['add_vertex', 'create_face', 'connect', 'target_merge', 'merge', 'delete'],
+    ['bevel', null, null, null, 'merge', 'dissolve'],
+    ['create_face', VOID, 'connect', 'target_merge', 'add_vertex', 'delete'],
   ],
 };
 
-// Earlier defaults that are moved to the current default when a saved grid is
-// still exactly one of them (nothing rearranged by the user).
-const EARLIER_DEFAULTS = {
-  face: [[
-    ...stack(),
-    ['dissolve', null, null, null, null, null],
-    ['bridge', 'draw_face', 'detach', 'clone', 'extrude', 'delete'],
-  ]],
-  edge: [[
-    ...stack(),
-    ['split', 'select_ring', 'draw_cut', 'bridge', 'dissolve', null],
-    ['cut_loop', 'select_loop', 'create_face_border', 'extrude', 'bevel', 'delete'],
-  ]],
-  vertex: [[
-    ...stack(),
-    ['bevel', 'dissolve', null, null, null, null],
-    ['add_vertex', 'create_face', 'connect', 'target_merge', 'merge', 'delete'],
-  ]],
+const DEFAULT_HIDDEN = {
+  object: ['radial_array', 'linear_array', 'boolean', 'lock', 'soft_normals', 'smooth', 'divide', 'segments', 'merge'],
+  edge: ['split', 'bridge', 'draw_cut', 'select_ring', 'cut_loop'],
 };
 
-const DEFAULT_HIDDEN = {
-  object: ['boolean', 'radial_array', 'linear_array', 'lock', 'smooth', 'divide', 'merge', 'soft_normals'],
-  edge: ['split', 'select_ring', 'draw_cut', 'bridge'],
+// Earlier defaults (with their hidden tools) that are moved to the current
+// default when a saved grid is still exactly one of them (nothing rearranged
+// by the user).
+const EARLIER_DEFAULTS = {
+  general: [{
+    rows: [
+      ...stack(),
+      ['materials', null, null, null, null, 'reference'],
+      ['sculpt', 'free_transform', 'convert', 'display', 'measure', 'protractor'],
+    ],
+    hidden: [],
+  }],
+  object: [{
+    rows: [
+      ...stack().slice(0, STACK_ROWS - 1),
+      ['boolean', VOID, VOID, VOID, VOID, 'linear_array'],
+      ['radial_array', 'lock', 'smooth', 'divide', 'merge', 'soft_normals'],
+      ['combine', 'separate', 'mirror', 'clone', 'segments', 'delete'],
+    ],
+    hidden: ['boolean', 'radial_array', 'linear_array', 'lock', 'smooth', 'divide', 'merge', 'soft_normals'],
+  }],
+  face: [{
+    rows: [
+      ...stack(),
+      ['dissolve', null, null, null, null, null],
+      ['bridge', 'draw_face', 'detach', 'clone', 'extrude', 'delete'],
+    ],
+    hidden: [],
+  }, {
+    rows: [
+      ...stack(),
+      [null, null, null, null, null, 'dissolve'],
+      ['bridge', 'draw_face', 'detach', 'clone', 'extrude', 'delete'],
+    ],
+    hidden: [],
+  }],
+  edge: [{
+    rows: [
+      ...stack(),
+      ['split', 'select_ring', 'draw_cut', 'bridge', 'dissolve', null],
+      ['cut_loop', 'select_loop', 'create_face_border', 'extrude', 'bevel', 'delete'],
+    ],
+    hidden: ['split', 'select_ring', 'draw_cut', 'bridge'],
+  }, {
+    rows: [
+      ...stack(),
+      ['split', 'select_ring', 'draw_cut', 'bridge', null, 'dissolve'],
+      ['cut_loop', 'select_loop', 'create_face_border', 'extrude', 'bevel', 'delete'],
+    ],
+    hidden: ['split', 'select_ring', 'draw_cut', 'bridge'],
+  }],
+  vertex: [{
+    rows: [
+      ...stack(),
+      ['bevel', 'dissolve', null, null, null, null],
+      ['add_vertex', 'create_face', 'connect', 'target_merge', 'merge', 'delete'],
+    ],
+    hidden: [],
+  }, {
+    rows: [
+      ...stack(),
+      ['bevel', null, null, null, null, 'dissolve'],
+      ['add_vertex', 'create_face', 'connect', 'target_merge', 'merge', 'delete'],
+    ],
+    hidden: [],
+  }],
 };
 
 const KEY = 'axis3d.toolLayouts';
@@ -143,6 +201,20 @@ function placeMissing(rows, mode, id) {
     if (c >= 0) { rows[r][c] = id; return; }
   }
 }
+
+// Keep the open mode's button spot in the bottom row clear in a saved
+// arrangement. A tool the user had put there moves to its default spot if that
+// is free, otherwise to the last free slot.
+function clearModeButtonSpot(rows, mode) {
+  const bottom = Array.isArray(rows) ? rows[rows.length - 1] : null;
+  const c = MODE_COLUMN[mode];
+  if (!Array.isArray(bottom) || c === undefined || bottom[c] === VOID) return;
+  const id = bottom[c];
+  bottom[c] = VOID;
+  if (id) placeMissing(rows, mode, id);
+}
+
+const sameIds = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
 
 // A stored arrangement is only used when it still holds exactly the same tools
 // and blocked slots as the default, in the same shape, so a future tool addition
@@ -223,13 +295,14 @@ export function loadToolLayout(mode) {
     // Linear array joins saved object grids as an expanded-only tool, like Radial array.
     const linearAdded = mode === 'object' && Array.isArray(rows) && !allIds(rows).includes('linear_array');
     if (mode === 'object') placeMissing(rows, mode, 'linear_array');
+    const storedHidden = Array.isArray(all[mode]?.hidden) ? all[mode].hidden : [];
+    if (Array.isArray(rows) && (EARLIER_DEFAULTS[mode] || []).some((earlier) => JSON.stringify(rows) === JSON.stringify(earlier.rows)
+      && sameIds(storedHidden.filter((id) => allIds(rows).includes(id)), earlier.hidden))) {
+      return { rows: DEFAULT_LAYOUTS[mode], hidden: [...(DEFAULT_HIDDEN[mode] || [])] };
+    }
+    clearModeButtonSpot(rows, mode);
     if (matchesDefault(rows, mode)) {
-      const hidden = Array.isArray(all[mode].hidden) ? all[mode].hidden.filter((id) => allIds(rows).includes(id)) : [];
-      const defaultHidden = [...(DEFAULT_HIDDEN[mode] || [])].sort();
-      if ((EARLIER_DEFAULTS[mode] || []).some((earlier) => JSON.stringify(rows) === JSON.stringify(earlier))
-        && JSON.stringify([...hidden].sort()) === JSON.stringify(defaultHidden)) {
-        return { rows: DEFAULT_LAYOUTS[mode], hidden: [...(DEFAULT_HIDDEN[mode] || [])] };
-      }
+      const hidden = storedHidden.filter((id) => allIds(rows).includes(id));
       // Upgrade untouched defaults only; keep manually customized layouts.
       if (PREVIOUS_LAYOUTS[mode] && previousShape === JSON.stringify(widenStack(PREVIOUS_LAYOUTS[mode]))
         && (hidden.length === 0 || JSON.stringify([...hidden].sort()) === JSON.stringify([...PREVIOUS_HIDDEN[mode]].sort()))) {
