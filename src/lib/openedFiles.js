@@ -35,3 +35,6 @@ export function onOpenedFile(listener) {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
+
+// TEST BUILD ONLY: lets the browser test hand in a file as if Android had.
+window.__axisOpenFile = (file) => { queue.push({ file }); notify(); };
