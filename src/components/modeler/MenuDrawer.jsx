@@ -282,7 +282,7 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
           </div>
         );
       case 'grid':
-        return <GridCascade bare enabled={display.gridVisible} onToggle={display.onToggleGrid} panelStyle={panelStyle} />;
+        return <GridCascade bare enabled={display.gridVisible} onToggle={display.onToggleGrid} onApply={back} panelStyle={panelStyle} />;
       case 'snap':
         return <SnapCascade />;
       case 'settings':
@@ -370,7 +370,7 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
               style={{ background: panelStyle.background, top: cascadeAnchor.top, left: `calc(100% + 0.25rem - ${cascadeShift}px)`, width: 'max-content' }}
             >
               {viewportCascade === 'grid'
-                ? <GridCascade bare enabled={display.gridVisible} onToggle={display.onToggleGrid} panelStyle={panelStyle} />
+                ? <GridCascade bare enabled={display.gridVisible} onToggle={display.onToggleGrid} onApply={() => setViewportCascade(null)} panelStyle={panelStyle} />
                 : <TransformGizmoCascade />}
             </div>
           )}

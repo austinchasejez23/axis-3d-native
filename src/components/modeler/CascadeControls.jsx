@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 
-export function NumericEditor({ value, unit, min, onCommit }) {
+// `onDraft` (optional) hears every edit, so a panel's checkmark can apply
+// what is typed even when the field never loses focus.
+export function NumericEditor({ value, unit, min, onCommit, onDraft = undefined }) {
   const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
+  useEffect(() => { setDraft(String(value)); onDraft?.(String(value)); }, [value]);
   const commit = () => {
     const next = Number(draft);
     if (Number.isFinite(next) && next >= min) onCommit(next);
@@ -16,7 +18,7 @@ export function NumericEditor({ value, unit, min, onCommit }) {
         min={min}
         step="any"
         value={draft}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => { setDraft(e.target.value); onDraft?.(e.target.value); }}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
         className={`w-20 h-8 text-[13px] rounded-md border border-white/20 bg-white/10 px-2 text-right text-white font-mono outline-none`}
