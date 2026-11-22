@@ -206,6 +206,7 @@ declare module './SceneManager.js' {
     beginSceneLightMouse(e: any): any;
     /** Implemented by sceneGestures.js */
     beginSculptStroke(x: number, y: number): boolean;
+    sculptTouchPoint(x: number, y: number, onlyMeshId?: number | string | null): { meshId: any; point: import('three').Vector3 } | null;
     /** Implemented by sceneAddVertex.js */
     cancelAddVertex(): any;
     /** Implemented by sceneRadialArray.js */
