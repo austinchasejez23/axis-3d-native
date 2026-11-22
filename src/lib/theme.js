@@ -15,7 +15,8 @@ const RENDER_BOOST_MANUAL_ONLY_MIGRATION = 'axis_render_boost_manual_only_v1';
 const GRID_DEFAULT_ON_MIGRATION = 'axis_grid_default_on_v1';
 const TOOL_LABELS_DEFAULT_ON_MIGRATION = 'axis_tool_labels_default_on_v1';
 const SHORTER_HOLD_MIGRATION = 'axis_shorter_hold_v1';
-const DEFAULTS = { backgroundColor: '#1c1c1c', highlightColor: '#0066ff', gridColor: '#3a7bbf', shadowsEnabled: false, shadowIntensity: 0.6, defaultLightingEnabled: true, shineEnabled: true, shineIntensity: 0.7, wireframeEnabled: true, toolLabelsEnabled: true, unit: 'in', gridSquareSize: 1, gridSize: 100, snapToGrid: false, snapDistance: 0.0625, snapAngle: 15, lightFollowCamera: false, lightAzimuth: 45, lightElevation: 50, lightDistance: 8, lightColor: '#ffffff', lightIntensity: 1.5, savedColors: [], gestureMoveThreshold: 5, gestureHoldDelay: 400, gestureSelectReach: 0.025, gesturePinchThreshold: 6, gestureRotateSensitivity: 1, gestureScaleSensitivity: 1, hideDetailWhileEditing: true, renderBoostEnabled: false, focusRenderBoostEnabled: false, gridVisible: true, objectArrowsEnabled: false, measurementsOn: false, measurementOption: 'edge' };
+const INCH_GRID_MIGRATION = 'axis_inch_grid_v1';
+const DEFAULTS = { backgroundColor: '#1c1c1c', highlightColor: '#0066ff', gridColor: '#3a7bbf', shadowsEnabled: false, shadowIntensity: 0.6, defaultLightingEnabled: true, shineEnabled: true, shineIntensity: 0.7, wireframeEnabled: true, toolLabelsEnabled: true, unit: 'in', gridSquareSize: 0.5, gridSize: 250, snapToGrid: false, snapDistance: 0.0625, snapAngle: 15, lightFollowCamera: false, lightAzimuth: 45, lightElevation: 50, lightDistance: 8, lightColor: '#ffffff', lightIntensity: 1.5, savedColors: [], gestureMoveThreshold: 5, gestureHoldDelay: 400, gestureSelectReach: 0.025, gesturePinchThreshold: 6, gestureRotateSensitivity: 1, gestureScaleSensitivity: 1, hideDetailWhileEditing: true, renderBoostEnabled: false, focusRenderBoostEnabled: false, gridVisible: true, objectArrowsEnabled: false, gizmoSpace: 'local', measurementsOn: false, measurementOption: 'edge' };
 
 // Display settings that belong to one model. They are saved with it and restored
 // when it opens; everything else here (highlight color, gestures, tool labels,
@@ -26,7 +27,7 @@ export const SCENE_SETTING_KEYS = [
   'shadowsEnabled', 'shadowIntensity', 'shineEnabled', 'shineIntensity', 'wireframeEnabled',
   'defaultLightingEnabled',
   'lightFollowCamera', 'lightAzimuth', 'lightElevation', 'lightDistance', 'lightColor', 'lightIntensity',
-  'renderBoostEnabled', 'focusRenderBoostEnabled', 'objectArrowsEnabled',
+  'renderBoostEnabled', 'focusRenderBoostEnabled', 'objectArrowsEnabled', 'gizmoSpace',
   'measurementsOn', 'measurementOption',
 ];
 const pickScene = (source, fallback) => Object.fromEntries(SCENE_SETTING_KEYS.map((key) => [key, source?.[key] !== undefined ? source[key] : fallback[key]]));
@@ -105,6 +106,14 @@ function load() {
       if (saved.gestureHoldDelay == null || saved.gestureHoldDelay === 500) saved.gestureHoldDelay = 400;
       localStorage.setItem(SHORTER_HOLD_MIGRATION, '1');
     }
+    // The grid defaults to one-inch squares, 500 inches across (1 scene unit
+    // = 2 in). Only the old defaults (two-inch squares, 200 inches across)
+    // move; a chosen size stays.
+    if (!localStorage.getItem(INCH_GRID_MIGRATION)) {
+      if (saved.gridSquareSize == null || saved.gridSquareSize === 1) saved.gridSquareSize = 0.5;
+      if (saved.gridSize == null || saved.gridSize === 100) saved.gridSize = 250;
+      localStorage.setItem(INCH_GRID_MIGRATION, '1');
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
     return { ...DEFAULTS, ...saved };
   } catch {}
@@ -136,8 +145,8 @@ export const theme = {
   get wireframeEnabled() { return state.wireframeEnabled !== false; },
   get toolLabelsEnabled() { return state.toolLabelsEnabled === true; },
   get unit() { return state.unit || 'mm'; },
-  get gridSquareSize() { return state.gridSquareSize ?? 1; },
-  get gridSize() { return state.gridSize ?? 100; },
+  get gridSquareSize() { return state.gridSquareSize ?? 0.5; },
+  get gridSize() { return state.gridSize ?? 250; },
   get snapToGrid() { return !!state.snapToGrid; },
   get snapDistance() { return state.snapDistance ?? 0.0625; },
   get snapAngle() { return state.snapAngle ?? 15; },
@@ -163,6 +172,8 @@ export const theme = {
   // Viewport display state; saved per model (see SCENE_SETTING_KEYS).
   get gridVisible() { return state.gridVisible === true; },
   get objectArrowsEnabled() { return state.objectArrowsEnabled === true; },
+  // Transform gizmo arrows: along the world axes ('world') or the object's own axes ('local').
+  get gizmoSpace() { return state.gizmoSpace === 'world' ? 'world' : 'local'; },
   get measurementsOn() { return !!state.measurementsOn; },
   get measurementOption() { return state.measurementOption || 'edge'; },
   // Getting-started hints. Unless set in Settings, they are on for new users.
@@ -219,6 +230,7 @@ export function useTheme() {
     focusRenderBoostEnabled: theme.focusRenderBoostEnabled,
     gridVisible: theme.gridVisible,
     objectArrowsEnabled: theme.objectArrowsEnabled,
+    gizmoSpace: theme.gizmoSpace,
     measurementsOn: theme.measurementsOn,
     measurementOption: theme.measurementOption,
     hintsEnabled: theme.hintsEnabled,

@@ -1284,8 +1284,6 @@ export default function Modeler() {
       <TopBar
         clayViewport={clayViewport}
         transparentViewport={transparentViewport}
-        orthographic={orthographic}
-        onToggleOrthographic={() => setOrthographic((value) => !value)}
         freeTransform={freeTransform}
         snapping={snapToGrid}
         precision={precision}
@@ -1566,6 +1564,8 @@ export default function Modeler() {
         display={{
           gridVisible,
           onToggleGrid: (v) => setGridVisible(v),
+          orthographic,
+          onToggleOrthographic: () => setOrthographic((value) => !value),
           measurementsOn,
           onToggleMeasure: (v) => setMeasurementsOn(v),
           measurementOption,

@@ -6,7 +6,6 @@ import {
 import { ProtractorIcon, MeasureIcon } from '@/lib/toolIcons';
 import ResistanceIcon from '@/components/modeler/ResistanceIcon';
 import OrientationResetIcon from '@/components/modeler/OrientationResetIcon';
-import OrthographicIcon from '@/components/modeler/OrthographicIcon';
 import { TOOLS } from '@/lib/tools';
 
 // Basics shown at the top of the main Help page.
@@ -15,7 +14,7 @@ export const HELP_BASICS = [
   'Hide tools: touch and hold a tool, tap any others to add them, then select Hide. One tool is enough.',
   'Show tools: use the arrow above the tools to reveal hidden tools, select them, then select Show.',
   'Change the Background, Grid and Highlight colors: Menu > Viewport > Colors.',
-  'Toggle Grid, Wireframe, Object arrows, Dimensions and Tool labels: Menu > Viewport.',
+  'Toggle Grid, Orthographic, Tool labels, Wireframe, Transform gizmo and Dimensions: Menu > Viewport.',
   'Open the settings for Free Transform, Snapping and Resistance: double-tap the button.',
 ];
 
@@ -146,11 +145,6 @@ const desc = {
 
 const ALIASES = { soft_normals: ['Hard normals'], lock: ['Unlock'] };
 
-// The button at the top of the screen, between Menu and the information tip.
-const TOP = [
-  { key: 'top:orthographic', side: 'orthographic', label: 'Orthographic view', icon: OrthographicIcon, desc: 'Switches the view between perspective and orthographic. Orthographic draws everything at one scale with no perspective, so parallel edges stay parallel. Orbit, pan and zoom work the same in both. Tap again for perspective.' },
-];
-
 const modeEntries = (mode) => TOOLS[mode].pages[0].map((t) => ({
   key: `${mode}:${t.id}`, mode, label: t.label, aliases: ALIASES[t.id] || [], icon: t.icon, desc: desc[mode][t.id],
 }));
@@ -167,7 +161,7 @@ const SIDE = [
   { key: 'side:focus', side: 'focus', label: 'Focus', icon: Crosshair, desc: 'Re-centers the camera on the selection.' },
 ];
 
-// Tools grouped by mode: Object, Face, Edge, Vertex, General, then the side and top buttons.
+// Tools grouped by mode: Object, Face, Edge, Vertex, General, then the side buttons.
 export const HELP_SECTIONS = [
   { title: 'Object tools', entries: [...modeEntries('object'), segments] },
   { title: 'Face tools', entries: modeEntries('face') },
@@ -175,7 +169,6 @@ export const HELP_SECTIONS = [
   { title: 'Vertex tools', entries: modeEntries('vertex') },
   { title: 'General tools', entries: G.map((e) => ({ ...e, key: `general:${e.key}`, mode: 'general' })) },
   { title: 'Side buttons', entries: SIDE },
-  { title: 'Top button', entries: TOP },
 ];
 
 const HELP_ENTRIES = HELP_SECTIONS.flatMap((section) => section.entries);
