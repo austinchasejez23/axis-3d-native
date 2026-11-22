@@ -111,17 +111,57 @@ export function applySceneGestures(SceneManager) {
 
   // Sculpt strokes are shared by touch and mouse. Begin returns true when the
   // press landed on an editable mesh; the FIRST mesh touched owns the stroke.
-  P.beginSculptStroke = /** @this {import("./SceneManager").SceneManager} */ function (x, y) {
+  // Where a sculpt touch lands. On an object: the surface under the finger.
+  // Just off an object, within the brush's on-screen radius (at least two
+  // fingertip reaches, at most 120 px): the object's nearest point on screen,
+  // so its edges can be sculpted without the camera taking the touch.
+  // `onlyMeshId` limits it to the object a stroke started on.
+  P.sculptTouchPoint = /** @this {import("./SceneManager").SceneManager} */ function (x, y, onlyMeshId = null) {
     const ndc = this.screenToNDC(x, y);
-    const hits = this.raycastMeshes(ndc.x, ndc.y);
-    if (hits.length === 0) return false;
-    const meshId = this.findMeshIdByObject(hits[0].object);
+    const candidates = (onlyMeshId ? [this.getMesh(onlyMeshId)] : this.meshes)
+      .filter((mesh) => mesh && !mesh.locked && this.threeObjects.get(mesh.id)?.mesh.visible);
+    if (!candidates.length) return null;
+    this.pointer.set(ndc.x, ndc.y);
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    let exact = null;
+    for (const mesh of candidates) {
+      const hit = this.raycaster.intersectObject(this.threeObjects.get(mesh.id).mesh, false)[0];
+      if (hit && (!exact || hit.distance < exact.hit.distance)) exact = { meshId: mesh.id, hit };
+    }
+    if (exact) return { meshId: exact.meshId, point: exact.hit.point.clone() };
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const halfW = rect.width / 2, halfH = rect.height / 2;
+    const brushPx = this.brushSizeToScreenPixels(this.sculptTool?.size ?? 0.4);
+    const reach = Math.max(2 * TOUCH_REACH_PX, Math.min(120, brushPx));
+    let best = null;
+    let bestD = reach * reach;
+    const v = new THREE.Vector3();
+    for (const mesh of candidates) {
+      const wm = this.getWorldMatrix(mesh);
+      for (const p of mesh.vertices) {
+        v.set(p.x, p.y, p.z).applyMatrix4(wm).project(this.camera);
+        if (v.z < -1 || v.z > 1) continue;
+        const dx = (v.x - ndc.x) * halfW, dy = (v.y - ndc.y) * halfH;
+        const d = dx * dx + dy * dy;
+        if (d < bestD) {
+          bestD = d;
+          best = { meshId: mesh.id, point: new THREE.Vector3(p.x, p.y, p.z).applyMatrix4(wm) };
+        }
+      }
+    }
+    return best;
+  };
+
+  P.beginSculptStroke = /** @this {import("./SceneManager").SceneManager} */ function (x, y) {
+    const touch = this.sculptTouchPoint(x, y);
+    if (!touch) return false;
+    const meshId = touch.meshId;
     const mesh = this.getMesh(meshId);
     if (!mesh || mesh.locked) return false;
     this.beginHeavyEdit(meshId);
     const wm = this.getWorldMatrix(mesh);
     const inv = new THREE.Matrix4().copy(wm).invert();
-    const hitWorld = hits[0].point.clone();
+    const hitWorld = touch.point;
     const localCenter = hitWorld.clone().applyMatrix4(inv);
     const stroke = {
       meshId, tool: this.sculptTool.tool, size: this.sculptTool.size,
@@ -151,17 +191,9 @@ export function applySceneGestures(SceneManager) {
       const worldDelta = this.screenToWorldDrag(stroke.startScreen.x, stroke.startScreen.y, x, y, stroke.hitWorld);
       sculptGrabMove(this, mesh, stroke.grabbed, worldDelta, stroke.intensity, stroke.axes);
     } else {
-      // Only the stroke's own object can be sculpted, so only it is tested:
-      // the nearest hit on it is the same one a ray through the whole scene
-      // finds for it.
-      const ndc = this.screenToNDC(x, y);
-      const obj = this.threeObjects.get(stroke.meshId);
-      let hit;
-      if (obj?.mesh.visible && !mesh.locked) {
-        this.pointer.set(ndc.x, ndc.y);
-        this.raycaster.setFromCamera(this.pointer, this.camera);
-        hit = this.raycaster.intersectObject(obj.mesh, false)[0];
-      }
+      // Only the stroke's own object can be sculpted, so only it is tested,
+      // with the same reach past its edges as the start of a stroke.
+      const hit = this.sculptTouchPoint(x, y, stroke.meshId);
       if (hit) {
         // Dabs are laid along the path the finger has covered on the surface,
         // one every SCULPT_DAB_SPACING of the brush radius.
