@@ -1,62 +1,26 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
 
-// Where the chevron sits until it is moved: centred under the seven side
-// controls (their layout position, so it stays put while they are slid
-// away), hovering just above the left column's tools — the bottom bar, or
-// whatever is shown in the left slots above it, so it rises as tools are
-// expanded or moved there.
-function toolAnchor(node) {
-  const controls = document.getElementById('axis-side-controls');
-  const grid = node?.closest('[data-tool-grid]');
-  if (!controls || !grid) return null;
-  let topCell = null;
-  for (const cell of grid.querySelectorAll('[data-tool-cell$=":0"]')) {
-    const rect = cell.getBoundingClientRect();
-    if (rect.height > 0 && (!topCell || rect.top < topCell.top)) topCell = rect;
-  }
-  const top = topCell ? topCell.top : grid.querySelector('[data-tool-bar]')?.getBoundingClientRect().top;
-  if (!Number.isFinite(top)) return null;
-  // No room between the side controls and the left slots (all filled on a
-  // short screen): sit beside the top left-slot tool instead of on either.
-  if (topCell && top - 54 < controls.getBoundingClientRect().bottom + 2) {
-    return { x: Math.round(topCell.right + 2), y: Math.round(topCell.top) };
-  }
-  // Centred under the side controls' handle: the same spot whether the
-  // controls stand in a column under it or slide out in a row beside it.
-  const handle = document.getElementById('axis-side-handle') || controls;
-  return { x: Math.round(handle.offsetLeft + handle.offsetWidth / 2 - 34), y: Math.round(top - 52 - 2) };
-}
-
+// Until it is moved, the chevron sits in the strip above the tool grid
+// (ToolGridActions): centred, just above the second row from the bottom, where
+// no tool can be. Once moved, it stays where it was put.
 export default function MovableToolChevron({ mode, expanded, onToggle }) {
   const { uiColor, highlightColor } = useTheme();
-  const key = `axis3d.chevron.lower.v4.${mode}`;
+  const key = `axis3d.chevron.lower.v5.${mode}`;
   const read = () => { const p = JSON.parse(localStorage.getItem(key) || 'null'); return p && Number.isFinite(p.x) && Number.isFinite(p.y) ? p : null; };
   const [position, setPosition] = useState(read);
-  const [anchor, setAnchor] = useState(null);
   const [held, setHeld] = useState(false);
   const drag = useRef(null), timer = useRef(null), suppress = useRef(false), button = useRef(null);
   const clamp = (p) => ({ x: Math.max(0, Math.min(p.x, window.innerWidth - 68)), y: Math.max(0, Math.min(p.y, window.innerHeight - 52)) });
   useEffect(() => { setPosition(read()); return () => clearTimeout(timer.current); }, [key]);
-  // Re-measured after every render (tools expanded, hidden, moved, Boolean
-  // opened) and whenever the tool grid changes size.
-  const measure = () => {
-    const next = toolAnchor(button.current);
-    setAnchor((current) => (current?.x === next?.x && current?.y === next?.y ? current : next));
-  };
-  useLayoutEffect(measure);
   useEffect(() => {
-    const resize = () => { setPosition(p => p ? clamp(p) : null); measure(); };
+    const resize = () => setPosition(p => p ? clamp(p) : null);
     window.addEventListener('resize', resize);
-    const grid = button.current?.closest('[data-tool-grid]');
-    const observer = grid && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
-    if (grid) observer?.observe(grid);
-    return () => { window.removeEventListener('resize', resize); observer?.disconnect(); };
+    return () => window.removeEventListener('resize', resize);
   }, []);
-  // A moved chevron stays on screen; the default spot may sit slightly past
-  // the left edge so it stays centred under the side controls.
-  const placed = position ? clamp(position) : anchor ? { x: anchor.x, y: clamp(anchor).y } : null;
+  // A moved chevron stays on screen.
+  const placed = position ? clamp(position) : null;
   const finish = (e) => {
     e.stopPropagation(); clearTimeout(timer.current);
     if (drag.current?.moved && e.type !== 'pointercancel') localStorage.setItem(key, JSON.stringify(clamp(drag.current.next)));

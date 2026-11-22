@@ -1421,6 +1421,7 @@ export default function Modeler() {
           softNormalsOn={!!managerRef.current?.getMesh(managerRef.current?.selection.meshId)?.smoothShading}
           isPro={isPro}
           onProLock={openUpgrade}
+          onModeButton={() => handleModeChange(selectionMode)}
         />
       )}
 
@@ -1519,6 +1520,7 @@ export default function Modeler() {
         isPro={isPro}
         onProLock={openUpgrade}
         onActivateTool={(id) => dismissActiveTool(id)}
+        onModeButton={handleToggleTools}
       />
       )}
 

@@ -1,19 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Grid3x3 } from 'lucide-react';
 import { TOOLS } from '@/lib/tools';
-import { VOID, isStackRow } from '@/lib/toolLayout';
+import { VOID, isStackRow, MODE_COLUMN } from '@/lib/toolLayout';
 import { useTheme } from '@/lib/theme';
 import GridToolButton from './GridToolButton';
 import GlassToolRow from './GlassToolRow';
 import ToolGridActions from './ToolGridActions';
 import ToolDragGhost from './ToolDragGhost';
+import ModeGridButton from './ModeGridButton';
 import { useToolArrange } from '@/hooks/use-tool-arrange';
 import { PRO_TOOL_IDS } from '@/lib/proAccess';
 
 const SEGMENTS_TOOL = { id: 'segments', label: 'Segments', icon: Grid3x3 };
 const BOOLEAN_TOOLS = new Set(['subtract', 'union', 'intersect']);
 
-export default function ModeToolGrid({ selectionMode, onTool, onSegments, onLock, lockLabel, softNormalsOn, clearSelectionToken, isPro, onProLock }) {
+export default function ModeToolGrid({ selectionMode, onTool, onSegments, onLock, lockLabel, softNormalsOn, clearSelectionToken, isPro, onProLock, onModeButton }) {
   const { toolLabelsEnabled, highlightColor } = useTheme();
   const [booleanOpen, setBooleanOpen] = useState(false);
   const arrange = useToolArrange(selectionMode);
@@ -52,10 +53,13 @@ export default function ModeToolGrid({ selectionMode, onTool, onSegments, onLock
   const isHeld = (r, c) => arrange.held?.row === r && arrange.held?.col === c;
   const isOver = (r, c) => dragging && arrange.over?.row === r && arrange.over?.col === c && !isHeld(r, c);
   const heldTool = dragging ? byId[rows[arrange.held.row]?.[arrange.held.col]] : null;
+  // This mode's own button keeps its bottom-row spot while its tools are open.
+  const isModeCell = (r, c) => r === rows.length - 1 && c === MODE_COLUMN[selectionMode];
   // Follow the real visible tool positions, including tool swaps, hidden
   // positions and Boolean's temporary expanded options. Empty drop targets
   // never acquire a background.
   const backdropRows = rows.map((row, r) => row.map((cell, c) => {
+    if (isModeCell(r, c)) return true;
     if (cell === VOID) return false;
     if (booleanOpen && !dragging && expandedBoolean.has(`${r}:${c}`)) return true;
     if (cell === null) return booleanOpen && !dragging && expandedBoolean.has(`${r}:${c}`);
@@ -100,7 +104,9 @@ export default function ModeToolGrid({ selectionMode, onTool, onSegments, onLock
           nextCells={backdropRows[r + 1]}
           className={isStackRow(row) ? (toolLabelsEnabled ? 'min-h-14' : 'min-h-11') : ''}
           bar={!isStackRow(row)}
+          rowIndex={r}
           cells={row.map((cell, c) => {
+            if (isModeCell(r, c)) return <div data-mode-cell className="rounded-lg pointer-events-auto"><ModeGridButton mode={selectionMode} onPress={onModeButton} /></div>;
             if (cell === VOID) return null;
             if (BOOLEAN_TOOLS.has(cell) && !booleanOpen) return null;
             const expandedId = booleanOpen && !dragging ? expandedBoolean.get(`${r}:${c}`) : null;
