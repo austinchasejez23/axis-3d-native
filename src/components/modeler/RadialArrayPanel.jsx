@@ -5,9 +5,10 @@ import { toolMemory } from '@/lib/toolMemory';
 import { RadialArrayIcon } from '@/lib/toolIcons';
 import HorizontalChevronStepper from './HorizontalChevronStepper';
 import ModelingPanel from '@/components/modeler/ModelingPanel';
+import { toDisplayUnit, fromDisplayUnit } from '@/lib/units';
 
 export default function RadialArrayPanel({ onPreview, onApply, onCancel }) {
-  const { uiColor, highlightColor } = useTheme();
+  const { uiColor, highlightColor, unit } = useTheme();
   const [values, setValues] = useState(() => ({ ...toolMemory.radialArray }));
   // One keypad at a time: Count and Radius each have their own, so typing goes
   // to the field that was tapped.
@@ -44,8 +45,8 @@ export default function RadialArrayPanel({ onPreview, onApply, onCancel }) {
               <HorizontalChevronStepper label="Count" value={values.count} onChange={(count) => update({ count })} step={1} min={2} max={64} color={uiColor} highlightColor={highlightColor} appearance="radial" {...keypad('count')} />
             </div>
             <div className="min-w-0 pl-3">
-              <div className="mb-1 flex items-center gap-1 text-[12px] font-semibold" style={{ color: uiColor }}><CircleDot className="h-3.5 w-3.5 shrink-0 opacity-80" />Radius (scale units)</div>
-              <HorizontalChevronStepper label="Radius" value={values.radius ?? 3} onChange={(radius) => update({ radius })} step={0.25} decimals={2} min={0} max={1000} color={uiColor} highlightColor={highlightColor} appearance="radial" {...keypad('radius')} />
+              <div className="mb-1 flex items-center gap-1 text-[12px] font-semibold" style={{ color: uiColor }}><CircleDot className="h-3.5 w-3.5 shrink-0 opacity-80" />Radius ({unit})</div>
+              <HorizontalChevronStepper label="Radius" value={toDisplayUnit(values.radius ?? 3, unit)} onChange={(radius) => update({ radius: fromDisplayUnit(radius, unit) })} step={unit === 'in' ? 0.25 : 5} decimals={unit === 'in' ? 2 : 1} min={0} max={toDisplayUnit(1000, unit)} color={uiColor} highlightColor={highlightColor} appearance="radial" {...keypad('radius')} />
             </div>
           </div>
           <div className="mt-1.5 flex items-center border-t border-white/10 pt-1.5">

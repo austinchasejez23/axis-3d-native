@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { newVid, edgeKey, posKey, adjacentFaceIndicesForEdge, weldCoincidentVertices } from './meshTopology';
 import { createPipeBendSweep } from './pipeBendCode';
 import { mergeHiddenDiagonals } from './quadMerge';
+import { theme } from './theme';
+import { formatLength } from './units';
 
 // Multi-segment edge-LOOP bevel.
 //
@@ -884,7 +886,8 @@ export function bevelLoopEdges(sm, options = {}) {
         const mid = (lo + hi) / 2;
         if (fits(makeTubeSweep(mid))) lo = mid; else hi = mid;
       }
-      const show = (v) => (Math.round(v * 1000) / 1000).toFixed(3);
+      // In the app's unit, as the Radius field shows it.
+      const show = (v) => formatLength(v, theme.unit);
       sm.bevelNotice = lo > 1e-3
         ? `Radius ${show(r)} is too big for this bend. Up to ${show(lo)} fits.`
         : 'There is no room for this bend on the straight tube.';
