@@ -527,9 +527,10 @@ export default function Modeler() {
 
   // Tapping empty canvas acts like a back button: it closes the innermost open
   // thing (menu, guide, drawer, library, an open Surface sub-panel/picker, the
-  // picked paint tool) and only once nothing is left does it close Surface /
-  // Sculpt mode itself. It returns true when it consumed the tap so the current
-  // selection is kept instead of being cleared.
+  // picked paint tool) and only once nothing is left does it close Surface
+  // mode itself. Sculpt never closes from a touch on the screen: only its X,
+  // another tool, or the device back button close it. It returns true when it
+  // consumed the tap so the current selection is kept instead of being cleared.
   const handleCanvasBack = useCallback((fromCanvas = false) => {
     if (cancelOpenAddVertex()) return true;
     if (selectionPattern) { setSelectionPattern(null); return true; }
@@ -548,7 +549,7 @@ export default function Modeler() {
     if (libraryOpen) { setLibraryOpen(false); return true; }
     if (lightingOpen) { setLightingOpen(false); return true; }
     if (orientationOpen) { setOrientationOpen(false); return true; }
-    if (sculptOpen) { closeSculpt(); return true; }
+    if (sculptOpen) { if (!fromCanvas) closeSculpt(); return true; }
     return false;
   }, [cancelOpenAddVertex, selectionPattern, cancelOpenBevel, cancelOpenRadialArray, cancelOpenLinearArray, cancelOpenSnapPanel, cancelOpenFreeTransformPanel, menuOpen, guideOpen, transformDrawerOpen, libraryOpen, lightingOpen, orientationOpen, sculptOpen, closeSculpt]);
 
