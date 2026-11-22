@@ -84,7 +84,7 @@ try {
     'Menu and triangle counter must occupy matching 48px slots');
   assert.equal((top.match(/absolute left-\[2px\] w-12 rounded-xl pointer-events-auto/g) || []).length, 1,
     'The fixed side chevron sits a few px left of the Menu, with the seven controls');
-  assert.match(bar, /left-0 right-0.*safe-bottom pt-1/, 'Bottom bar should retain full viewport width');
+  assert.match(bar, /left-0 right-0 z-30 px-1 pb-\[calc\(0\.75rem\+var\(--axis-safe-bottom/, 'Bottom bar should sit where the tool panels\' bottom row sits');
   assert.match(bar, /rgba\(9,13,22,0\.38\)/, 'Bottom toolbar should have faint transparent background');
   assert.match(top, /The seven controls: one background, dividers between buttons/, 'Seven side controls must share one panel');
   assert.match(top, /absolute left-\[2px\] w-12 rounded-xl py-1/, 'Side control panel sits a few px left of the Menu');
