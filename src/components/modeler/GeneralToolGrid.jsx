@@ -36,6 +36,7 @@ export default function GeneralToolGrid({
   const [convertSpot, setConvertSpot] = useState(null);
   const gridRef = useRef(null);
   const convertCellRef = useRef(null);
+  const convertListRef = useRef(null);
   const referenceInputRef = useRef(null);
   const arrange = useToolArrange('general');
   useEffect(() => { arrange.clearSelected(); }, [clearSelectionToken]);
@@ -105,7 +106,7 @@ export default function GeneralToolGrid({
         button,
         rows: [...grid.querySelectorAll('[data-tool-row]')].map(rect),
         columns: 6,
-        height: convertItems.length * button.height,
+        height: convertListRef.current?.offsetHeight || convertItems.length * button.height,
         gap: 4,
         blockers,
       });
@@ -175,13 +176,17 @@ export default function GeneralToolGrid({
                 {cell === 'convert' && convertOpen && (
                   // Same surface as the tool panel behind it. Straight up until
                   // the clear spot has been measured.
+                  // The background hugs the four choices; it is centred in the
+                  // column it opens in.
                   <div
-                    className={`absolute z-30 flex flex-col rounded-lg pointer-events-auto ${convertSpot ? '' : 'right-0 bottom-[calc(100%+0.25rem)] w-full'}`}
-                    style={{ background: 'rgba(9,13,22,0.38)', ...(convertSpot || {}) }}
+                    className={`absolute z-30 flex justify-center pointer-events-none ${convertSpot ? '' : 'right-0 bottom-[calc(100%+0.25rem)] w-full'}`}
+                    style={convertSpot || undefined}
                   >
-                    {convertItems.map((item) => (
-                      <GridToolButton key={item.label} fullWidth icon={item.icon} iconClassName="w-5 h-5" label={item.label} onClick={item.onClick} />
-                    ))}
+                    <div ref={convertListRef} className="flex w-fit flex-col rounded-lg pointer-events-auto" style={{ background: 'rgba(9,13,22,0.38)' }}>
+                      {convertItems.map((item) => (
+                        <GridToolButton key={item.label} fullWidth icon={item.icon} iconClassName="w-5 h-5" label={item.label} onClick={item.onClick} sizeClassName={toolLabelsEnabled ? 'h-11 gap-0.5 px-2' : 'h-9 px-2'} />
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
