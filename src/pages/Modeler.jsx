@@ -57,6 +57,7 @@ import { TOOLS } from '@/lib/tools';
 import { getToolRequirementNotice } from '@/lib/toolRequirements';
 import { UNAVAILABLE_EVENT, notifyUnavailable } from '@/lib/unavailable';
 import { useProAccess } from '@/lib/ProAccessContext';
+import { peekOpenedFile, takeOpenedFile, onOpenedFile } from '@/lib/openedFiles';
 import { FREE_PROJECT_LIMIT, FREE_TRIANGLE_LIMIT, PRO_TOOL_IDS, TRIANGLE_GROWTH_TOOLS, totalTriangles } from '@/lib/proAccess';
 import { toolMemory } from '@/lib/toolMemory';
 import { useTheme, theme } from '@/lib/theme';
@@ -354,9 +355,13 @@ export default function Modeler() {
   // viewport's own ready callback (not a mount effect) so the cube and grid can
   // never be skipped because the scene wasn't built yet — the cause of the
   // occasional empty black canvas.
+  // Set once the scene has its model (saved, new, or opened from another app).
+  const [sceneReady, setSceneReady] = useState(false);
   const handleViewportReady = useCallback(async (mgr) => {
     const urlParams = new URLSearchParams(window.location.search);
     const projectId = urlParams.get('id');
+    // A model file opened with AXIS from another app starts this new model.
+    const opened = urlParams.get('opened') === '1' ? peekOpenedFile()?.file : null;
     let existing = null;
     try { existing = projectId ? await loadProject(projectId) : null; } finally { if (!existing) setModelLoading(false); }
     if (!existing && !isPro && listProjects().length >= FREE_PROJECT_LIMIT) {
@@ -379,15 +384,19 @@ export default function Modeler() {
       resetRenderBoostAuto();
       if (mgr.grid) mgr.grid.visible = theme.gridVisible;
       mgr.projectId = generateProjectId();
-      mgr.projectName = uniqueProjectName('Untitled', mgr.projectId);
+      // Named after an opened file, which is then the model's only content.
+      mgr.projectName = uniqueProjectName((opened && opened.name.replace(/\.[^.]+$/, '')) || 'Untitled', mgr.projectId);
       setProjectName(mgr.projectName);
-      mgr.addPrimitive('cube', 12);
-      mgr._newProjectStartingView = true;
-      mgr.frameScene(7.8);
+      if (!opened) {
+        mgr.addPrimitive('cube', 12);
+        mgr._newProjectStartingView = true;
+        mgr.frameScene(7.8);
+      }
     }
     mgr.triangleLimit = isPro ? Infinity : FREE_TRIANGLE_LIMIT;
     mgr.setViewportDisplayMode({ clay: clayViewport, transparent: transparentViewport });
     mgr.setOrthographic(orthographic);
+    setSceneReady(true);
   }, [clayViewport, transparentViewport, orthographic, isPro, openUpgrade, navigate]);
 
   // Keyboard undo
@@ -1153,6 +1162,28 @@ export default function Modeler() {
       setImporting(false);
     }
   }, [isPro, openUpgrade]);
+
+  // Model files opened with AXIS from another app ("Open with") are imported
+  // into the open model, one after another, once the scene is ready.
+  const openingFilesRef = useRef(false);
+  useEffect(() => {
+    if (!sceneReady) return undefined;
+    const importOpened = async () => {
+      if (openingFilesRef.current) return;
+      openingFilesRef.current = true;
+      try {
+        let item;
+        while ((item = takeOpenedFile())) {
+          if (item.error) toast.error(item.error);
+          else await handleImport(item.file);
+        }
+      } finally {
+        openingFilesRef.current = false;
+      }
+    };
+    importOpened();
+    return onOpenedFile(importOpened);
+  }, [sceneReady, handleImport]);
 
   const handleLock = useCallback(() => {
     const mgr = managerRef.current;
