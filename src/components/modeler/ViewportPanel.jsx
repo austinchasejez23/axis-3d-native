@@ -1,5 +1,6 @@
 import { useTheme, theme } from '@/lib/theme';
 import { Axis3D, Box, Grid3X3, Palette, Ruler, Tags } from 'lucide-react';
+import OrthographicIcon from './OrthographicIcon';
 
 // Match the main menu's exact row dimensions, icon size, text size and spacing.
 function ViewportRow({ label, icon: Icon, onClick, color, pressed = false }) {
@@ -17,7 +18,7 @@ function ViewportRow({ label, icon: Icon, onClick, color, pressed = false }) {
   );
 }
 
-export default function ViewportPanel({ gridEnabled, dimensionsEnabled, onGrid, onToggleDimensions, onColors }) {
+export default function ViewportPanel({ gridEnabled, dimensionsEnabled, onGrid, onToggleDimensions, onColors, orthographic, onToggleOrthographic, onGizmo }) {
   const t = useTheme();
   const toggle = (label, icon, enabled, onChange) => (
     <ViewportRow
@@ -36,11 +37,15 @@ export default function ViewportPanel({ gridEnabled, dimensionsEnabled, onGrid, 
     <div>
       <ViewportRow label="Grid" icon={Grid3X3} color={gridEnabled ? t.highlightColor : t.uiColor} onClick={onGrid} />
       {divider()}
+      {/* On: orthographic view. Off: perspective view. */}
+      {toggle('Orthographic', OrthographicIcon, !!orthographic, () => onToggleOrthographic?.())}
+      {divider()}
       {toggle('Tool labels', Tags, t.toolLabelsEnabled, (enabled) => theme.set({ toolLabelsEnabled: enabled }))}
       {divider()}
       {toggle('Wireframe', Box, t.wireframeEnabled, (enabled) => theme.set({ wireframeEnabled: enabled }))}
       {divider()}
-      {toggle('Object arrows', Axis3D, t.objectArrowsEnabled, (enabled) => theme.set({ objectArrowsEnabled: enabled }))}
+      {/* Opens its panel beside it: on/off, World or Local. */}
+      <ViewportRow label="Transform gizmo" icon={Axis3D} color={t.objectArrowsEnabled ? t.highlightColor : t.uiColor} onClick={onGizmo} />
       {divider()}
       {toggle('Dimensions', Ruler, dimensionsEnabled, onToggleDimensions)}
       {divider()}

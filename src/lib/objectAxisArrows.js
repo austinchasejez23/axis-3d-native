@@ -55,12 +55,16 @@ export function updateObjectAxisArrows(manager) {
     viewPosition.copy(mesh.position).applyMatrix4(manager.camera.matrixWorldInverse);
     group.visible = mesh.visible && -viewPosition.z > manager.camera.near;
     group.position.copy(mesh.position);
-    group.quaternion.setFromEuler(mesh.rotation);
+    // World: along the world axes. Local: along the object's own axes.
+    const local = theme.gizmoSpace !== 'world';
+    if (local) group.quaternion.setFromEuler(mesh.rotation);
+    else group.quaternion.identity();
     // Constant readable screen size, independent of object scale or camera zoom.
     const depth = manager.camera.isOrthographicCamera ? manager.cameraDist : Math.max(manager.camera.near, -viewPosition.z);
     const length = 64 * 2 * depth
       * Math.tan(THREE.MathUtils.degToRad(manager.camera.fov / 2)) / Math.max(1, resolution.y);
-    group.scale.set(length * (Math.sign(mesh.scale.x) || 1), length * (Math.sign(mesh.scale.y) || 1), length * (Math.sign(mesh.scale.z) || 1));
+    const sign = (v) => (local ? Math.sign(v) || 1 : 1);
+    group.scale.set(length * sign(mesh.scale.x), length * sign(mesh.scale.y), length * sign(mesh.scale.z));
     for (const child of group.children) child.material.resolution?.copy(resolution);
   }
 }

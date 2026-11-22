@@ -1,4 +1,4 @@
-// Icon of the Orthographic view button (top of the screen, and in Help): a
+// Icon of the Orthographic row in Menu > Viewport: a
 // cube whose receding edges stay parallel, as they do in an orthographic view.
 export default function OrthographicIcon({ className = '', strokeWidth = 2, style }) {
   return (

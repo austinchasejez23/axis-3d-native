@@ -6,6 +6,7 @@ import SettingsPanel from './SettingsPanel';
 import ViewportPanel from './ViewportPanel';
 import MenuColorPicker from './MenuColorPicker';
 import GridCascade from './GridCascade';
+import TransformGizmoCascade from './TransformGizmoCascade';
 import SnapCascade from './SnapCascade';
 import GesturePanel from './GesturePanel';
 import MenuScreenHeader from './MenuScreenHeader';
@@ -55,7 +56,8 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
   // spot, and the header's back chevron steps back exactly one level.
   const [stack, setStack] = useState([]);
   const [viewportCascade, setViewportCascade] = useState(null);
-  const [gridAnchor, setGridAnchor] = useState({ top: 44, width: 196 });
+  // Where the open Viewport sub-panel (Grid or Transform gizmo) sits: beside its row.
+  const [cascadeAnchor, setCascadeAnchor] = useState({ top: 44, width: 196 });
   const cascadeLayoutRef = useRef(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [name, setName] = useState(projectName);
@@ -131,14 +133,14 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
   const push = (id) => { setViewportCascade(null); setStack((s) => [...s, id]); };
   const back = () => { setViewportCascade(null); setStack((s) => s.slice(0, -1)); };
   const toggleViewportCascade = (id, event) => {
-    if (id === 'grid' && event?.currentTarget && cascadeLayoutRef.current) {
+    if (event?.currentTarget && cascadeLayoutRef.current) {
       const button = event.currentTarget.getBoundingClientRect();
       const menu = cascadeLayoutRef.current.getBoundingClientRect();
-      // Position the Grid settings panel at the actual Grid button's height,
-      // and keep its slightly wider controls within the phone viewport.
+      // Position the settings panel at the actual row's height, and keep its
+      // slightly wider controls within the phone viewport.
       // Screen distances are divided by the menu's zoom, since the panel's
       // own lengths are scaled by it.
-      setGridAnchor({
+      setCascadeAnchor({
         top: Math.max(0, (button.top - menu.top) / MENU_ZOOM),
         width: Math.max(128, Math.min(208, (window.innerWidth - menu.right - 12) / MENU_ZOOM)),
       });
@@ -262,6 +264,9 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
               onGrid={(event) => toggleViewportCascade('grid', event)}
               onToggleDimensions={display.onToggleMeasure}
               onColors={() => push('colors')}
+              orthographic={display.orthographic}
+              onToggleOrthographic={display.onToggleOrthographic}
+              onGizmo={(event) => toggleViewportCascade('gizmo', event)}
             />
           </div>
         );
@@ -347,12 +352,14 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
             <div className={`modeling-value m-1.5 rounded-lg ${screen === 'account' ? '' : 'py-1 [&_button]:min-h-8'}`}>{renderBody()}</div>
           </div>
 
-          {screen === 'viewport' && viewportCascade === 'grid' && (
+          {screen === 'viewport' && (viewportCascade === 'grid' || viewportCascade === 'gizmo') && (
             <div
               className="modeling-sheet absolute z-10 rounded-2xl pointer-events-auto"
-              style={{ background: panelStyle.background, top: gridAnchor.top, left: 'calc(100% + 0.25rem)', width: 'max-content' }}
+              style={{ background: panelStyle.background, top: cascadeAnchor.top, left: 'calc(100% + 0.25rem)', width: 'max-content' }}
             >
-              <GridCascade bare enabled={display.gridVisible} onToggle={display.onToggleGrid} panelStyle={panelStyle} />
+              {viewportCascade === 'grid'
+                ? <GridCascade bare enabled={display.gridVisible} onToggle={display.onToggleGrid} panelStyle={panelStyle} />
+                : <TransformGizmoCascade />}
             </div>
           )}
         </div>
