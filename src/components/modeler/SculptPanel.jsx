@@ -1,5 +1,6 @@
 import { Check, Hand, Undo2, X } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
+import { toDisplayUnit } from '@/lib/units';
 import SculptAxisButtons from './SculptAxisButtons';
 import SculptToolButtons from './SculptToolButtons';
 import SculptSliderRow from './SculptSliderRow';
@@ -9,7 +10,7 @@ export default function SculptPanel({
   onTool, onSize, onIntensity, onAxesChange,
   onCancel, onApply, onUndo, onTuningChange,
 }) {
-  const { uiColor, highlightColor } = useTheme();
+  const { uiColor, highlightColor, unit } = useTheme();
   const actionClass = 'modeling-value flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:scale-95';
 
   return (
@@ -46,7 +47,7 @@ export default function SculptPanel({
           <SculptToolButtons tool={tool} onTool={onTool} />
           <div className="flex-1 min-h-0 flex flex-col">
             <SculptSliderRow
-              label="Size" value={size} display={size.toFixed(2)}
+              label="Size" value={size} display={`${toDisplayUnit(size, unit).toFixed(unit === 'in' ? 2 : 1)} ${unit}`}
               min={0.05} max={2} step={0.01} onChange={onSize}
               onActiveChange={onTuningChange}
             />

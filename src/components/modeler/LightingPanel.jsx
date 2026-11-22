@@ -7,6 +7,7 @@ import ModelingPanel from '@/components/modeler/ModelingPanel';
 import InlineSlider from '@/components/modeler/InlineSlider';
 import RoundColorPicker from '@/components/modeler/RoundColorPicker';
 import { blockedButton } from '@/lib/unavailable';
+import { toDisplayUnit } from '@/lib/units';
 
 // Range runs from 1 to the longest range on a ratio scale, so short ranges
 // for small models and long ones for full-size models are both easy to set.
@@ -22,7 +23,7 @@ const TYPES = [
 // Lighting: same docked sheet as the other tool panels. Every change applies
 // live; Check keeps it, X puts the lights back the way they were on opening.
 export default function LightingPanel({ state, managerRef, onClose }) {
-  const { uiColor, highlightColor, defaultLightingEnabled, shadowsEnabled, shadowIntensity } = useTheme();
+  const { uiColor, highlightColor, defaultLightingEnabled, shadowsEnabled, shadowIntensity, unit } = useTheme();
   const [opening] = useState(() => {
     const manager = managerRef.current;
     return manager ? {
@@ -129,7 +130,7 @@ export default function LightingPanel({ state, managerRef, onClose }) {
         <div className="modeling-value mb-1.5 grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-lg px-2.5 py-2">
           <InlineSlider grow compact label="Intensity" value={light.intensity} display={light.intensity.toFixed(2)} min={0} max={5} step={0.05}
             onChange={(intensity) => change({ intensity })} onActiveChange={begin} />
-          <InlineSlider grow compact label="Range" value={rangeToSlider(light.range)} display={light.range.toFixed(1)} min={0} max={100} step={0.1}
+          <InlineSlider grow compact label="Range" value={rangeToSlider(light.range)} display={`${toDisplayUnit(light.range, unit).toFixed(unit === 'in' ? 1 : 0)} ${unit}`} min={0} max={100} step={0.1}
             onChange={(value) => change({ range: sliderToRange(value) })} onActiveChange={begin} />
           <InlineSlider grow compact label={spot ? 'Cone' : 'Radius'} value={light.radius} display={spot ? `${Math.round(light.radius)}°` : light.radius.toFixed(1)}
             min={spot ? 5 : 0.1} max={spot ? 85 : 5} step={spot ? 1 : 0.1} disabled={light.type === 'directional'} disabledReason="Directional light has no radius"
