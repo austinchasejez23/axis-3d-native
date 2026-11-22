@@ -58,6 +58,9 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
   const [viewportCascade, setViewportCascade] = useState(null);
   // Where the open Viewport sub-panel (Grid or Transform gizmo) sits: beside its row.
   const [cascadeAnchor, setCascadeAnchor] = useState({ top: 44, width: 196 });
+  // How far the sub-panel moves left so its right edge stays on screen.
+  const cascadeRef = useRef(null);
+  const [cascadeShift, setCascadeShift] = useState(0);
   const cascadeLayoutRef = useRef(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [name, setName] = useState(projectName);
@@ -115,6 +118,14 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
     if (key !== reportedRect.current) { reportedRect.current = key; onPanelRect?.(rect); }
   };
   useLayoutEffect(reportPanelRect);
+  useLayoutEffect(() => {
+    const node = cascadeRef.current;
+    if (!node) { if (cascadeShift) setCascadeShift(0); return; }
+    // Screen distances are divided by the menu's zoom, as for the anchor.
+    const overflow = node.getBoundingClientRect().right + cascadeShift * MENU_ZOOM - (window.innerWidth - 4);
+    const next = Math.max(0, overflow / MENU_ZOOM);
+    if (Math.abs(next - cascadeShift) > 0.5) setCascadeShift(next);
+  }, [open, stack, viewportCascade, cascadeShift]);
   useEffect(() => {
     const node = cascadeLayoutRef.current;
     if (!open || !node || typeof ResizeObserver === 'undefined') return undefined;
@@ -354,8 +365,9 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
 
           {screen === 'viewport' && (viewportCascade === 'grid' || viewportCascade === 'gizmo') && (
             <div
+              ref={cascadeRef}
               className="modeling-sheet absolute z-10 rounded-2xl pointer-events-auto"
-              style={{ background: panelStyle.background, top: cascadeAnchor.top, left: 'calc(100% + 0.25rem)', width: 'max-content' }}
+              style={{ background: panelStyle.background, top: cascadeAnchor.top, left: `calc(100% + 0.25rem - ${cascadeShift}px)`, width: 'max-content' }}
             >
               {viewportCascade === 'grid'
                 ? <GridCascade bare enabled={display.gridVisible} onToggle={display.onToggleGrid} panelStyle={panelStyle} />
