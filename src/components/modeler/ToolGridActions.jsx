@@ -2,11 +2,12 @@ import { EyeOff, Eye } from 'lucide-react';
 import MovableToolChevron from '@/components/modeler/MovableToolChevron';
 import { useTheme } from '@/lib/theme';
 
-// Centred strip just above the second row from the bottom (the highest row
-// that can be a full row of tools), so it never covers a tool. Hide and Show
+// Hide and Show sit centred just above the second row from the bottom (the
+// highest row that can be a full row of tools), so they never cover a tool;
 // both appear as soon as one or more tools are selected. The chevron appears
 // once anything is hidden and expands (up) or collapses (down) the hidden
-// tools; it stays in this strip until it is moved.
+// tools; it sits on the left, under the seven side controls, until it is
+// moved (see MovableToolChevron).
 export default function ToolGridActions({ mode, showHide, onHide, onShow, showChevron, expanded, onToggleExpanded }) {
   const { uiColor, toolLabelsEnabled } = useTheme();
   if (!showHide && !showChevron) return null;
