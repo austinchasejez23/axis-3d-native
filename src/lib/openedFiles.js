@@ -1,9 +1,9 @@
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Capacitor } from '@capacitor/core';
+import { AxisFiles } from '@/lib/axisFilesPlugin';
 
 // Model files opened with AXIS from another app ("Open with" on Android).
 // The native side copies the file into the app's cache and reports it; it is
 // read here and queued until the modeler takes it.
-const AxisFiles = registerPlugin('AxisFiles');
 const queue = [];
 const listeners = new Set();
 let started = false;
@@ -38,3 +38,4 @@ export function onOpenedFile(listener) {
 
 // TEST BUILD ONLY: lets the browser test hand in a file as if Android had.
 window.__axisOpenFile = (file) => { queue.push({ file }); notify(); };
+window.__axisOpenDebug = () => ({ queue: queue.length, listeners: listeners.size });

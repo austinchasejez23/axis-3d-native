@@ -1,7 +1,6 @@
 import * as THREE from 'three';
-import { Capacitor, registerPlugin } from '@capacitor/core';
-
-const AxisFiles = registerPlugin('AxisFiles');
+import { Capacitor } from '@capacitor/core';
+import { AxisFiles } from '@/lib/axisFilesPlugin';
 
 /** Convert model bytes to aligned base64 chunks for the native save picker. */
 async function encodeFileForAndroid(blob) {
