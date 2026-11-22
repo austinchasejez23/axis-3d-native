@@ -51,12 +51,12 @@ export default function BottomToolbar({ selectionMode, onModeChange, onToggleToo
     textShadow: '0 1px 3px rgba(0,0,0,0.35)',
   };
 
+  // Same background, size and spot as the bottom row of the tool panels, so
+  // the mode buttons line up with the tools' columns and look the same.
+  const height = toolLabelsEnabled ? 'h-14' : 'h-11';
   return (
-    <div
-      className="absolute bottom-0 left-0 right-0 z-30 safe-bottom pt-1"
-      style={{ background: 'rgba(9,13,22,0.38)', borderTop: '1px solid rgba(255,255,255,0.07)' }}
-    >
-      <div className="flex items-end justify-center gap-0 mx-0 mb-0">
+    <div className="absolute bottom-0 left-0 right-0 z-30 px-1 pb-[calc(0.75rem+var(--axis-safe-bottom,env(safe-area-inset-bottom,0px)))] pointer-events-none">
+      <div className="flex items-end justify-center gap-0 rounded-lg pointer-events-auto" style={{ background: 'rgba(9,13,22,0.38)' }}>
         {modes.map((mode) => {
           if (soloButton && mode.id !== soloButton) {
             return <div key={mode.id} className="flex-1" />;
@@ -70,7 +70,7 @@ export default function BottomToolbar({ selectionMode, onModeChange, onToggleToo
                 aria-label="Tools"
                 aria-pressed={active}
                 style={active ? { ...buttonBase, color: highlightColor } : buttonBase}
-                className="flex-1 min-w-0 h-16 flex flex-col items-center justify-center gap-0.5 transition-colors touch-manipulation"
+                className={`flex-1 min-w-0 ${height} flex flex-col items-center justify-center gap-0.5 transition-colors touch-manipulation`}
               >
                 <Wrench className="w-[25px] h-[25px]" strokeWidth={2.5} />
                 {toolLabelsEnabled && <span className="text-xs font-semibold">{mode.label}</span>}
@@ -88,7 +88,7 @@ export default function BottomToolbar({ selectionMode, onModeChange, onToggleToo
               aria-label={`${mode.label} mode`}
               aria-pressed={active}
               style={active ? { ...buttonBase, color: highlightColor } : buttonBase}
-              className="flex-1 min-w-0 h-16 flex flex-col items-center justify-center gap-0.5 transition-colors touch-manipulation"
+              className={`flex-1 min-w-0 ${height} flex flex-col items-center justify-center gap-0.5 transition-colors touch-manipulation`}
             >
               <ModeIcon mode={mode.id} color={active ? highlightColor : uiColor} />
             </button>
@@ -100,7 +100,7 @@ export default function BottomToolbar({ selectionMode, onModeChange, onToggleToo
           aria-label="Library"
           aria-pressed={libraryOpen}
           style={libraryOpen ? { ...buttonBase, color: highlightColor } : buttonBase}
-          className="flex-1 min-w-0 h-16 flex flex-col items-center justify-center gap-0.5 transition-colors touch-manipulation"
+          className={`flex-1 min-w-0 ${height} flex flex-col items-center justify-center gap-0.5 transition-colors touch-manipulation`}
         >
           <Library className="w-[25px] h-[25px]" strokeWidth={2} />
           {toolLabelsEnabled && <span className="text-xs font-semibold">Library</span>}
