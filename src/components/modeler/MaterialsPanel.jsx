@@ -93,10 +93,12 @@ export default function MaterialsPanel({
   const setEnv = (id) => { setEnvId(id); markDirty(); managerRef.current?.setReflectionEnvironment(id === 'none' ? null : id); };
   const toggleSoftNormals = () => {
     const manager = managerRef.current;
-    if (!manager?.selection.meshId) { toast.error('Select an object first'); return; }
+    // The selected object, or every object in a multi-selection.
+    const ids = manager?.targetMeshIds() ?? [];
+    if (!ids.length) { toast.error('Select an object first'); return; }
     manager.executeTool('soft_normals');
     markDirty();
-    const mesh = manager.getMesh(manager.selection.meshId);
+    const mesh = manager.getMesh(manager.selection.meshId) || manager.getMesh(ids[0]);
     setSoftNormalsOn(!!mesh?.smoothShading);
   };
 

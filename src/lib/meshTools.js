@@ -10,14 +10,19 @@ import { collectTopologicalEdgeLoop } from './edgeLoopTraversal';
 import { clonePaintLayer } from './paintLayer';
 
 // Toggle smooth (interpolated) normals for the selected mesh.
+// Soft / hard normals for the selected object, or for every object in a
+// multi-selection. They all end up the same: the opposite of what the selected
+// object (the one the button's label follows) has now.
 export function toggleSmoothShading(sm) {
-  const sel = sm.selection;
-  if (!sel.meshId) return;
-  const mesh = sm.getMesh(sel.meshId);
-  if (!mesh) return;
+  const meshes = sm.targetMeshIds().map((id) => sm.getMesh(id)).filter(Boolean);
+  if (!meshes.length) return;
+  const lead = sm.getMesh(sm.selection.meshId) || meshes[0];
+  const soft = !lead.smoothShading;
   sm.pushUndo();
-  mesh.smoothShading = !mesh.smoothShading;
-  sm.rebuildThreeMesh(mesh.id);
+  for (const mesh of meshes) {
+    mesh.smoothShading = soft;
+    sm.rebuildThreeMesh(mesh.id);
+  }
 }
 
 // Split a mesh into disconnected face groups, each becoming its own mesh.
