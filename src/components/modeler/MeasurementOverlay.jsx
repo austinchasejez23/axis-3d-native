@@ -19,7 +19,7 @@ export default function MeasurementOverlay({ managerRef, unit, option, enabled }
       const mgr = managerRef.current;
       if (mgr) {
         const moving = (mgr.activeAction === 'move' || mgr.activeAction === 'scale') &&
-          (mgr.selectionMode === 'face' || mgr.selectionMode === 'edge');
+          (mgr.selectionMode === 'face' || mgr.selectionMode === 'edge' || mgr.selectionMode === 'vertex');
         const selectionKey = [mgr.selectionMode, mgr.selection?.meshId, ...(mgr.selection?.indices || [])].join(':');
         if (selectionRef.current !== selectionKey) {
           selectionRef.current = selectionKey;

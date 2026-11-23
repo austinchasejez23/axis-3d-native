@@ -6,7 +6,8 @@ import * as THREE from 'three';
 // option: 'edge' (per-edge lengths) | 'bbox' (W×H×D) | 'both'.
 // object mode -> the few forward-most edges / object bbox;
 // face mode   -> edges of selected faces / their bbox;
-// edge mode   -> selected edges / their endpoints' bbox.
+// edge mode   -> selected edges / their endpoints' bbox;
+// vertex mode -> while moving, the edges attached to the selected vertices.
 export function getMeasurements(manager, option = 'edge', showConnectingEdges = false) {
   const out = [];
   const sel = manager.selection;
@@ -115,6 +116,27 @@ export function getMeasurements(manager, option = 'edge', showConnectingEdges = 
       const key = keyFor(edge.v1, edge.v2);
       if (seen.has(key)) continue;
       if (!movingVertices.has(edge.v1) && !movingVertices.has(edge.v2)) continue;
+      seen.add(key);
+      const va = mesh.getVertex(edge.v1), vb = mesh.getVertex(edge.v2);
+      if (va && vb) addEdge(va, vb, true);
+    }
+  }
+
+  // Moving vertices shows, live, the lengths of every edge attached to them,
+  // the same way moving an edge shows the edges attached to its ends (and
+  // they stay up for a few seconds after, the same way).
+  if (wantEdge && mode === 'vertex' && sel.indices.length &&
+      (showConnectingEdges || manager.activeAction === 'move' || manager.activeAction === 'scale')) {
+    const movingVertices = new Set();
+    for (const index of new Set(sel.indices)) {
+      const vertex = mesh.vertices[index];
+      if (vertex) movingVertices.add(vertex.id);
+    }
+    const seen = new Set();
+    for (const edge of edges) {
+      if (!movingVertices.has(edge.v1) && !movingVertices.has(edge.v2)) continue;
+      const key = edge.v1 < edge.v2 ? edge.v1 + ',' + edge.v2 : edge.v2 + ',' + edge.v1;
+      if (seen.has(key)) continue;
       seen.add(key);
       const va = mesh.getVertex(edge.v1), vb = mesh.getVertex(edge.v2);
       if (va && vb) addEdge(va, vb, true);
