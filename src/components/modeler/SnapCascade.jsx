@@ -1,34 +1,56 @@
-import { useState } from 'react';
+import { useRef } from 'react';
 import { useTheme, theme } from '@/lib/theme';
 import { fromDisplayUnit, toDisplayUnit } from '@/lib/units';
-import { NumericEditor, PillSwitch } from './CascadeControls';
+import { ApplyButton, NumericEditor, PillSwitch } from './CascadeControls';
+import MenuSubPanel, { MenuSubRow } from './MenuSubPanel';
 
-export default function SnapCascade() {
+// Menu > Settings > Snapping, built like the Grid panel: the on/off switch and
+// the checkmark in the header, Snap distance and Snap angle always shown
+// below. The checkmark applies what is typed and steps back.
+export default function SnapCascade({ onBack = undefined, onApply = undefined }) {
   const t = useTheme();
-  const [sub, setSub] = useState(null);
-  const rowColor = (id) => (sub === id ? t.highlightColor : t.uiColor);
+  const drafts = useRef({ distance: '', angle: '' });
+  const apply = () => {
+    const read = (key) => {
+      const value = Number(drafts.current[key]);
+      return Number.isFinite(value) && value >= 0 ? value : null;
+    };
+    const distance = read('distance'), angle = read('angle');
+    const patch = {};
+    if (distance !== null) patch.snapDistance = fromDisplayUnit(distance, t.unit);
+    if (angle !== null) patch.snapAngle = angle;
+    if (Object.keys(patch).length) theme.set(patch);
+    onApply?.();
+  };
   return (
-    <div className="w-fit p-1 pointer-events-auto">
-      <div className="flex items-center justify-between gap-2 h-9 px-2">
-        <span className="text-[13px] font-semibold whitespace-nowrap" style={{ color: t.uiColor }}>Snap</span>
-        <PillSwitch on={t.snapToGrid} onChange={(v) => theme.set({ snapToGrid: v })} label={`Turn snap ${t.snapToGrid ? 'off' : 'on'}`} color={t.uiColor} highlight={t.highlightColor} />
-      </div>
-      <button onClick={() => setSub(sub === 'distance' ? null : 'distance')} className="w-full h-9 flex items-center px-2 active:scale-95 transition-transform">
-        <span className="text-[13px] font-semibold whitespace-nowrap" style={{ color: rowColor('distance') }}>Snap distance</span>
-      </button>
-      {sub === 'distance' && (
-        <div className="px-2 pb-2">
-          <NumericEditor value={toDisplayUnit(t.snapDistance, t.unit)} unit={t.unit} min={0} onCommit={(v) => theme.set({ snapDistance: fromDisplayUnit(v, t.unit) })} />
-        </div>
+    <MenuSubPanel
+      title="Snapping"
+      onBack={onBack}
+      actions={(
+        <>
+          <PillSwitch on={t.snapToGrid} onChange={(v) => theme.set({ snapToGrid: v })} label={`Turn snap ${t.snapToGrid ? 'off' : 'on'}`} color={t.uiColor} highlight={t.highlightColor} />
+          <ApplyButton onClick={apply} label="Apply snapping" highlight={t.highlightColor} />
+        </>
       )}
-      <button onClick={() => setSub(sub === 'angle' ? null : 'angle')} className="w-full h-9 flex items-center px-2 active:scale-95 transition-transform">
-        <span className="text-[13px] font-semibold whitespace-nowrap" style={{ color: rowColor('angle') }}>Snap angle</span>
-      </button>
-      {sub === 'angle' && (
-        <div className="px-2 pb-2">
-          <NumericEditor value={t.snapAngle} unit="°" min={0} onCommit={(v) => theme.set({ snapAngle: v })} />
-        </div>
-      )}
-    </div>
+    >
+      <MenuSubRow label="Snap distance">
+        <NumericEditor
+          value={toDisplayUnit(t.snapDistance, t.unit)}
+          unit={t.unit}
+          min={0}
+          onCommit={(v) => theme.set({ snapDistance: fromDisplayUnit(v, t.unit) })}
+          onDraft={(v) => { drafts.current.distance = v; }}
+        />
+      </MenuSubRow>
+      <MenuSubRow label="Snap angle">
+        <NumericEditor
+          value={t.snapAngle}
+          unit="°"
+          min={0}
+          onCommit={(v) => theme.set({ snapAngle: v })}
+          onDraft={(v) => { drafts.current.angle = v; }}
+        />
+      </MenuSubRow>
+    </MenuSubPanel>
   );
 }

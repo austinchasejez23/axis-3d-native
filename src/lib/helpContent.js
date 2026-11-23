@@ -13,7 +13,9 @@ export const HELP_BASICS = [
   'Rearrange tools: touch and hold a tool, then drag it to a new position.',
   'Hide tools: touch and hold a tool, tap any others to add them, then select Hide. One tool is enough.',
   'Show tools: use the arrow above the tools to reveal hidden tools, select them, then select Show.',
+  'Open a mode\'s tools: tap its button on the bottom bar again (or Tools). The button stays in the bottom row while they are open; tap it again to close them.',
   'Change the Background, Grid and Highlight colors: Menu > Viewport > Colors.',
+  'Grid size and step, and the Transform gizmo\'s World or Local: tap Grid or Transform gizmo in Menu > Viewport. Typed values apply with the check mark.',
   'Toggle Grid, Orthographic, Tool labels, Wireframe, Transform gizmo and Dimensions: Menu > Viewport.',
   'Open the settings for Free Transform, Snapping and Resistance: double-tap the button.',
 ];
@@ -40,8 +42,8 @@ export const HELP_MATERIALS = [
     entries: [
       { key: 'paint:wheel', label: 'Color wheel', icon: Palette, desc: 'Picks the paint color. The slider beside it sets brightness.' },
       { key: 'paint:fill', label: 'Fill', icon: PaintBucket, desc: 'Fills the selection with the color when you Apply.' },
-      { key: 'paint:brush', label: 'Brush', icon: Paintbrush, desc: 'Paints by dragging across the surface.' },
-      { key: 'paint:spray', label: 'Spray', icon: SprayCan, desc: 'Sprays soft paint as you drag across the surface.' },
+      { key: 'paint:brush', label: 'Brush', icon: Paintbrush, desc: 'Paints by dragging across the surface, only while the Paint tab is open. In Material and Texture, taps select as usual.' },
+      { key: 'paint:spray', label: 'Spray', icon: SprayCan, desc: 'Sprays soft paint as you drag across the surface, only while the Paint tab is open. In Material and Texture, taps select as usual.' },
       { key: 'paint:eyedropper', label: 'Eyedropper', icon: Pipette, desc: 'Tap the model to take a color from it.' },
       { key: 'paint:apply', label: 'Apply', icon: Check, desc: 'Applies the paint to the selection.' },
       { key: 'paint:undo', label: 'Undo', icon: Undo2, desc: 'Undoes the last paint stroke or preview.' },
@@ -54,7 +56,7 @@ export const HELP_MATERIALS = [
     title: 'Material',
     entries: [
       { key: 'material:environment', label: 'Environment', icon: Sun, desc: 'Chooses the scene reflected in shiny surfaces: Off, Studio, Shop, City, Sunset, Light Studio, Desert or Graffiti.' },
-      { key: 'material:soft', label: 'Soft Norms', icon: Spline, desc: 'Smooths the shading across faces without changing the shape. Tap again for sharp shading.' },
+      { key: 'material:soft', label: 'Soft Norms', icon: Spline, desc: 'Smooths the shading across faces without changing the shape, on every selected object. Tap again for sharp shading.' },
       { key: 'material:default', label: 'Default', icon: RotateCcw, desc: 'Resets the material sliders to a new object\'s values.' },
       { key: 'material:apply', label: 'Apply', icon: Check, desc: 'Keeps the material changes.' },
       { key: 'material:sliders', label: 'Material sliders', icon: SlidersHorizontal, desc: 'Metal, Rough, Opacity, Glow, Reflect, Blur and Clear coat shape the surface. Tint and Tint amount color it.' },
@@ -82,11 +84,11 @@ const SP = 'Has a settings panel';
 const G = [
   { key: 'reference', label: 'Reference', icon: ImagePlus, desc: 'Imports an image to use as a modeling reference.' },
   { key: 'materials', label: 'Materials', icon: Palette, desc: `Applies colors, materials and textures to objects. ${SP}: Paint, Material and Texture.` },
-  { key: 'sculpt', label: 'Sculpt', icon: Hand, desc: `Pushes, pulls and smooths the surface as you drag across it. ${SP}: brush, size, intensity and axes.` },
+  { key: 'sculpt', label: 'Sculpt', icon: Hand, desc: `Pushes, pulls and smooths the surface as you drag across it; a touch just off an object's edge still sculpts it. Pull draws the surface toward the camera and Push presses it away. Stays open until its X or another tool. ${SP}: brush, size, intensity, axes, and Undo for the last stroke.` },
   { key: 'free_transform', label: 'Free Transform', icon: Move3D, desc: `Moves, rotates and scales the selection directly by touch. ${SP}: move, rotate and scale values.` },
   { key: 'protractor', label: 'Protractor', icon: ProtractorIcon, desc: 'Shows the angle of the selected edge relative to vertical.' },
   { key: 'measure', label: 'Measure', icon: MeasureIcon, desc: 'Measures the distance between two tapped points.' },
-  { key: 'convert', label: 'Convert', icon: ArrowLeftRight, desc: 'Converts the selection between object, face, edge and vertex.' },
+  { key: 'convert', label: 'Convert', icon: ArrowLeftRight, desc: 'Converts the selection between object, face, edge and vertex. Its list opens above the button, or in the nearest clear space when something is in the way.' },
   { key: 'display', label: 'Display selected', aliases: ['Display hidden'], icon: EyeOff, desc: 'Shows only the selection and hides everything else. Tap again to show everything.' },
 ];
 
@@ -94,7 +96,7 @@ const desc = {
   object: {
     merge: 'Welds nearby vertices into one to clean up the mesh.',
     mirror: 'Creates a mirrored copy of the object across an axis.',
-    soft_normals: 'Smooths the shading across faces without changing the shape. Hard normals restores sharp shading.',
+    soft_normals: 'Smooths the shading across faces without changing the shape, on every selected object. Hard normals restores sharp shading.',
     combine: 'Merges the selected objects into a single mesh.',
     separate: 'Splits disconnected parts of a mesh into separate objects.',
     divide: 'Subdivides the mesh to add faces and edges.',
@@ -104,7 +106,7 @@ const desc = {
     intersect: 'Keeps only the volume where two objects overlap. In its panel, select an object and tap Add under First object, select the other and tap Add under Second object, then tap Intersect.',
     smooth: 'Relaxes vertices to even out the surface.',
     clone: 'Duplicates the selected object.',
-    radial_array: `Duplicates the object in a circle around an axis. ${SP}: count, radius, axis and follow.`,
+    radial_array: `Duplicates the object in a circle around an axis. ${SP}: count, radius (in your unit), axis and follow.`,
     linear_array: `Duplicates the object in a straight line. ${SP}: count, distance between (the space between copies), direction and reverse.`,
     lock: 'Locks the selected objects so they can\'t be edited. With nothing selected the button becomes Unlock, which releases every locked object.',
     delete: 'Deletes the selected object.',
@@ -123,7 +125,7 @@ const desc = {
     bridge: 'Connects two selected edges with new geometry.',
     split: 'Divides the selected edges into smaller edges.',
     draw_cut: `Slices across the model through the points you tap. ${SP}: delete last point and snap.`,
-    bevel: `Rounds or chamfers the selected edges. ${SP}: radius, segments, smooth and sweep.`,
+    bevel: `Rounds or chamfers the selected edges. ${SP}: radius (in your unit), segments, smooth and sweep.`,
     extrude: 'Pulls the selected edges out into new faces in the direction you drag them: along one axis, or freely with Free Move on.',
     select_ring: `Selects a ring of connected edges. ${SP}: skip and offset.`,
     select_loop: `Selects a continuous loop of edges. ${SP}: skip and offset.`,
@@ -137,7 +139,7 @@ const desc = {
     connect: 'Connects the selected vertices with edges.',
     target_merge: 'Moves a vertex onto a target vertex and merges them.',
     merge: 'Merges the selected vertices at a single point.',
-    bevel: `Rounds the selected corner vertices into a curved corner. ${SP}: radius, segments, smooth and sweep.`,
+    bevel: `Rounds the selected corner vertices into a curved corner. ${SP}: radius (in your unit), segments, smooth and sweep.`,
     dissolve: 'Removes the selected vertices and merges the faces around each into one face.',
     delete: 'Deletes selected vertices that lie partway along a straight edge. A corner of a face cannot be deleted.',
   },
@@ -156,8 +158,8 @@ const SIDE = [
   { key: 'side:transparent', side: 'transparent', label: 'Transparent', icon: Scan, desc: 'Makes the model see-through.' },
   { key: 'side:orientation', side: 'orientation', label: 'Reset orientation', icon: OrientationResetIcon, desc: `Lines the selected geometry's own axes up with the world axes without moving it, so scaling follows the world axes. Double-tap to open its panel and undo the last reset.` },
   { key: 'side:free', side: 'free', label: 'Free Transform', icon: Move3D, desc: `Turns Free Transform on or off. Double-tap to open its settings panel.` },
-  { key: 'side:snap', side: 'snap', label: 'Snapping', icon: Magnet, desc: `Snaps movement to set distances and angles. Double-tap to open its settings panel: distance and angle.` },
-  { key: 'side:precision', side: 'precision', label: 'Resistance', icon: ResistanceIcon, desc: `Adds resistance to movement for finer control. Double-tap to open its settings panel.` },
+  { key: 'side:snap', side: 'snap', label: 'Snapping', icon: Magnet, desc: `Snaps movement to set distances and angles. Double-tap to open its settings panel: distance and angle. They are also in Menu > Settings > Snapping.` },
+  { key: 'side:precision', side: 'precision', label: 'Resistance', icon: ResistanceIcon, desc: `Adds resistance to moving, turning and scaling for finer control. Double-tap to open its settings panel: at 50% the selection moves 1/4 as far as your finger, at 80% 1/25.` },
   { key: 'side:focus', side: 'focus', label: 'Focus', icon: Crosshair, desc: 'Re-centers the camera on the selection.' },
 ];
 
