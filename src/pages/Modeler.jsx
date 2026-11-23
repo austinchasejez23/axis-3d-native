@@ -282,16 +282,17 @@ export default function Modeler() {
     if (theme.measurementsOn !== measurementsOn || theme.measurementOption !== measurementOption) theme.set({ measurementsOn, measurementOption });
   }, [measurementsOn, measurementOption]);
 
-  // Brush and spray paint directly on the touched surface. Fill (only while the
-  // Paint section is open) colors whatever object/face/edge/vertex is tapped;
-  // Apply still fills the current selection explicitly.
+  // Brush and spray paint directly on the touched surface, and Fill colors
+  // whatever object/face/edge/vertex is tapped — all only while the Paint
+  // section is open, so Material and Texture keep normal selecting. Apply
+  // still fills the current selection explicitly.
   useEffect(() => {
     // Paint is only live while the Surface sheet itself is the active tool —
     // opening any other tool set, menu, library or panel deactivates it.
     const paintBlocked = toolsOpen || modeToolsOpen || menuOpen || libraryOpen || segmentsOpen || sculptOpen || transformDrawerOpen || guideOpen || lightingOpen;
     if (paintBlocked) {
       managerRef.current?.exitPaintMode();
-    } else if (materialsOpen && (paintTool === 'brush' || paintTool === 'spray')) {
+    } else if (materialsOpen && surfaceSection === 'paint' && (paintTool === 'brush' || paintTool === 'spray')) {
       managerRef.current?.setPaintTool({ tool: paintTool, color: paintColor, size: paintSize, opacity: paintOpacity, smoothness: paintSmoothness });
     } else if (materialsOpen && surfaceSection === 'paint' && paintTool === 'fill') {
       managerRef.current?.setPaintTool({ tool: 'fill', color: paintColor, opacity: paintOpacity / 100 });
