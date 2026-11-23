@@ -189,7 +189,10 @@ export default function Modeler() {
   useEffect(() => { if (!freeTransform) setFreeTransformPanelOpen(false); }, [freeTransform]);
   useEffect(() => { if (!snapToGrid) setSnapPanelOpen(false); }, [snapToGrid]);
   useEffect(() => { if (!precision) setPrecisionPanelOpen(false); }, [precision]);
-  useEffect(() => { if (managerRef.current) managerRef.current.precisionFactor = precision ? 1 - precisionIntensity / 100 : 1; }, [precision, precisionIntensity]);
+  // Resistance slows moves, turns and scales. The share of the finger's motion
+  // that still applies falls with the square of what is left of the slider, so
+  // it bites harder: 50% → 1/4 speed, 80% → 1/25, 95% → 1/400.
+  useEffect(() => { if (managerRef.current) managerRef.current.precisionFactor = precision ? (1 - precisionIntensity / 100) ** 2 : 1; }, [precision, precisionIntensity]);
   const [selectionPattern, setSelectionPattern] = useState(null);
   // A touch that begins and ends on the same button is a tap, however the
   // finger shifted in between.
