@@ -1,4 +1,8 @@
 import { useEffect, useState } from 'react';
+import { Check } from 'lucide-react';
+
+// Controls for the menu's side panels, styled like the Settings controls
+// (the Units buttons): outlined, the chosen one in the highlight color.
 
 // `onDraft` (optional) hears every edit, so a panel's checkmark can apply
 // what is typed even when the field never loses focus.
@@ -21,9 +25,9 @@ export function NumericEditor({ value, unit, min, onCommit, onDraft = undefined 
         onChange={(e) => { setDraft(e.target.value); onDraft?.(e.target.value); }}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-        className={`w-20 h-8 text-[13px] rounded-md border border-white/20 bg-white/10 px-2 text-right text-white font-mono outline-none`}
+        className="w-16 h-7 text-[12px] rounded-md border border-white/20 bg-transparent px-2 text-right text-white font-mono outline-none"
       />
-      <span className="w-6 text-[13px] text-white/50 font-mono">{unit}</span>
+      <span className="w-5 text-[11px] font-semibold text-white/60">{unit}</span>
     </div>
   );
 }
@@ -34,14 +38,41 @@ export function PillSwitch({ on, onChange, label, color, highlight }) {
       onClick={() => onChange(!on)}
       aria-label={label}
       aria-pressed={on}
-      className="h-8 min-w-12 rounded-md border px-2 active:scale-95 transition-transform"
-      style={{
-        color: on ? highlight : color,
-        borderColor: on ? highlight : 'rgba(255,255,255,0.22)',
-        background: on ? `${highlight}18` : 'rgba(255,255,255,0.05)',
-      }}
+      className="h-7 min-w-10 rounded-md border px-2 text-[11px] font-semibold active:scale-95 transition-transform"
+      style={{ color: on ? highlight : color, borderColor: 'rgba(255,255,255,0.2)', background: 'transparent' }}
     >
-      <span className="text-[13px] font-semibold">{on ? 'On' : 'Off'}</span>
+      {on ? 'On' : 'Off'}
+    </button>
+  );
+}
+
+// Two or more choices side by side; the chosen one in the highlight color.
+export function ChoiceButton({ on, onClick, label, color, highlight }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className="flex-1 h-7 rounded-md border px-2 text-[11px] font-semibold active:scale-95 transition-transform"
+      style={{ color: on ? highlight : color, borderColor: 'rgba(255,255,255,0.2)', background: 'transparent' }}
+    >
+      {label}
+    </button>
+  );
+}
+
+// Applies what is typed in the panel (and closes it), like the checkmark on
+// the other panels.
+export function ApplyButton({ onClick, label, highlight }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className="flex h-7 w-8 shrink-0 items-center justify-center rounded-md border active:scale-95 transition-transform"
+      style={{ color: highlight, borderColor: 'rgba(255,255,255,0.2)', background: 'transparent' }}
+    >
+      <Check className="h-[18px] w-[18px]" strokeWidth={2.5} />
     </button>
   );
 }

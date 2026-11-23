@@ -34,6 +34,9 @@ function DrawerRow({ icon: Icon, label, color, onClick, chevron = false, compact
 // labels, icons, controls and spacing all scale together.
 const MENU_ZOOM = 1.15;
 
+// Screens that draw their own header and card.
+const OWN_FRAME = new Set(['grid', 'snap']);
+
 const TITLES = {
   file: 'File',
   viewport: 'Viewport',
@@ -282,9 +285,9 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
           </div>
         );
       case 'grid':
-        return <GridCascade bare enabled={display.gridVisible} onToggle={display.onToggleGrid} onApply={back} panelStyle={panelStyle} />;
+        return <GridCascade enabled={display.gridVisible} onToggle={display.onToggleGrid} onApply={back} onBack={back} />;
       case 'snap':
-        return <SnapCascade />;
+        return <SnapCascade onBack={back} onApply={back} />;
       case 'settings':
         return <div className="w-fit max-w-[62vw] px-2 pt-2 pb-1"><SettingsPanel onGestures={() => push('gestures')} onSnapping={() => push('snap')} /></div>;
       case 'gestures':
@@ -349,6 +352,9 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
             className="modeling-sheet relative w-fit rounded-2xl flex flex-col pointer-events-auto overflow-y-auto axis-menu-scroll"
             style={{ background: panelStyle.background, maxHeight: `calc((100vh - 6.75rem) / ${MENU_ZOOM})` }}
           >
+            {/* Grid and Snapping draw their own header and card (with their
+                switch and checkmark in the header). */}
+            {OWN_FRAME.has(screen) ? renderBody() : (<>
             {screen !== 'root' && (
               <MenuScreenHeader
                 title={TITLES[screen]}
@@ -361,6 +367,7 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
             {/* Same two-tone look as the modeling panels: a sheet with the
                 menu content sitting on a lighter card inside it. */}
             <div className={`modeling-value m-1.5 rounded-lg ${screen === 'account' ? '' : 'py-1 [&_button]:min-h-8'}`}>{renderBody()}</div>
+            </>)}
           </div>
 
           {screen === 'viewport' && (viewportCascade === 'grid' || viewportCascade === 'gizmo') && (
@@ -370,7 +377,7 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
               style={{ background: panelStyle.background, top: cascadeAnchor.top, left: `calc(100% + 0.25rem - ${cascadeShift}px)`, width: 'max-content' }}
             >
               {viewportCascade === 'grid'
-                ? <GridCascade bare enabled={display.gridVisible} onToggle={display.onToggleGrid} onApply={() => setViewportCascade(null)} panelStyle={panelStyle} />
+                ? <GridCascade enabled={display.gridVisible} onToggle={display.onToggleGrid} onApply={() => setViewportCascade(null)} />
                 : <TransformGizmoCascade />}
             </div>
           )}
