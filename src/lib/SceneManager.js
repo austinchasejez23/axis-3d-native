@@ -66,6 +66,19 @@ const DEFAULT_SUN_DIRECTION = new THREE.Vector3(-5, 8, 1.5).normalize();
 // are never affected, so ordinary models look exactly the same as before.
 const HEAVY_EDIT_TRIANGLES = 20000;
 
+// Sets an object's rotation from a turn, as the X, Y, Z angles that read
+// most simply. The same turn has two sets of angles (X+180°, 180°-Y, Z+180°);
+// the usual one keeps Y within ±90°, so a flat object turned past 90° around
+// Y read as X -171°, Z 177° instead of small tilts. Prefer the set with the
+// smaller X and Z.
+function setRotationReadably(rotation, quaternion) {
+  rotation.setFromQuaternion(quaternion);
+  if (rotation.order !== 'XYZ') return;
+  const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  const x = wrap(rotation.x + Math.PI), y = wrap(Math.PI - rotation.y), z = wrap(rotation.z + Math.PI);
+  if (Math.abs(x) + Math.abs(z) < Math.abs(rotation.x) + Math.abs(rotation.z) - 1e-9) rotation.set(x, y, z);
+}
+
 export class SceneManager {
   constructor(container, callbacks = {}) {
     this.container = container;
@@ -1882,6 +1895,34 @@ export class SceneManager {
     this.updateHud();
   }
 
+  // Typed rotation for a group (Transform drawer): the values shown are the
+  // main object's rotation, so the group turns, around its pivot, until that
+  // object's rotation is exactly the typed X, Y, Z. Those exact numbers are
+  // kept: working them back out of the turned object could give another set
+  // of angles for the same turn, which made the other two values jump and
+  // the next typed value turn the group by the wrong amount.
+  setGroupRotationLive(rxDeg, ryDeg, rzDeg) {
+    const primaryId = this.selection.meshId && this.selectedMeshIds.includes(this.selection.meshId)
+      ? this.selection.meshId
+      : this.selectedMeshIds[0];
+    const primary = this.getMesh(primaryId);
+    if (!primary || primary.locked) return;
+    const D = Math.PI / 180;
+    const target = new THREE.Euler(rxDeg * D, ryDeg * D, rzDeg * D, primary.rotation.order);
+    const turn = new THREE.Quaternion().setFromEuler(target)
+      .multiply(new THREE.Quaternion().setFromEuler(primary.rotation).invert())
+      .normalize();
+    if (turn.w < 0) turn.set(-turn.x, -turn.y, -turn.z, -turn.w);
+    const angle = 2 * Math.acos(Math.min(1, turn.w));
+    if (angle > 1e-9) {
+      const s = Math.sqrt(Math.max(0, 1 - turn.w * turn.w));
+      this.rotateGroupAroundAxis(angle, new THREE.Vector3(turn.x / s, turn.y / s, turn.z / s));
+    }
+    primary.rotation.copy(target);
+    this.updateObjectTransform(primary.id);
+    this.updateHud();
+  }
+
   rotateGroupAxis(angle, axis) {
     const axisVec = axis === 'x' ? new THREE.Vector3(1, 0, 0)
       : axis === 'y' ? new THREE.Vector3(0, 1, 0)
@@ -2036,7 +2077,7 @@ export class SceneManager {
       m.position.copy(center).add(offset);
       const curQ = new THREE.Quaternion().setFromEuler(m.rotation);
       curQ.premultiply(q);
-      m.rotation.setFromQuaternion(curQ);
+      setRotationReadably(m.rotation, curQ);
       this.updateObjectTransform(id);
     }
     refreshTransformHighlights(this);

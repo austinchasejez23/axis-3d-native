@@ -17,7 +17,6 @@ export default function TransformDrawer({ meshId, managerRef, onClose, onApplied
   const [dims, setDims] = useState(() => { const b = managerRef.current?.getSelectionBounds(); return b ? [b.sx,b.sy,b.sz].map(v => toDisplayUnit(v,unit)) : [0,0,0]; });
   const [snapshot, setSnapshot] = useState(null);
   const [activeKeypad, setActiveKeypad] = useState(null);
-  const groupRotationRef = useRef([...rot]);
   const groupScaleRef = useState(() => [1, 1, 1])[0];
   const keypad = (name) => ({ keypadOpen: activeKeypad === name, onKeypadOpen: (open) => setActiveKeypad(open ? name : null) });
   useEffect(() => {
@@ -25,7 +24,6 @@ export default function TransformDrawer({ meshId, managerRef, onClose, onApplied
     if (!transform) return;
     setPos(transform.position.map((v) => toDisplayUnit(v, unit)));
     setRot(transform.rotation);
-    if (managerRef.current?.isGroupMode()) groupRotationRef.current = [...transform.rotation];
     if (managerRef.current?.selection.type === 'object') setScl(transform.scale);
     const bounds = managerRef.current?.getSelectionBounds();
     if (bounds) setDims([bounds.sx,bounds.sy,bounds.sz].map(v => toDisplayUnit(v,unit))); 
@@ -55,11 +53,7 @@ export default function TransformDrawer({ meshId, managerRef, onClose, onApplied
     setRot(n);
     const manager = managerRef.current;
     if (manager?.isGroupMode()) {
-      const delta = (v - groupRotationRef.current[i]) * Math.PI / 180;
-      if (Math.abs(delta) > 1e-9) {
-        manager.rotateGroupAxis(delta, ['x', 'y', 'z'][i]);
-        groupRotationRef.current[i] = v;
-      }
+      manager.setGroupRotationLive(n[0], n[1], n[2]);
     } else {
       manager?.setObjectRotationLive(n[0], n[1], n[2]);
     }
