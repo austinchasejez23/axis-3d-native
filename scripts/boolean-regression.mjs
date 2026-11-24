@@ -263,4 +263,20 @@ try {
     assert.ok(Math.abs(results[0].volume - results[1].volume) < 1e-6, 'a reversed face must cut the same grooves');
   }
 
+  // Several grooves cut into one face and open at its edge leave that face
+  // as one piece: no extra lines from the groove ends to the face's edge.
+  {
+    const part = EditableMesh.fromGeometry(new THREE.BoxGeometry(6, 1, 0.8), 'part');
+    for (let i = 0; i < 6; i++) {
+      const slat = EditableMesh.fromGeometry(new THREE.BoxGeometry(0.15, 1.6, 0.1), 'slat');
+      slat.position.set(-2.4 + i * 0.5, -0.4, 0.4);
+      slat.rotation.set(0, 0, 0.5);
+      assert.equal(localBoolean(manager, part, slat, 'subtract'), true, 'groove cut should run');
+    }
+    const byId = new Map(part.vertices.map((v) => [v.id, v]));
+    const front = part.faces.filter((f) => f.every((id) => Math.abs(byId.get(id).z - 0.4) < 1e-6));
+    console.log(JSON.stringify({ name: 'open-grooves-one-face', frontFaces: front.map((f) => f.length), volume: volumeOf(part) }));
+    assert.equal(front.length, 1, 'the grooved face must stay one face with no extra lines');
+  }
+
 }finally{await server.close();}
