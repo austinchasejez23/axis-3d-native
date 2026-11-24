@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { sculptGrabStart, sculptGrabMove, SCULPT_DAB_SPACING } from './sculptTools';
 import { theme } from './theme';
+import { playMultiSelectClick } from './clickSound';
 import { beginFreeScale, updateFreeScale, updateFreeRotation } from '@/lib/freeTransforms';
 import { beginCameraTouch, endCameraTouch } from '@/lib/cameraTouchSession';
 import { discardTapMotion, resetCameraTouchSpeed } from '@/lib/cameraMotion';
@@ -447,6 +448,7 @@ export function applySceneGestures(SceneManager) {
           if (this.surfaceMode && this.surfaceSection === 'texture') return;
           // No multi-select (or selection frame) while a Boolean panel is open.
           if (this.multiSelectBlocked) return;
+          const wasMultiSelect = this.multiSelect;
           if (onGeometry) {
             this.enterMultiSelect();
             if (this.selectionMode === 'object') {
@@ -472,6 +474,8 @@ export function applySceneGestures(SceneManager) {
             if (this.selectionMode === 'object' || this.selectionMode === 'vertex' || this.selectionMode === 'edge' || this.selectionMode === 'face') this.enterMultiSelect();
             this.updateMarquee();
           }
+          // Button feedback for multi-select going active; no other gesture clicks.
+          if (!wasMultiSelect && this.multiSelect) playMultiSelectClick();
         }
       }, theme.gestureHoldDelay);
     } else if (this.pointers.size === 2) {
