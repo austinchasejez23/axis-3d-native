@@ -1,0 +1,26 @@
+name: Test web bundle
+on:
+  push:
+    branches: ['test/bool-winding']
+permissions:
+  contents: write
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx vite build --outDir /tmp/webdist
+      - name: Push the bundle to test/web-bundle-11
+        run: |
+          cd /tmp/webdist
+          git init -q -b test/web-bundle-11
+          git config user.name bundle-bot
+          git config user.email bundle-bot@users.noreply.github.com
+          git add -A
+          git commit -q -m "web bundle for ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" test/web-bundle-11
