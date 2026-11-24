@@ -270,7 +270,7 @@ function classify(points, normal, other, at = null, insideTest = null) {
   queryBox(other.bvh, V().subVectors(c, pad), V().addVectors(c, pad), near);
   for (const i of near) {
     const t = other.tris[i];
-    const dot = t.n.dot(normal);
+    const dot = t.n.dot(normal) * (t.o || 1);
     if (Math.abs(dot) < 1 - 1e-6 || Math.abs(t.n.dot(c) - t.w) > ON_EPS) continue;
     const ax = Math.abs(t.n.x), ay = Math.abs(t.n.y), az = Math.abs(t.n.z);
     const axis = ax >= ay && ax >= az ? 'x' : ay >= az ? 'y' : 'z';
@@ -314,7 +314,7 @@ function localInsideTest(S, faceIdxs) {
       const d = q.distanceToSquared(p);
       if (d < bestD) { bestD = d; best = { t, q }; }
     }
-    return V().subVectors(p, best.q).dot(best.t.n) * sign < 0;
+    return V().subVectors(p, best.q).dot(best.t.n) * (best.t.o || 1) * sign < 0;
   };
 }
 
@@ -442,11 +442,66 @@ function solidOf(mesh, wm) {
   });
   const min = V(Infinity, Infinity, Infinity), max = V(-Infinity, -Infinity, -Infinity);
   for (const t of tris) { min.min(t.min); max.max(t.max); }
+  // A face wound the opposite way to the faces around it is read the right
+  // way round, so which side of it is inside does not depend on that.
+  const orient = faceOrientation(mesh.faces, faceTris, tris);
+  for (const t of tris) t.o = orient[t.face];
   // Which way this object's faces are wound. A model whose faces point inward
   // is still valid; the result just has to follow the same convention.
-  let volume = 0;
-  for (const t of tris) volume += t.a.dot(V().crossVectors(t.b, t.c)) / 6;
-  return { mesh, wm, pos, tris, faceTris, bvh: buildBVH(tris), min, max, inverted: volume < 0 };
+  let volume = 0, rawVolume = 0;
+  for (const t of tris) {
+    const v = t.a.dot(V().crossVectors(t.b, t.c)) / 6;
+    rawVolume += v; volume += v * t.o;
+  }
+  return { mesh, wm, pos, tris, faceTris, orient, bvh: buildBVH(tris), min, max, inverted: volume < 0, rawInverted: rawVolume < 0 };
+}
+
+// +1 for a face wound like the faces it joins, -1 for one wound the other way.
+// Across each edge shared by exactly two faces, the faces should run along it
+// in opposite directions. In each connected part, the winding that covers the
+// larger area is taken as the part's own, so a model wound the same way
+// throughout reads exactly as it is.
+function faceOrientation(faces, faceTris, tris) {
+  const orient = faces.map(() => 0);
+  const edges = new Map();
+  faces.forEach((f, fi) => {
+    for (let i = 0; i < f.length; i++) {
+      const a = f[i], b = f[(i + 1) % f.length];
+      const key = a < b ? `${a},${b}` : `${b},${a}`;
+      if (!edges.has(key)) edges.set(key, []);
+      edges.get(key).push({ fi, up: a < b });
+    }
+  });
+  const area = (fi) => {
+    let sum = 0;
+    for (const ti of faceTris[fi] || []) {
+      const t = tris[ti];
+      sum += V().subVectors(t.b, t.a).cross(V().subVectors(t.c, t.a)).length() / 2;
+    }
+    return sum;
+  };
+  for (let seed = 0; seed < faces.length; seed++) {
+    if (orient[seed]) continue;
+    orient[seed] = 1;
+    const part = [seed], stack = [seed];
+    while (stack.length) {
+      const fi = stack.pop(), f = faces[fi];
+      for (let i = 0; i < f.length; i++) {
+        const a = f[i], b = f[(i + 1) % f.length];
+        const users = edges.get(a < b ? `${a},${b}` : `${b},${a}`);
+        if (users.length !== 2) continue;
+        const [x, y] = users;
+        const other = x.fi === fi ? y : x, mine = x.fi === fi ? x : y;
+        if (other.fi === fi || orient[other.fi]) continue;
+        orient[other.fi] = mine.up === other.up ? -orient[fi] : orient[fi];
+        part.push(other.fi); stack.push(other.fi);
+      }
+    }
+    let kept = 0, reversed = 0;
+    for (const fi of part) { if (orient[fi] > 0) kept += area(fi); else reversed += area(fi); }
+    if (reversed > kept) for (const fi of part) orient[fi] = -orient[fi];
+  }
+  return orient;
 }
 
 // ---------------------------------------------------------------------------
@@ -517,6 +572,7 @@ export function localBoolean(manager, work, operand, operation) {
       continue;
     }
     const normal = newellNormal(points) || A.tris[A.faceTris[fi][0]].n;
+    const facing = A.orient[fi] < 0 ? normal.clone().negate() : normal;
     const cutters = [...cutsA.get(fi)].map((j) => B.tris[j]);
     const polys = isConvexPlanar(points, normal) ? [points]
       : A.faceTris[fi].map((ti) => [A.tris[ti].a, A.tris[ti].b, A.tris[ti].c]);
@@ -525,7 +581,7 @@ export function localBoolean(manager, work, operand, operation) {
     for (const poly of polys) {
       for (const piece of cutPolygon(poly, cutters)) {
         if (polygonArea(piece) < 1e-12) continue;
-        if (keepPiece(true, classify(piece, normal, B, null, insideB), operation)) kept.push(...splitConcave(piece, normal));
+        if (keepPiece(true, classify(piece, facing, B, null, insideB), operation)) kept.push(...splitConcave(piece, normal));
         else dropped = true;
       }
     }
@@ -540,9 +596,10 @@ export function localBoolean(manager, work, operand, operation) {
     const points = B.mesh.faces[fi].map((id) => B.pos.get(id));
     if (points.some((p) => !p) || !B.faceTris[fi].length) continue;
     const normal = newellNormal(points) || B.tris[B.faceTris[fi][0]].n;
+    const facing = B.orient[fi] < 0 ? normal.clone().negate() : normal;
     if (!cutsB.has(fi)) {
       const at = faceSample(B, fi);
-      if (at && insideA && keepPiece(false, classify(points, normal, A, at, insideA), operation)) pieceSets.push({ isA: false, fi, whole: true });
+      if (at && insideA && keepPiece(false, classify(points, facing, A, at, insideA), operation)) pieceSets.push({ isA: false, fi, whole: true });
       continue;
     }
     const cutters = [...cutsB.get(fi)].map((j) => A.tris[j]);
@@ -553,7 +610,7 @@ export function localBoolean(manager, work, operand, operation) {
     for (const poly of polys) {
       for (const piece of cutPolygon(poly, cutters)) {
         if (polygonArea(piece) < 1e-12) continue;
-        if (keepPiece(false, classify(piece, normal, A, null, insideA), operation)) kept.push(...splitConcave(piece, normal));
+        if (keepPiece(false, classify(piece, facing, A, null, insideA), operation)) kept.push(...splitConcave(piece, normal));
         else dropped = true;
       }
     }
@@ -656,7 +713,7 @@ export function localBoolean(manager, work, operand, operation) {
     else if (piece.isA) pushFace(piece.points.map(idAt), originalColors[piece.fi], true);
     else {
       const ids = piece.whole ? operand.faces[piece.fi].map(bId) : piece.points.map(idAt);
-      if (flipB) ids.reverse();
+      if (flipB !== (B.orient[piece.fi] < 0)) ids.reverse();
       pushFace(ids, null, true);
     }
   }
@@ -922,7 +979,7 @@ export function localBoolean(manager, work, operand, operation) {
     const a = world.get(f[0]);
     for (let i = 1; i < f.length - 1; i++) volume += a.dot(world.get(f[i]).clone().cross(world.get(f[i + 1]))) / 6;
   }
-  if (Math.abs(volume) > 1e-10 && (volume < 0) !== A.inverted) keepFaces.forEach((f) => f.reverse());
+  if (Math.abs(volume) > 1e-10 && (volume < 0) !== A.rawInverted) keepFaces.forEach((f) => f.reverse());
 
 
   // 6. Edge lines around the cut. One rule for every edge of a changed face:

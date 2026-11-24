@@ -208,4 +208,59 @@ try {
     console.log(JSON.stringify({name:operation,faces:result.faces.length,vertices:result.vertices.length,volume:volumeOf(result)}));
   }
 
+  // A part whose faces are not all wound the same way (one face reversed)
+  // must cut exactly like the same part wound consistently: the cutter's
+  // outside must not be kept and every groove must be cut.
+  {
+    const makeL = (reverseRecess) => {
+      const mesh = new EditableMesh('L part');
+      const section = [[-0.5,-2],[0.5,-2],[0.5,1],[0,1],[0,2],[-0.5,2]]; // (y, z)
+      section.forEach(([y, z], i) => { mesh.vertices.push({ id: 100 + i, x: -3, y, z }); mesh.vertices.push({ id: 200 + i, x: 3, y, z }); });
+      const n = section.length;
+      mesh.faces.push(section.map((_, i) => 100 + i).reverse(), section.map((_, i) => 200 + i));
+      for (let i = 0; i < n; i++) { const j = (i + 1) % n; mesh.faces.push([100 + i, 100 + j, 200 + j, 200 + i]); }
+      // Wound outward.
+      const corner = new Map(mesh.vertices.map((v) => [v.id, new THREE.Vector3(v.x, v.y, v.z)]));
+      let signed = 0;
+      for (const f of mesh.faces) { const a = corner.get(f[0]); for (let i = 1; i < f.length - 1; i++) signed += a.dot(new THREE.Vector3().crossVectors(corner.get(f[i]), corner.get(f[i + 1]))); }
+      if (signed < 0) mesh.faces = mesh.faces.map((f) => [...f].reverse());
+      if (reverseRecess) {
+        const byId = new Map(mesh.vertices.map((v) => [v.id, v]));
+        mesh.faces = mesh.faces.map((f) => (f.every((id) => Math.abs(byId.get(id).z - 1) < 1e-9) ? [...f].reverse() : f));
+      }
+      return mesh;
+    };
+    const slats = [];
+    for (let i = 0; i < 4; i++) {
+      const slat = EditableMesh.fromGeometry(new THREE.BoxGeometry(0.3, 0.6, 0.4), 'slat');
+      slat.position.set(-2 + i * 1.2, 0.45, 1);
+      slat.rotation.set(0, 0, 0.5);
+      slats.push(slat);
+    }
+    const results = [false, true].map((reverseRecess) => {
+      const work = makeL(reverseRecess);
+      for (const slat of slats) assert.equal(localBoolean(manager, work, slat, 'subtract'), true, 'groove cut should run');
+      // Outside the part: above it, or in front of the recessed face.
+      let outside = 0;
+      for (const v of work.vertices) if (v.y > 0.5 + 1e-6 || v.y < -0.5 - 1e-6 || v.z > 2 + 1e-6 || (v.y > 1e-6 && v.z > 1 + 1e-6)) outside++;
+      // Read what is left of the reversed face the right way round, so the
+      // two results can be measured the same way.
+      const byId = new Map(work.vertices.map((v) => [v.id, v]));
+      const measured = work.clone();
+      measured.faces = work.faces.map((f) => {
+        if (!f.every((id) => Math.abs(byId.get(id).z - 1) < 1e-6)) return f;
+        let nz = 0;
+        for (let i = 0; i < f.length; i++) { const p = byId.get(f[i]), q = byId.get(f[(i + 1) % f.length]); nz += (p.x - q.x) * (p.y + q.y); }
+        return nz < 0 ? [...f].reverse() : f;
+      });
+      return { volume: volumeOf(measured), outside };
+    });
+    console.log(JSON.stringify({ name: 'reversed-face-grooves', consistent: results[0], reversedFace: results[1] }));
+    assert.ok(results[0].volume < 6 * 3.5 - 0.05, 'grooves must remove material');
+    assert.ok(results[0].volume > 6 * 3.5 - 1, 'grooves must remove only the grooves');
+    assert.equal(results[0].outside, 0, 'grooves must not leave cutter material outside the part');
+    assert.equal(results[1].outside, 0, 'a reversed face must not leave cutter material outside the part');
+    assert.ok(Math.abs(results[0].volume - results[1].volume) < 1e-6, 'a reversed face must cut the same grooves');
+  }
+
 }finally{await server.close();}
