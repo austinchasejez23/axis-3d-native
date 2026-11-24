@@ -3,7 +3,6 @@ import { theme } from './theme';
 import { applyPaintLayerShader } from './paintLayer';
 import { isClosedSurface } from './renderBoost';
 import objectShadowMaterial from '@/lib/objectShadowMaterial';
-import { applyScreenAOShader } from '@/lib/screenAO';
 import { updateShadowFloor } from '@/lib/shadowFloor';
 
 // Legacy projects stored the old near-white default. Render that untouched
@@ -66,7 +65,7 @@ export function createMaterial(mesh, viewportMode = {}) {
     mat.polygonOffsetFactor = 1;
     mat.polygonOffsetUnits = 1;
     mat.needsUpdate = true;
-    return objectShadowMaterial(applyScreenAOShader(mat));
+    return objectShadowMaterial(mat);
   }
   // Real-time reflections: the runtime cube env map (assigned by SceneManager's
   // reflection manager) reflects the actual scene. We only tune roughness +
@@ -196,7 +195,7 @@ export function createMaterial(mesh, viewportMode = {}) {
   // Still draw Axis's neutral editable surface behind the structural edges;
   // colorWrite=false made complex imports appear hollow/black.
   mat.needsUpdate = true;
-  return objectShadowMaterial(applyScreenAOShader(mat));
+  return objectShadowMaterial(mat);
 }
 
 function _createMaterialInner(mesh) {

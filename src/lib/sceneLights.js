@@ -204,8 +204,7 @@ export function applySceneLights(SceneManager) {
     // pitch black, so every light setting has a clearly visible effect and the
     // scene goes dark when the lights are turned down.
     // Default lighting keeps the flat, even light low so the key and fill
-    // separate faces turned different ways, and corners and grooves take the
-    // viewport's ambient occlusion (screenAO.js).
+    // separate faces turned different ways.
     const base = theme.defaultLightingEnabled;
     if (this.dirLight) {
       this.dirLight.intensity = base ? 2.5 : 0;
