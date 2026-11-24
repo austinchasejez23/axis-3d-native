@@ -477,7 +477,7 @@ declare module './SceneManager.js' {
     /** Implemented by sceneRadialArray.js */
     updateRadialArray(options?: { count?: number; axis?: 'x' | 'y' | 'z'; follow?: boolean; radius?: number }): void;
     /** Implemented by sceneRadialArray.js */
-    updateLinearArray(options?: { count?: number; axis?: 'x' | 'y' | 'z'; distance?: number; reverse?: boolean }): false | { count: number; axis: string; distance: number; reverse: boolean };
+    updateLinearArray(options?: { count?: number; axis?: 'x' | 'y' | 'z'; distance?: number; reverse?: boolean }): false | { count: number; axis: string; distance: number; reverse: boolean; minDistance: number };
     /** Implemented by sceneReflections.js */
     updateReflections(): any;
     /** Implemented by sceneLights.js */

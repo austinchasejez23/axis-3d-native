@@ -132,7 +132,8 @@ export function applySceneRadialArray(SceneManager) {
       state.previewIds.push(clone.id);
     }
 
-    state.options = { count: total, axis: key, distance: gap, reverse: !!reverse };
+    // minDistance: the lowest Distance between for this object and direction.
+    state.options = { count: total, axis: key, distance: gap, reverse: !!reverse, minDistance: -length };
     this.radialArraySelectPreview();
     return state.options;
   };
