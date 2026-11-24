@@ -121,10 +121,14 @@ export function paintAt(sm, clientX, clientY) {
   if (sm._paintTargetCache && !sm._paintTargetCache.stroke) sm._paintTargetCache.stroke = stroke;
   const layer = ensurePaintLayer(sm, mesh);
 
-  // Screen radius → world radius at the touched depth → local radius.
+  // Screen radius → world radius at the touched depth → local radius. Depth
+  // is measured along the view, as the screen draws it, so the dab is the
+  // size of the ring anywhere on screen, not only in the middle.
   const wm = sm.getWorldMatrix(mesh);
   const center = hit.point.clone().applyMatrix4(wm.clone().invert());
-  const dist = viewDistance(sm.camera, hit.point);
+  const dist = sm.camera.isOrthographicCamera
+    ? viewDistance(sm.camera, hit.point)
+    : Math.max(sm.camera.near, hit.point.clone().sub(sm.camera.position).dot(sm.camera.getWorldDirection(new THREE.Vector3())));
   const fov = sm.camera.fov * Math.PI / 180;
   const vh = sm.renderer.domElement.clientHeight || window.innerHeight;
   const worldPerPixel = (2 * dist * Math.tan(fov / 2)) / Math.max(1, vh);

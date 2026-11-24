@@ -1,9 +1,13 @@
 import * as THREE from 'three';
 
-// Smoothstep falloff: 1 at the brush center, 0 at the radius edge.
+// Falloff: full strength at the brush center, staying strong out to most of
+// the radius and easing smoothly to 0 at the edge, so what a dab changes fills
+// the size ring instead of only its middle. Half strength is at 0.72 of the
+// radius (it was 0.5).
 const falloff = (d, radius) => {
-  const t = Math.max(0, 1 - d / radius);
-  return t * t * (3 - 2 * t);
+  const x = Math.min(1, d / radius);
+  const k = 1 - x * x * x * x;
+  return k * k;
 };
 
 // How far apart brush dabs are along a stroke, as a share of the brush radius.
