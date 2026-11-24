@@ -4,12 +4,13 @@ import MenuScreenHeader from './MenuScreenHeader';
 // A panel built like the Menu's own screens: the title in the highlight color
 // on a header line (with the panel's controls at its right), and the content
 // on the lighter card inside, one row per setting.
-export default function MenuSubPanel({ title, onBack = undefined, actions = null, children }) {
+export default function MenuSubPanel({ title, icon = null, onBack = undefined, actions = null, children }) {
   const t = useTheme();
   return (
     <div className="pointer-events-auto">
       <MenuScreenHeader
         title={title}
+        icon={icon}
         onBack={onBack}
         color={t.uiColor}
         highlightColor={t.highlightColor}

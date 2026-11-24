@@ -10,6 +10,7 @@ import PageTransition from '@/components/PageTransition';
 import RouteTransition from '@/components/RouteTransition';
 import { ProAccessProvider, useProAccess } from '@/lib/ProAccessContext';
 import { startOpenedFiles, peekOpenedFile, takeOpenedFile, onOpenedFile } from '@/lib/openedFiles';
+import { startClickSound } from '@/lib/clickSound';
 import ScrollToTop from '@/components/ScrollToTop';
 import Modeler from '@/pages/Modeler';
 import Splash from '@/pages/Splash';
@@ -55,6 +56,7 @@ function OpenedFileRoute() {
   const { pathname } = useLocation();
   const { isPro, openUpgrade } = useProAccess();
   useEffect(() => { startOpenedFiles(); }, []);
+  useEffect(() => { startClickSound(); }, []);
   useEffect(() => {
     const route = () => {
       const item = peekOpenedFile();

@@ -203,9 +203,12 @@ export function applySceneLights(SceneManager) {
     // faint fill and a little environment remain, enough that metal is not
     // pitch black, so every light setting has a clearly visible effect and the
     // scene goes dark when the lights are turned down.
+    // Default lighting keeps the flat, even light low so the key and fill
+    // separate faces turned different ways, and corners and grooves take the
+    // viewport's ambient occlusion (screenAO.js).
     const base = theme.defaultLightingEnabled;
     if (this.dirLight) {
-      this.dirLight.intensity = base ? 2 : 0;
+      this.dirLight.intensity = base ? 2.5 : 0;
       if (!this.dirLight.target.parent) this.scene.add(this.dirLight.target);
       if (base && !theme.shadowsEnabled) {
         this.dirLight.position.set(-5, 8, 1.5);
@@ -213,17 +216,17 @@ export function applySceneLights(SceneManager) {
         this.dirLight.target.updateMatrixWorld();
       }
     }
-    if (this.ambientLight) this.ambientLight.intensity = base ? 0.3 : 0.03;
+    if (this.ambientLight) this.ambientLight.intensity = base ? 0.08 : 0.03;
     if (this.hemiLight) {
-      this.hemiLight.intensity = base ? 0.5 : 0.06;
+      this.hemiLight.intensity = base ? 0.42 : 0.06;
       this.hemiLight.color.set(0xffffff);
-      this.hemiLight.groundColor.set(0x888888);
+      this.hemiLight.groundColor.set(base ? 0x4e4e4e : 0x888888);
     }
     if (this.fillLight) {
-      this.fillLight.intensity = base ? 0.35 : 0;
+      this.fillLight.intensity = base ? 0.5 : 0;
       this.fillLight.color.set(0xffffff);
     }
-    this.scene.environmentIntensity = base ? 0.7 : 0.22;
+    this.scene.environmentIntensity = base ? 0.5 : 0.22;
     for (const light of this.sceneLights || []) this._syncSceneLight(light);
   };
   P.setLightingEdit = /** @this {import("./SceneManager").SceneManager} */ function (active) {

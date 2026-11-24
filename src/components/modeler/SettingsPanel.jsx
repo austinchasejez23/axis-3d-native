@@ -102,7 +102,7 @@ function UnitRow({ unit, onChange, highlightColor, uiColor }) {
   );
 }
 
-export default function SettingsPanel({ onGestures, onSnapping }) {
+export default function SettingsPanel({ onGestures, onSnapping, onSound = undefined }) {
   const t = useTheme();
   return (
     <div className="pt-1">
@@ -126,7 +126,7 @@ export default function SettingsPanel({ onGestures, onSnapping }) {
       <div className="divide-y divide-white/10">
         <LabelToggleRow label="Hints" icon={Lightbulb} enabled={t.hintsEnabled} onToggle={(v) => theme.set({ hintsEnabled: v })} highlightColor={t.highlightColor} uiColor={t.uiColor} />
       </div>
-      {(onGestures || onSnapping) && (
+      {(onGestures || onSnapping || onSound) && (
         <>
           <div className="flex items-center gap-2 mt-2 mb-0.5">
             <span className="text-white/60 text-[10px] font-semibold uppercase">Input</span>
@@ -141,6 +141,12 @@ export default function SettingsPanel({ onGestures, onSnapping }) {
             {onSnapping && (
               <button onClick={onSnapping} className="w-full flex items-center justify-between py-1.5 active:scale-95 transition-transform">
                 <span className="text-[12px] font-medium" style={{ color: t.snapToGrid ? t.highlightColor : t.uiColor }}>Snapping</span>
+                <span className="text-[12px]" style={{ color: t.uiColor, opacity: 0.6 }}>›</span>
+              </button>
+            )}
+            {onSound && (
+              <button onClick={onSound} className="w-full flex items-center justify-between py-1.5 active:scale-95 transition-transform">
+                <span className="text-[12px] font-medium" style={{ color: t.soundEnabled ? t.highlightColor : t.uiColor }}>Sound</span>
                 <span className="text-[12px]" style={{ color: t.uiColor, opacity: 0.6 }}>›</span>
               </button>
             )}

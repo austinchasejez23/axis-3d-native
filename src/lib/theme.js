@@ -16,7 +16,7 @@ const GRID_DEFAULT_ON_MIGRATION = 'axis_grid_default_on_v1';
 const TOOL_LABELS_DEFAULT_ON_MIGRATION = 'axis_tool_labels_default_on_v1';
 const SHORTER_HOLD_MIGRATION = 'axis_shorter_hold_v1';
 const INCH_GRID_MIGRATION = 'axis_inch_grid_v1';
-const DEFAULTS = { backgroundColor: '#1c1c1c', highlightColor: '#0066ff', gridColor: '#3a7bbf', shadowsEnabled: false, shadowIntensity: 0.6, defaultLightingEnabled: true, shineEnabled: true, shineIntensity: 0.7, wireframeEnabled: true, toolLabelsEnabled: true, unit: 'in', gridSquareSize: 0.5, gridSize: 250, snapToGrid: false, snapDistance: 0.0625, snapAngle: 15, lightFollowCamera: false, lightAzimuth: 45, lightElevation: 50, lightDistance: 8, lightColor: '#ffffff', lightIntensity: 1.5, savedColors: [], gestureMoveThreshold: 5, gestureHoldDelay: 400, gestureSelectReach: 0.025, gesturePinchThreshold: 6, gestureRotateSensitivity: 1, gestureScaleSensitivity: 1, hideDetailWhileEditing: true, renderBoostEnabled: false, focusRenderBoostEnabled: false, gridVisible: true, objectArrowsEnabled: false, gizmoSpace: 'local', measurementsOn: false, measurementOption: 'edge' };
+const DEFAULTS = { backgroundColor: '#1c1c1c', highlightColor: '#0066ff', gridColor: '#3a7bbf', shadowsEnabled: false, shadowIntensity: 0.6, defaultLightingEnabled: true, shineEnabled: true, shineIntensity: 0.7, wireframeEnabled: true, toolLabelsEnabled: true, unit: 'in', gridSquareSize: 0.5, gridSize: 250, snapToGrid: false, snapDistance: 0.0625, snapAngle: 15, lightFollowCamera: false, lightAzimuth: 45, lightElevation: 50, lightDistance: 8, lightColor: '#ffffff', lightIntensity: 1.5, savedColors: [], gestureMoveThreshold: 5, gestureHoldDelay: 400, gestureSelectReach: 0.025, gesturePinchThreshold: 6, gestureRotateSensitivity: 1, gestureScaleSensitivity: 1, hideDetailWhileEditing: true, renderBoostEnabled: false, focusRenderBoostEnabled: false, gridVisible: true, objectArrowsEnabled: false, gizmoSpace: 'local', measurementsOn: false, measurementOption: 'edge', soundEnabled: true, soundVolume: 0.5 };
 
 // Display settings that belong to one model. They are saved with it and restored
 // when it opens; everything else here (highlight color, gestures, tool labels,
@@ -178,6 +178,9 @@ export const theme = {
   get measurementOption() { return state.measurementOption || 'edge'; },
   // Getting-started hints. Unless set in Settings, they are on for new users.
   get hintsEnabled() { return typeof state.hintsEnabled === 'boolean' ? state.hintsEnabled : true; },
+  // Click sound on button taps: on at half volume unless set in Settings > Sound.
+  get soundEnabled() { return state.soundEnabled !== false; },
+  get soundVolume() { return Math.max(0, Math.min(1, Number.isFinite(state.soundVolume) ? state.soundVolume : 0.5)); },
   getSceneSettings() { return pickScene(state, DEFAULTS); },
   applySceneSettings(settings) { theme.set(pickScene(settings, DEFAULTS)); },
   resetSceneSettings() { theme.set(pickScene(null, DEFAULTS)); },
@@ -234,5 +237,7 @@ export function useTheme() {
     measurementsOn: theme.measurementsOn,
     measurementOption: theme.measurementOption,
     hintsEnabled: theme.hintsEnabled,
+    soundEnabled: theme.soundEnabled,
+    soundVolume: theme.soundVolume,
   };
 }
