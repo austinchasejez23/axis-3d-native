@@ -49,7 +49,7 @@ export const HELP_MATERIALS = [
       { key: 'paint:undo', label: 'Undo', icon: Undo2, desc: 'Undoes the last paint stroke or preview.' },
       { key: 'paint:remove', label: 'Remove paint', icon: Ban, desc: 'Removes all paint from the object.' },
       { key: 'paint:save', label: 'Save color', icon: Plus, desc: 'Adds the current color to the saved colors. Tap a saved color to use it.' },
-      { key: 'paint:sliders', label: 'Size, Opacity, Hardness', icon: SlidersHorizontal, desc: 'Size, Opacity and Hardness shape brush and spray strokes.' },
+      { key: 'paint:sliders', label: 'Size, Opacity, Hardness', icon: SlidersHorizontal, desc: 'Size, Opacity and Hardness shape brush and spray strokes. While Size moves, a ring in the middle of the screen shows how big a dab is.' },
     ],
   },
   {

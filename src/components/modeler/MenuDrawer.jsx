@@ -8,6 +8,7 @@ import MenuColorPicker from './MenuColorPicker';
 import GridCascade from './GridCascade';
 import TransformGizmoCascade from './TransformGizmoCascade';
 import SnapCascade from './SnapCascade';
+import SoundCascade from './SoundCascade';
 import GesturePanel from './GesturePanel';
 import MenuScreenHeader from './MenuScreenHeader';
 import { theme } from '@/lib/theme';
@@ -35,13 +36,14 @@ function DrawerRow({ icon: Icon, label, color, onClick, chevron = false, compact
 const MENU_ZOOM = 1.15;
 
 // Screens that draw their own header and card.
-const OWN_FRAME = new Set(['grid', 'snap']);
+const OWN_FRAME = new Set(['grid', 'snap', 'sound']);
 
 const TITLES = {
   file: 'File',
   viewport: 'Viewport',
   grid: 'Grid',
   snap: 'Snapping',
+  sound: 'Sound',
   settings: 'Settings',
   gestures: 'Gestures',
   account: 'Account',
@@ -288,8 +290,10 @@ export default function MenuDrawer({ open, onClose, backRef, projectName, onRena
         return <GridCascade enabled={display.gridVisible} onToggle={display.onToggleGrid} onApply={back} onBack={back} />;
       case 'snap':
         return <SnapCascade onBack={back} onApply={back} />;
+      case 'sound':
+        return <SoundCascade onClose={back} />;
       case 'settings':
-        return <div className="w-fit max-w-[62vw] px-2 pt-2 pb-1"><SettingsPanel onGestures={() => push('gestures')} onSnapping={() => push('snap')} /></div>;
+        return <div className="w-fit max-w-[62vw] px-2 pt-2 pb-1"><SettingsPanel onGestures={() => push('gestures')} onSnapping={() => push('snap')} onSound={() => push('sound')} /></div>;
       case 'gestures':
         return <div className="w-60 max-w-[78vw] px-2.5 py-1"><GesturePanel /></div>;
       case 'account':

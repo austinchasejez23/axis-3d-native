@@ -39,7 +39,7 @@ try {
   try {
     theme.set({ defaultLightingEnabled: true });
     manager.applyLighting();
-    assert.equal(manager.scene.environmentIntensity, 0.7);
+    assert.equal(manager.scene.environmentIntensity, 0.5);
     const studioAmbient = manager.ambientLight.intensity;
     const studioHemi = manager.hemiLight.intensity;
     const studioFill = manager.fillLight.intensity;

@@ -49,6 +49,7 @@ import { bridgeSelection } from '@/lib/bridgeTools';
 import { applyFocusRenderBoost } from '@/lib/focusRenderBoost';
 import { updateObjectAxisArrows, disposeObjectAxisArrows } from '@/lib/objectAxisArrows';
 import updateSceneShadowBounds from '@/lib/sceneShadowBounds';
+import { SCREEN_AO_LAYER, beginScreenAO, endScreenAO, disposeScreenAO } from '@/lib/screenAO';
 import cloneObjects from '@/lib/cloneObjects';
 import {
   makeFatSegments,
@@ -552,6 +553,7 @@ export class SceneManager {
     threeMesh.visible = mesh.visible;
     threeMesh.castShadow = !mesh.importedWireframeOnly;
     threeMesh.receiveShadow = !mesh.importedWireframeOnly;
+    if (!mesh.referenceUrl) threeMesh.layers.enable(SCREEN_AO_LAYER);
     loadReferenceImage(this, mesh);
 
     // Screen-space fat lines: GPU lines are locked at 1px, so the wireframe is
@@ -2786,7 +2788,9 @@ export class SceneManager {
       sizeVertexDots(this.highlightGroup, this.camera);
       updateShadowMapNeeds(this);
       uploadPaintStrokes(this);
+      beginScreenAO(this);
       this.renderer.render(this.scene, this.camera);
+      endScreenAO();
       this._disposeRetiredMaterials();
     } catch (err) {
       this._reportGraphicsError(err?.message || String(err));
@@ -2964,6 +2968,7 @@ export class SceneManager {
   dispose() {
     this._disposed = true;
     this._disposeRetiredMaterials();
+    disposeScreenAO(this);
     if (this._themeUnsub) this._themeUnsub();
     cancelAnimationFrame(this._rafId);
     this.stopCameraMotion();

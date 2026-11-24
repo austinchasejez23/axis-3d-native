@@ -121,15 +121,21 @@ export function paintAt(sm, clientX, clientY) {
   if (sm._paintTargetCache && !sm._paintTargetCache.stroke) sm._paintTargetCache.stroke = stroke;
   const layer = ensurePaintLayer(sm, mesh);
 
-  // Screen radius → world radius at the touched depth → local radius.
+  // Screen radius → world radius at the touched depth → local radius. Depth
+  // is measured along the view, as the screen draws it, so the dab is the
+  // size of the ring anywhere on screen, not only in the middle.
   const wm = sm.getWorldMatrix(mesh);
   const center = hit.point.clone().applyMatrix4(wm.clone().invert());
-  const dist = viewDistance(sm.camera, hit.point);
+  const dist = sm.camera.isOrthographicCamera
+    ? viewDistance(sm.camera, hit.point)
+    : Math.max(sm.camera.near, hit.point.clone().sub(sm.camera.position).dot(sm.camera.getWorldDirection(new THREE.Vector3())));
   const fov = sm.camera.fov * Math.PI / 180;
   const vh = sm.renderer.domElement.clientHeight || window.innerHeight;
   const worldPerPixel = (2 * dist * Math.tan(fov / 2)) / Math.max(1, vh);
-  const s = new THREE.Vector3().setFromMatrixScale(wm);
-  const radius = (stroke.screenRadius * worldPerPixel) / Math.max(1e-6, (s.x + s.y + s.z) / 3);
+  // World radius; the dab measures it at the object's own scale, so a
+  // stretched object is not painted wider along its long side.
+  const radius = stroke.screenRadius * worldPerPixel;
+  const scale = new THREE.Vector3(mesh.scale?.x ?? 1, mesh.scale?.y ?? 1, mesh.scale?.z ?? 1);
   const normal = hit.face?.normal
     ? hit.face.normal.clone().normalize()
     : mesh.getFaceNormal(mesh.getFaceIndexFromTriangle(hit.faceIndex ?? 0));
@@ -152,6 +158,7 @@ export function paintAt(sm, clientX, clientY) {
     faces: target.faces,
     influenceEdges: target.edges,
     brush: true,
+    scale,
   });
 }
 
