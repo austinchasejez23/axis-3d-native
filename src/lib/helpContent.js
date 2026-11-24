@@ -107,7 +107,7 @@ const desc = {
     smooth: 'Relaxes vertices to even out the surface.',
     clone: 'Duplicates the selected object.',
     radial_array: `Duplicates the object in a circle around an axis. ${SP}: count, radius (in your unit), axis and follow.`,
-    linear_array: `Duplicates the object in a straight line. ${SP}: count, distance between (the space between copies), direction and reverse.`,
+    linear_array: `Duplicates the object in a straight line. ${SP}: count, distance between (the space between copies: 0 has them touching, below 0 overlaps them), direction and reverse.`,
     lock: 'Locks the selected objects so they can\'t be edited. With nothing selected the button becomes Unlock, which releases every locked object.',
     delete: 'Deletes the selected object.',
   },
