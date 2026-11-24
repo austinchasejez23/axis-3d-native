@@ -643,21 +643,37 @@ export class SceneManager {
     syncObjectHighlightTransforms(this);
   }
 
-  // The angle a vertex / edge / face selection has been turned by, as world
-  // X, Y, Z angles in degrees. Twists, free rotation and typed values all add
-  // to the same record (subRotationQ), so the HUD and the Transform values
-  // always show the rotation the selection actually has. The record is kept
-  // on the object for that exact selection (its vertices), so selecting it
-  // again later, or reopening the project, shows the same angle.
+  // The actual world angle of a vertex / edge / face selection, as X, Y, Z
+  // angles in degrees: its object's rotation plus however far the selection
+  // has been turned within the object. A selection that was never turned on
+  // an object rotated 45° reads 45°, the same as the object. Twists, free
+  // rotation and typed values all add to the same record (subRotationQ, the
+  // turn within the object), kept on the object for that exact selection (its
+  // vertices), so selecting it again later, or reopening the project, shows
+  // the same angle.
   subRotationDegrees() {
-    const q = this.subRotationQ;
-    if (!q) return { x: 0, y: 0, z: 0 };
-    const e = new THREE.Euler().setFromQuaternion(q, 'XYZ');
+    const mesh = this.getMesh(this.selection.meshId);
     const deg = (r) => {
       const d = r * 180 / Math.PI;
       return Math.abs(d) < 1e-9 ? 0 : d;
     };
+    const turn = this.subRotationQ;
+    // Not turned within its object: exactly the object's own values.
+    if (!turn || 1 - Math.abs(turn.w) < 1e-12) {
+      return mesh ? { x: deg(mesh.rotation.x), y: deg(mesh.rotation.y), z: deg(mesh.rotation.z) } : { x: 0, y: 0, z: 0 };
+    }
+    const e = new THREE.Euler().setFromQuaternion(this._subWorldQuaternion(), mesh?.rotation.order || 'XYZ');
     return { x: deg(e.x), y: deg(e.y), z: deg(e.z) };
+  }
+
+  // The object's rotation as a quaternion.
+  _objectQuaternion(mesh = this.getMesh(this.selection.meshId)) {
+    return mesh ? new THREE.Quaternion().setFromEuler(mesh.rotation) : new THREE.Quaternion();
+  }
+
+  // World orientation of the selection: object rotation, then its turn within it.
+  _subWorldQuaternion() {
+    return this._objectQuaternion().multiply(this.subRotationQ || new THREE.Quaternion());
   }
 
   // Key of the current vertex / edge / face selection in its object's angle
@@ -689,20 +705,21 @@ export class SceneManager {
   }
 
   // HUD rotation while vertices/edges/faces are selected rotates ONLY that
-  // selection, around its own center, to the typed angles (measured from where
-  // it sat before it was first turned), never the object around it.
+  // selection, around its own center, to the typed world angles (the same
+  // angles the values show), never the object around it.
   // Typed angles are exact: rotation snapping does not round them.
   rotateSubSelectionTo(rxDeg, ryDeg, rzDeg) {
     const D = Math.PI / 180;
-    const target = new THREE.Quaternion().setFromEuler(new THREE.Euler(rxDeg * D, ryDeg * D, rzDeg * D, 'XYZ'));
-    const cur = this.subRotationQ || new THREE.Quaternion();
-    const delta = target.clone().multiply(cur.clone().invert());
+    const mesh = this.getMesh(this.selection.meshId);
+    const target = new THREE.Quaternion().setFromEuler(new THREE.Euler(rxDeg * D, ryDeg * D, rzDeg * D, mesh?.rotation.order || 'XYZ'));
+    const delta = target.clone().multiply(this._subWorldQuaternion().invert());
     if (1 - Math.abs(delta.w) > 1e-12) {
       this.rotatePivot = this.rotatePivot || this.getSelectionCenter();
       this._rotateSubSelection(delta);
       this.rotatePivot = null;
     }
-    this.subRotationQ = target;
+    // Exactly the typed angles, without rounding drift.
+    this.subRotationQ = this._objectQuaternion(mesh).invert().multiply(target);
     this._storeSubRotation();
   }
 
@@ -1990,7 +2007,11 @@ export class SceneManager {
       const delta = this.worldToLocalDelta(mesh, newWorld.clone().sub(vWorld));
       v.x += delta.x; v.y += delta.y; v.z += delta.z;
     }
-    this.subRotationQ = q.clone().multiply(this.subRotationQ || new THREE.Quaternion());
+    // The world turn q, recorded as a turn within the object, so the record
+    // stays right if the object itself is rotated later.
+    const objectQ = this._objectQuaternion(mesh);
+    const localTurn = objectQ.clone().invert().multiply(q).multiply(objectQ);
+    this.subRotationQ = localTurn.multiply(this.subRotationQ || new THREE.Quaternion());
     this._storeSubRotation();
     // Only positions changed: the edge list and the edge/face/vertex maps
     // depend on the faces alone, so they stay valid (working them out again
