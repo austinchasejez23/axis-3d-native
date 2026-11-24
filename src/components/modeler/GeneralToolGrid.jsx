@@ -4,13 +4,14 @@ import {
   ArrowLeftRight, Box, Hexagon, Circle, Move3D, ImagePlus,
 } from 'lucide-react';
 import { ProtractorIcon, MeasureIcon } from '@/lib/toolIcons';
-import { VOID, isStackRow, MODE_COLUMN } from '@/lib/toolLayout';
+import { VOID, isStackRow, MODE_COLUMN, chevronCell } from '@/lib/toolLayout';
 import { slideOutSpot } from '@/lib/slideOutSpot';
 import { useTheme } from '@/lib/theme';
 import { useToolArrange } from '@/hooks/use-tool-arrange';
 import GridToolButton from './GridToolButton';
 import GlassToolRow from './GlassToolRow';
 import ToolGridActions from './ToolGridActions';
+import ToolChevronButton from './ToolChevronButton';
 import ModeGridButton from './ModeGridButton';
 import ToolDragGhost from './ToolDragGhost';
 
@@ -86,6 +87,8 @@ export default function GeneralToolGrid({
     cell !== VOID && cell !== null && !!byId[cell]
     && !(arrange.hidden.includes(cell) && !arrange.expanded && !dragging)
   )));
+  // The chevron shows while any tool is hidden (not while a tool is dragged).
+  const chevron = arrange.hidden.length > 0 && !dragging ? chevronCell(arrange.rows, (r, c) => backdropRows[r][c]) : null;
 
   // Convert's list opens straight up when that is clear; otherwise in the
   // nearest clear space of the grid, wherever the Convert button has been moved.
@@ -99,7 +102,7 @@ export default function GeneralToolGrid({
       const rect = (el) => el.getBoundingClientRect();
       const visible = (r) => r.width > 0 && r.height > 0;
       const blockers = [
-        ...[...grid.querySelectorAll('[data-tool-cell], [data-mode-cell], [data-tool-actions] button')].map(rect),
+        ...[...grid.querySelectorAll('[data-tool-cell], [data-mode-cell], [data-tool-actions] button, [data-tool-chevron] button')].map(rect),
         ...['axis-side-controls', 'axis-side-handle'].map((id) => document.getElementById(id)).filter(Boolean).map(rect),
       ].filter(visible);
       const spot = slideOutSpot({
@@ -128,13 +131,9 @@ export default function GeneralToolGrid({
       {heldTool && <ToolDragGhost icon={heldTool.icon} label={heldTool.label} pointer={arrange.pointer} />}
       <div className="relative">
       <ToolGridActions
-        mode="general"
         showHide={arrange.selected.length >= 1}
         onHide={arrange.hideSelected}
         onShow={arrange.showSelected}
-        showChevron={arrange.hidden.length > 0}
-        expanded={arrange.expanded}
-        onToggleExpanded={arrange.toggleExpanded}
       />
       {arrange.rows.map((row, r) => (
         <GlassToolRow
@@ -147,6 +146,7 @@ export default function GeneralToolGrid({
           rowIndex={r}
           cells={row.map((cell, c) => {
             if (isModeCell(r, c)) return <div data-mode-cell className="rounded-lg pointer-events-auto"><ModeGridButton mode="general" onPress={onModeButton} /></div>;
+            if (chevron?.r === r && chevron?.c === c) return <ToolChevronButton expanded={arrange.expanded} onToggle={arrange.toggleExpanded} />;
             if (cell === VOID) return null;
             const hiddenAway = cell !== null && arrange.hidden.includes(cell) && !arrange.expanded && !dragging;
             if (cell === null || hiddenAway) {

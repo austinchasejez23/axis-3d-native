@@ -421,7 +421,14 @@ export class SceneManager {
       add(mesh, this.selection.type === 'object' ? mesh.vertices.map((v) => v.id) : this.getSelectedVertexIds());
     }
     if (box.isEmpty()) return false;
-    tweenCameraTo(this, box.getCenter(new THREE.Vector3()), this.cameraDist);
+    const center = box.getCenter(new THREE.Vector3());
+    // Keep the camera as far from the selection as it is now, so Focus never
+    // zooms in. The orbit distance can be far shorter than that (zooming in
+    // past the pivot carries the pivot along at the minimum distance), which
+    // used to put the camera right up against, or inside, the selection.
+    // Orthographic views keep their size (the orbit distance sets it).
+    const distance = this.camera.isOrthographicCamera ? this.cameraDist : this.camera.position.distanceTo(center);
+    tweenCameraTo(this, center, distance);
     return true;
   }
 
