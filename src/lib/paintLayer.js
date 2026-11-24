@@ -198,14 +198,23 @@ export function applyPaintPatches(sm, patches) {
 // indices allowed to receive paint (null = every face).
 // `brush`: a dab of a brush or spray stroke, many of which follow each other;
 // its changed pixels are sent with uploadPaintChanges.
-export function paintDab(layer, mesh, { meshId, stroke, center, normal, radius, color, opacity, softness, faces, influenceEdges, brush = false }) {
+// With `scale` (the object's scale on its own axes), `radius` is in world
+// units and distances are measured at the object's scale, so a stretched
+// object is painted the same size across in every direction.
+export function paintDab(layer, mesh, { meshId, stroke, center, normal, radius: brushRadius, color, opacity, softness, faces, influenceEdges, brush = false, scale = null }) {
+  const sx = scale?.x || 1, sy = scale?.y || 1, sz = scale?.z || 1;
+  // Reach in local units in every direction: enough to find every face the
+  // brush can touch.
+  const radius = scale ? brushRadius / Math.max(1e-9, Math.min(Math.abs(sx), Math.abs(sy), Math.abs(sz))) : brushRadius;
+  // Edge strokes fade over the brush radius in local units, as before.
+  const edgeReach = scale ? brushRadius / Math.max(1e-9, (Math.abs(sx) + Math.abs(sy) + Math.abs(sz)) / 3) : brushRadius;
   const { size, data, stamp, bounds } = layer;
   // One stamp id per dab: a texel on an edge shared by two triangles is only
   // blended once, so shared edges never show up as darker seam lines.
   layer.stampId = (layer.stampId % 250) + 1;
   if (layer.stampId === 1) stamp.fill(0);
   const stampId = layer.stampId;
-  const r2 = radius * radius;
+  const r2 = brushRadius * brushRadius;
   const cr = (color >> 16) & 255, cg = (color >> 8) & 255, cb = color & 255;
   const solid = 1 - softness;
   let changed = false;
@@ -223,7 +232,7 @@ export function paintDab(layer, mesh, { meshId, stroke, center, normal, radius, 
       const len2 = edgePoint.lengthSq();
       const t = len2 > 1e-12 ? clamp01(edgeDelta.set(x - a.x, y - a.y, z - a.z).dot(edgePoint) / len2) : 0;
       edgePoint.set(a.x + edgePoint.x * t, a.y + edgePoint.y * t, a.z + edgePoint.z * t);
-      strongest = Math.max(strongest, 1 - sample.distanceTo(edgePoint) / (edgeRadius ?? radius));
+      strongest = Math.max(strongest, 1 - sample.distanceTo(edgePoint) / (edgeRadius ?? edgeReach));
     }
     return clamp01(strongest);
   };
@@ -303,11 +312,11 @@ export function paintDab(layer, mesh, { meshId, stroke, center, normal, radius, 
           const X = A.x * l1 + B.x * l2 + C.x * l3;
           const Y = A.y * l1 + B.y * l2 + C.y * l3;
           const Z = A.z * l1 + B.z * l2 + C.z * l3;
-          const dx = X - center.x, dy = Y - center.y, dz = Z - center.z;
+          const dx = (X - center.x) * sx, dy = (Y - center.y) * sy, dz = (Z - center.z) * sz;
           const d2 = dx * dx + dy * dy + dz * dz;
           if (d2 > r2) continue;
           stamp[si] = stampId;
-          const nd = Math.sqrt(d2) / radius;
+          const nd = Math.sqrt(d2) / brushRadius;
           const w = softness <= 0 || nd <= solid ? 1 : Math.max(0, (1 - nd) / softness);
           // Edge mode adds a separate perpendicular falloff from each selected
           // edge. The strongest individual influence wins, so overlapping edge

@@ -132,8 +132,10 @@ export function paintAt(sm, clientX, clientY) {
   const fov = sm.camera.fov * Math.PI / 180;
   const vh = sm.renderer.domElement.clientHeight || window.innerHeight;
   const worldPerPixel = (2 * dist * Math.tan(fov / 2)) / Math.max(1, vh);
-  const s = new THREE.Vector3().setFromMatrixScale(wm);
-  const radius = (stroke.screenRadius * worldPerPixel) / Math.max(1e-6, (s.x + s.y + s.z) / 3);
+  // World radius; the dab measures it at the object's own scale, so a
+  // stretched object is not painted wider along its long side.
+  const radius = stroke.screenRadius * worldPerPixel;
+  const scale = new THREE.Vector3(mesh.scale?.x ?? 1, mesh.scale?.y ?? 1, mesh.scale?.z ?? 1);
   const normal = hit.face?.normal
     ? hit.face.normal.clone().normalize()
     : mesh.getFaceNormal(mesh.getFaceIndexFromTriangle(hit.faceIndex ?? 0));
@@ -156,6 +158,7 @@ export function paintAt(sm, clientX, clientY) {
     faces: target.faces,
     influenceEdges: target.edges,
     brush: true,
+    scale,
   });
 }
 
