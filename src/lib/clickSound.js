@@ -19,35 +19,43 @@ function audioContext() {
   return context;
 }
 
-// About 60 ms: a low knock that drops in pitch, a brief bright tick at the
-// start, and short inharmonic partials for the metal.
-function makeClick(ctx) {
-  const rate = ctx.sampleRate;
-  const length = Math.round(rate * 0.06);
-  const buffer = ctx.createBuffer(1, length, rate);
-  const data = buffer.getChannelData(0);
-  let phase = 0, previousNoise = 0, seed = 12345;
+// About 20 ms: a quick, crisp tick. A bright noise snap at the very start,
+// short metallic partials high up, and a touch of mid "clack", with nothing
+// low, so it reads as a sharp tick rather than a thump. Kept quiet: at the
+// default half volume it is just loud enough to hear.
+export function makeClickSamples(rate) {
+  const length = Math.round(rate * 0.02);
+  const data = new Float32Array(length);
+  let seed = 12345, n1 = 0, n2 = 0;
   const noise = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x3fffffff - 1; };
   let peak = 0;
   for (let i = 0; i < length; i++) {
     const t = i / rate;
-    const pitch = 150 + 330 * Math.exp(-t / 0.004);
-    phase += 2 * Math.PI * pitch / rate;
-    const body = Math.sin(phase) * (1 - Math.exp(-t / 0.0003)) * Math.exp(-t / 0.016) * 0.8;
-    const metal = Math.sin(2 * Math.PI * 2480 * t) * Math.exp(-t / 0.005) * 0.2
-      + Math.sin(2 * Math.PI * 3890 * t) * Math.exp(-t / 0.0035) * 0.13
-      + Math.sin(2 * Math.PI * 5370 * t) * Math.exp(-t / 0.0025) * 0.07;
     const n = noise();
-    const tick = (n - previousNoise) * Math.exp(-t / 0.0012) * 0.3;
-    previousNoise = n;
-    data[i] = body + metal + tick;
+    // Second difference of white noise: only the bright top end is left.
+    const bright = n - 2 * n1 + n2;
+    n2 = n1; n1 = n;
+    const snap = bright * Math.exp(-t / 0.0006) * 0.35;
+    const metal = Math.sin(2 * Math.PI * 3150 * t) * Math.exp(-t / 0.0022) * 0.5
+      + Math.sin(2 * Math.PI * 4870 * t + 0.7) * Math.exp(-t / 0.0016) * 0.35
+      + Math.sin(2 * Math.PI * 6930 * t + 1.3) * Math.exp(-t / 0.0011) * 0.2;
+    const clack = Math.sin(2 * Math.PI * 1650 * t) * Math.exp(-t / 0.0026) * 0.22;
+    const attack = 1 - Math.exp(-t / 0.00008);
+    data[i] = (snap + metal + clack) * attack;
     peak = Math.max(peak, Math.abs(data[i]));
   }
-  const scale = peak > 0 ? 0.95 / peak : 1;
+  const scale = peak > 0 ? 0.55 / peak : 1;
   for (let i = 0; i < length; i++) data[i] *= scale;
-  // Fade the last couple of milliseconds so it never ends on a pop.
-  const fade = Math.round(rate * 0.002);
+  // Fade the last millisecond so it never ends on a pop.
+  const fade = Math.round(rate * 0.001);
   for (let i = 0; i < fade; i++) data[length - 1 - i] *= i / fade;
+  return data;
+}
+
+function makeClick(ctx) {
+  const samples = makeClickSamples(ctx.sampleRate);
+  const buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
+  buffer.getChannelData(0).set(samples);
   return buffer;
 }
 
@@ -65,13 +73,19 @@ function playNow(volume) {
 }
 
 // Plays the click at the set volume, or at `volume` (0–1) when given.
-export function playClick(volume = undefined) {
+// `waitForLift`: if sound is not allowed yet (phones only allow it after a
+// finished tap), play it when the finger lifts instead of not at all.
+export function playClick(volume = undefined, waitForLift = true) {
   const level = volume ?? theme.soundVolume;
   if (level <= 0) return;
   if (playNow(level)) return;
-  // Phones only let sound start after a finished tap, so the first click
-  // waits for the finger to lift.
-  pending = true;
+  if (waitForLift) pending = true;
+}
+
+// Multi-select turning on by holding a finger down. The finger is still down,
+// so a click that cannot play right now is skipped rather than played late.
+export function playMultiSelectClick() {
+  if (theme.soundEnabled) playClick(undefined, false);
 }
 
 function unlock() {
