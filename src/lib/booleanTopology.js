@@ -580,15 +580,36 @@ export function compactContactFaces(faces, colors, changed, world, preserveEdge,
     return Math.abs(signedArea)>1e-10;
   };
 
+  // How many faces use each vertex; refreshed on every merge pass.
+  let vertexUses = new Map();
   const join = (first, second, ia, ib) => {
-    const a = first[ia], b = first[(ia + 1) % first.length];
-    if (second[ib] !== b || second[(ib + 1) % second.length] !== a) return null;
+    const nf = first.length, ng = second.length;
+    if (second[ib] !== first[(ia + 1) % nf] || second[(ib + 1) % ng] !== first[ia]) return null;
+    // Two pieces can share several edges in a row: a cut line crossed by
+    // other cuts keeps extra points along it. Take the whole shared run, so
+    // the line between them goes away instead of blocking the join.
+    let fs = ia, fe = (ia + 1) % nf, gs = ib, ge = (ib + 1) % ng, run = 1;
+    while (run < Math.min(nf, ng) - 1 && first[(fe + 1) % nf] === second[(gs - 1 + ng) % ng]) {
+      fe = (fe + 1) % nf; gs = (gs - 1 + ng) % ng; run++;
+    }
+    while (run < Math.min(nf, ng) - 1 && first[(fs - 1 + nf) % nf] === second[(ge + 1) % ng]) {
+      fs = (fs - 1 + nf) % nf; ge = (ge + 1) % ng; run++;
+    }
+    if (run > 1) {
+      for (let k = 0, i = fs; k < run; k++, i = (i + 1) % nf) {
+        const x = first[i], y = first[(i + 1) % nf], key = edgeKey(x, y);
+        if (bridgeEdges.has(key) || preserveEdge(key, world.get(x), world.get(y))) return null;
+        // A point inside the run must belong to these two pieces only.
+        if (k > 0 && (vertexUses.get(x) || 0) !== 2) return null;
+      }
+    }
+    const a = first[fs], b = first[fe];
     const result = [b];
-    let i = (ia + 2) % first.length;
-    while (first[i] !== a) { result.push(first[i]); i = (i + 1) % first.length; }
+    let i = (fe + 1) % nf;
+    while (first[i] !== a) { result.push(first[i]); i = (i + 1) % nf; }
     result.push(a);
-    i = (ib + 2) % second.length;
-    while (second[i] !== b) { result.push(second[i]); i = (i + 1) % second.length; }
+    i = (ge + 1) % ng;
+    while (second[i] !== b) { result.push(second[i]); i = (i + 1) % ng; }
     if (new Set(result).size !== result.length) return null;
     const points = result.map((id) => world.get(id));
     if (points.some((p) => !p)) return null;
@@ -600,6 +621,8 @@ export function compactContactFaces(faces, colors, changed, world, preserveEdge,
   // Merge disjoint pairs in each pass to avoid quadratic performance on
   // larger cut surfaces. This removes the shared edge from actual topology.
   for (let pass = 0; pass < 30; pass++) {
+    vertexUses = new Map();
+    for (const face of faces) if (face) for (const id of new Set(face)) vertexUses.set(id, (vertexUses.get(id) || 0) + 1);
     const adjacency = new Map();
     for (let fi = 0; fi < faces.length; fi++) {
       if (!changed.has(fi) || !faces[fi]) continue;
