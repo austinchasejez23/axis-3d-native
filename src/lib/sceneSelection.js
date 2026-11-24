@@ -132,8 +132,11 @@ export function applySceneSelection(SceneManager) {
     this.updateStats();
   };
 
+  // Two or more different objects that still exist; a repeated or stale id
+  // must not turn one object into a group.
   P.isGroupMode = /** @this {import('./SceneManager.js').SceneManager} */ function () {
-    return this.selectionMode === 'object' && this.selectedMeshIds.length > 1;
+    if (this.selectionMode !== 'object' || this.selectedMeshIds.length < 2) return false;
+    return new Set(this.selectedMeshIds.filter((id) => this.getMesh(id))).size > 1;
   };
 
   // The point a multi-selection spins/scales around: the average of each
