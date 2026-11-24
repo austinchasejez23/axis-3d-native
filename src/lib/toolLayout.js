@@ -28,6 +28,23 @@ export const MODE_COLUMN = { general: 0, vertex: 1, edge: 2, face: 3, object: 4 
 // A stack row: only its edge cells can ever hold a tool.
 export const isStackRow = (row) => row.slice(1, 5).every((cell) => cell === VOID);
 
+// Where the expand/collapse chevron goes, given which spots show a tool (or
+// the mode button) right now: column one, the lowest free spot from row two
+// (just above the bottom row) up, so it moves up past expanded tools and back
+// down when they collapse. With every column-one spot taken, the last
+// column's free spot nearest the bottom. Null when nowhere is free.
+export function chevronCell(rows, taken) {
+  const bottom = rows.length - 1;
+  for (let r = bottom - 1; r >= 0; r--) {
+    if (rows[r][0] !== VOID && !taken(r, 0)) return { r, c: 0 };
+  }
+  const last = rows[bottom].length - 1;
+  for (let r = bottom; r >= 0; r--) {
+    if (rows[r][last] !== VOID && !taken(r, last)) return { r, c: last };
+  }
+  return null;
+}
+
 // Before the right-edge stack there were five rows with a left-edge slot only.
 const OLD_STACK_ROWS = 5;
 const OLD_LEFT_STACK = () => [null, VOID, VOID, VOID, VOID, VOID];

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Grid3x3 } from 'lucide-react';
 import { TOOLS } from '@/lib/tools';
-import { VOID, isStackRow, MODE_COLUMN } from '@/lib/toolLayout';
+import { VOID, isStackRow, MODE_COLUMN, chevronCell } from '@/lib/toolLayout';
 import { useTheme } from '@/lib/theme';
 import GridToolButton from './GridToolButton';
 import GlassToolRow from './GlassToolRow';
 import ToolGridActions from './ToolGridActions';
+import ToolChevronButton from './ToolChevronButton';
 import ToolDragGhost from './ToolDragGhost';
 import ModeGridButton from './ModeGridButton';
 import { useToolArrange } from '@/hooks/use-tool-arrange';
@@ -66,6 +67,8 @@ export default function ModeToolGrid({ selectionMode, onTool, onSegments, onLock
     if (BOOLEAN_TOOLS.has(cell) && !booleanOpen) return false;
     return !!byId[cell] && !(arrange.hidden.includes(cell) && !arrange.expanded && !dragging);
   }));
+  // The chevron shows while any tool is hidden (not while a tool is dragged).
+  const chevron = arrange.hidden.length > 0 && !dragging ? chevronCell(rows, (r, c) => backdropRows[r][c]) : null;
 
   return (
     <div
@@ -88,13 +91,9 @@ export default function ModeToolGrid({ selectionMode, onTool, onSegments, onLock
       )}
       <div className="relative z-10">
       <ToolGridActions
-        mode={selectionMode}
         showHide={arrange.selected.length >= 1}
         onHide={arrange.hideSelected}
         onShow={arrange.showSelected}
-        showChevron={arrange.hidden.length > 0}
-        expanded={arrange.expanded}
-        onToggleExpanded={arrange.toggleExpanded}
       />
       {rows.map((row, r) => (
         <GlassToolRow
@@ -107,6 +106,7 @@ export default function ModeToolGrid({ selectionMode, onTool, onSegments, onLock
           rowIndex={r}
           cells={row.map((cell, c) => {
             if (isModeCell(r, c)) return <div data-mode-cell className="rounded-lg pointer-events-auto"><ModeGridButton mode={selectionMode} onPress={onModeButton} /></div>;
+            if (chevron?.r === r && chevron?.c === c) return <ToolChevronButton expanded={arrange.expanded} onToggle={arrange.toggleExpanded} />;
             if (cell === VOID) return null;
             if (BOOLEAN_TOOLS.has(cell) && !booleanOpen) return null;
             const expandedId = booleanOpen && !dragging ? expandedBoolean.get(`${r}:${c}`) : null;

@@ -1209,10 +1209,92 @@ export function bevelLoopEdges(sm, options = {}) {
     }
   }
 
+  // Where an open chain ends partway along a line that carries on unbeveled
+  // (the lower part of a box corner split by a loop cut, or a corner with an
+  // extra point on it), the bevel stops at that end, as in other modeling
+  // programs. The end point stays for the faces that carry on past it, the
+  // bevel's end points are added to those faces' outlines, and a small face
+  // closes the end of the cut. Moving the end point onto the bevel instead
+  // dragged the whole continuing corner with it, tapering it all the way up.
+  const terminalEnds = new Map(); // end vertex id -> loop index
+  if (!closed) {
+    for (const i of new Set([0, N - 1])) {
+      if (openEnds.has(i)) continue;
+      const O = order[i], nb = order[i === 0 ? 1 : N - 2];
+      const pO = P(O);
+      const dir = pO.clone().sub(P(nb));
+      if (dir.lengthSq() < 1e-18) continue;
+      dir.normalize();
+      let continues = false, plain = true;
+      for (let fi = 0; fi < mesh.faces.length && plain; fi++) {
+        const f = mesh.faces[fi];
+        const k = f.indexOf(O);
+        if (k < 0) continue;
+        const before = f[(k - 1 + f.length) % f.length], after = f[(k + 1) % f.length];
+        if (before === nb || after === nb) {
+          const d = P(before === nb ? after : before).sub(pO);
+          if (d.length() > 1e-9 && d.dot(dir) > 0.98 * d.length()) continues = true;
+          continue;
+        }
+        if (onA[fi] || onB[fi]) {
+          if (mesh.getFaceCenter(fi).sub(pO).dot(dir) > 1e-6) continues = true;
+          continue;
+        }
+        // Another face meets this end (a top or a floor): the usual end.
+        plain = false;
+      }
+      if (continues && plain) terminalEnds.set(O, i);
+    }
+  }
+  // The bevel's end point on a face's side: side A's faces take the first
+  // ring, side B's the last.
+  const terminalRing = (fi, i) => {
+    const e = i === 0 ? 0 : walk.length - 1;
+    if (sides[e].a === fi || (sides[e].b !== fi && onA[fi])) return rings[0][i];
+    return rings[segments][i];
+  };
+
   const extraFaces = [];
   for (let fi = 0; fi < mesh.faces.length; fi++) {
     const f = mesh.faces[fi];
     if (!f.some((vid) => idxOf.has(vid))) continue;
+    const endHere = f.find((vid) => terminalEnds.has(vid));
+    if (endHere != null) {
+      const i = terminalEnds.get(endHere);
+      const nb = order[i === 0 ? 1 : N - 2];
+      const pO = P(endHere);
+      const dir = pO.clone().sub(P(nb)).normalize();
+      const k = f.indexOf(endHere);
+      const before = f[(k - 1 + f.length) % f.length], after = f[(k + 1) % f.length];
+      const end = terminalRing(fi, i);
+      const mapOthers = (vid) => {
+        if (vid === endHere || !idxOf.has(vid)) return [vid];
+        const sideRing = end === rings[0][i] ? rings[0] : rings[segments];
+        return [sideRing[idxOf.get(vid)]];
+      };
+      const out = [];
+      for (const vid of f) {
+        if (vid !== endHere) { out.push(...mapOthers(vid)); continue; }
+        if (before === nb || after === nb) {
+          // A side face: if it carries on past the end, keep the end point
+          // after the bevel's end point; otherwise the end point moves onto it.
+          const X = before === nb ? after : before;
+          const d = P(X).sub(pO);
+          const carries = d.length() > 1e-9 && d.dot(dir) > 0.98 * d.length();
+          if (!carries) out.push(end);
+          else if (before === nb) out.push(end, endHere);
+          else out.push(endHere, end);
+          continue;
+        }
+        // A face past the end, beside the bevel: the bevel's end point goes on
+        // its edge across the corner (the neighbour that is not further along).
+        const alongBefore = P(before).sub(pO).dot(dir), alongAfter = P(after).sub(pO).dot(dir);
+        if (alongBefore <= alongAfter) out.push(end, endHere);
+        else out.push(endHere, end);
+      }
+      mesh.faces[fi] = out;
+      continue;
+    }
     const planned = capPlan.get(fi);
     if (planned) {
       const k = f.findIndex((vid) => idxOf.has(vid));
@@ -1337,8 +1419,26 @@ export function bevelLoopEdges(sm, options = {}) {
 
   // Open chain: close an exposed end inside a closed surface with one polygon
   // — unless a surrounding face already wrapped that end via the arc insertion
-  // above. An end on the surface's open border is left open.
+  // above. An end on the surface's open border is left open. Where the bevel
+  // stops partway along a line, the end point is part of that closing face.
   if (!closed) {
+    for (const [O, i] of terminalEnds) {
+      const col = [];
+      for (let s = 0; s <= segments; s++) col.push(rings[s][i]);
+      col.push(O);
+      // Facing back along the beveled edge, into the cut.
+      const nb = order[i === 0 ? 1 : N - 2];
+      const ref = V3(mesh.getVertex(nb)).sub(V3(mesh.getVertex(O)));
+      const n = new THREE.Vector3();
+      for (let j = 0; j < col.length; j++) {
+        const p = V3(mesh.getVertex(col[j])), q = V3(mesh.getVertex(col[(j + 1) % col.length]));
+        n.x += (p.y - q.y) * (p.z + q.z);
+        n.y += (p.z - q.z) * (p.x + q.x);
+        n.z += (p.x - q.x) * (p.y + q.y);
+      }
+      mesh.faces.push(n.dot(ref) < 0 ? [...col].reverse() : col);
+      arcUsedAt.add(i);
+    }
     for (const i of [0, N - 1]) {
       if (arcUsedAt.has(i) || openEnds.has(i)) continue;
       const col = [];
@@ -1357,7 +1457,7 @@ export function bevelLoopEdges(sm, options = {}) {
   // The original sharp loop is fully replaced. Anything still pointing at it is
   // re-pointed at the first ring rather than deleted — dropping the face would
   // punch a hole in the surface.
-  const dead = new Set(originals);
+  const dead = new Set(originals.filter((vid) => !terminalEnds.has(vid)));
   mesh.faces = mesh.faces.map((f) => {
     const out = [];
     for (const vid of f.map((x) => (dead.has(x) ? rings[0][idxOf.get(x)] : x))) {
