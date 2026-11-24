@@ -94,7 +94,9 @@ export function applySceneRadialArray(SceneManager) {
 
   // Copies in a straight line along X, Y or Z (or the reverse way). Distance
   // between is the space between neighbouring copies: 0 puts them side by
-  // side, touching.
+  // side, touching; below 0 they overlap, down to the object's own length
+  // along the direction, where they all sit in one place. Returns the options
+  // used (the distance as limited), or false.
   P.updateLinearArray = /** @this {import("./SceneManager").SceneManager} */ function ({ count = 5, axis = 'x', distance = 0.5, reverse = false } = {}) {
     const state = this._radialArray;
     const source = state ? this.getMesh(state.sourceId) : null;
@@ -104,7 +106,6 @@ export function applySceneRadialArray(SceneManager) {
     const base = state.sourceBase;
     const total = Math.max(2, Math.min(64, Math.round(count)));
     const key = AXES[axis] ? axis : 'x';
-    const gap = Math.max(0, Number.isFinite(Number(distance)) ? Number(distance) : 0);
     // The object's own length along the direction, in the world.
     const matrix = worldMatrix(base);
     const point = new THREE.Vector3();
@@ -115,6 +116,7 @@ export function applySceneRadialArray(SceneManager) {
       max = Math.max(max, point[key]);
     }
     const length = max > min ? max - min : 0;
+    const gap = Math.max(-length, Number.isFinite(Number(distance)) ? Number(distance) : 0);
     const step = AXES[key].clone().multiplyScalar((length + gap) * (reverse ? -1 : 1));
 
     const idBase = Date.now() * 100;
@@ -132,7 +134,7 @@ export function applySceneRadialArray(SceneManager) {
 
     state.options = { count: total, axis: key, distance: gap, reverse: !!reverse };
     this.radialArraySelectPreview();
-    return true;
+    return state.options;
   };
 
   P.radialArraySelectPreview = /** @this {import("./SceneManager").SceneManager} */ function () {

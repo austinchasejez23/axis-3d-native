@@ -9,7 +9,9 @@ import ModelingPanel from '@/components/modeler/ModelingPanel';
 
 // Laid out like the Radial array panel: Count and Distance between on top,
 // Direction (X, Y, Z) and Reverse underneath. Distance between is shown in
-// the app's unit (in or mm), like the transform values and Snap distance.
+// the app's unit (in or mm), like the transform values and Snap distance. It
+// can go below 0 to overlap the copies; the scene limits how far (the
+// object's own length), and the value shown follows that limit.
 export default function LinearArrayPanel({ onPreview, onApply, onCancel }) {
   const { uiColor, highlightColor, unit } = useTheme();
   const [values, setValues] = useState(() => ({ ...toolMemory.linearArray }));
@@ -19,9 +21,10 @@ export default function LinearArrayPanel({ onPreview, onApply, onCancel }) {
   const keypad = (name) => ({ keypadOpen: activeKeypad === name, onKeypadOpen: (open = true) => setActiveKeypad(open ? name : null) });
   const update = (change) => {
     const next = { ...values, ...change };
+    const used = onPreview(next);
+    if (used && typeof used === 'object' && Number.isFinite(used.distance)) next.distance = used.distance;
     setValues(next);
     toolMemory.linearArray = next;
-    onPreview(next);
   };
   const buttonStyle = (active) => ({ color: active ? highlightColor : uiColor });
   return (
@@ -49,7 +52,7 @@ export default function LinearArrayPanel({ onPreview, onApply, onCancel }) {
             </div>
             <div className="min-w-0 pl-3">
               <div className="mb-1 flex items-center gap-1 text-[12px] font-semibold" style={{ color: uiColor }}><Ruler className="h-3.5 w-3.5 shrink-0 opacity-80" />Distance between ({unit})</div>
-              <HorizontalChevronStepper label="Distance between" value={toDisplayUnit(values.distance ?? 0.5, unit)} onChange={(distance) => update({ distance: fromDisplayUnit(distance, unit) })} step={unit === 'in' ? 0.25 : 5} decimals={unit === 'in' ? 2 : 1} min={0} max={toDisplayUnit(1000, unit)} color={uiColor} highlightColor={highlightColor} appearance="radial" {...keypad('distance')} />
+              <HorizontalChevronStepper label="Distance between" value={toDisplayUnit(values.distance ?? 0.5, unit)} onChange={(distance) => update({ distance: fromDisplayUnit(distance, unit) })} step={unit === 'in' ? 0.25 : 5} decimals={unit === 'in' ? 2 : 1} min={-toDisplayUnit(1000, unit)} max={toDisplayUnit(1000, unit)} color={uiColor} highlightColor={highlightColor} appearance="radial" {...keypad('distance')} />
             </div>
           </div>
           <div className="mt-1.5 flex items-center border-t border-white/10 pt-1.5">
