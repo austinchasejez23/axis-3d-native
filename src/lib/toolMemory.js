@@ -5,7 +5,8 @@ export const toolMemory = {
   primitiveSegments: 12,
   bevel: { radius: 0.1, segments: 1 },
   radialArray: { count: 12, axis: 'y', follow: true, radius: 3 },
-  linearArray: { count: 5, axis: 'x', distance: 0.5, reverse: false },
+  // minDistance: lowest Distance between for the object being arrayed (set by the scene).
+  linearArray: { count: 5, axis: 'x', distance: 0.5, reverse: false, minDistance: /** @type {number | undefined} */ (undefined) },
   radius: { radius: 0.25, segments: 6 },
   selectionPattern: { skip: 0, offset: 0 },
 };
