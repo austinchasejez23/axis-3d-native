@@ -287,6 +287,12 @@ declare module './SceneManager.js' {
     getDrawPlane(): any;
     /** Implemented by sceneSelection.js */
     getGroupCenter(): import('three').Vector3 | null;
+    /** Implemented by sceneUndo.js */
+    getGroupRecord(create?: boolean): { ids: any[]; q: import('three').Quaternion; rotation: number[]; scale: number[]; copies: Map<any, any> | null } | null;
+    /** Implemented by sceneUndo.js */
+    groupKey(): string;
+    /** Implemented by sceneUndo.js */
+    syncGroupRecords(): void;
     /** Implemented by sceneLights.js */
     getLightingState(): unknown[];
     /** Implemented by sceneUndo.js */

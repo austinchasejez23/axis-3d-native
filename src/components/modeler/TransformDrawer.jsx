@@ -17,7 +17,6 @@ export default function TransformDrawer({ meshId, managerRef, onClose, onApplied
   const [dims, setDims] = useState(() => { const b = managerRef.current?.getSelectionBounds(); return b ? [b.sx,b.sy,b.sz].map(v => toDisplayUnit(v,unit)) : [0,0,0]; });
   const [snapshot, setSnapshot] = useState(null);
   const [activeKeypad, setActiveKeypad] = useState(null);
-  const groupScaleRef = useState(() => [1, 1, 1])[0];
   const keypad = (name) => ({ keypadOpen: activeKeypad === name, onKeypadOpen: (open) => setActiveKeypad(open ? name : null) });
   useEffect(() => {
     const transform = read();
@@ -63,11 +62,13 @@ export default function TransformDrawer({ meshId, managerRef, onClose, onApplied
     n[i] = Math.max(0.01, v);
     const manager = managerRef.current;
     if (manager?.isGroupMode()) {
-      const previous = Math.max(0.01, groupScaleRef[i]);
+      const previous = Math.max(0.01, manager.getGroupRecord()?.scale[i] ?? 1);
       const factor = n[i] / previous;
       if (Math.abs(factor - 1) > 1e-9) {
         manager.scaleGroupAxis(['x', 'y', 'z'][i], factor);
-        groupScaleRef[i] = n[i];
+        // Keep exactly the typed value.
+        const record = manager.getGroupRecord();
+        if (record) record.scale[i] = n[i];
       }
     } else if (manager?.selection.type === 'object') {
       applyLive(pos, rot, n);

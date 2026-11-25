@@ -63,6 +63,16 @@ function sameMeshState(live, copy) {
   return true;
 }
 
+// The selected objects' ids, each once, in a fixed order.
+function groupIds(manager) {
+  const ids = [...new Set(manager.selectedMeshIds.filter((id) => manager.getMesh(id)))];
+  return ids.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
+const copyGroupRecords = (records) => new Map([...records].map(([key, r]) => [key, {
+  ids: [...r.ids], q: r.q.clone(), rotation: [...r.rotation], scale: [...r.scale], copies: r.copies,
+}]));
+
 export function applySceneUndo(SceneManager) {
   const P = SceneManager.prototype;
 
@@ -86,7 +96,9 @@ export function applySceneUndo(SceneManager) {
   // skipped here and made by pushUndoSnapshot, and only if the selection
   // actually changed (selecting never edits a mesh, so the copy is identical).
   P.captureSnapshot = /** @this {import("./SceneManager").SceneManager} */ function (deferMeshes = false) {
+    this.syncGroupRecords?.();
     return {
+      groupRecords: this.groupRecords ? copyGroupRecords(this.groupRecords) : null,
       meshes: deferMeshes ? null : this._meshCopies(),
       selection: { ...this.selection, indices: [...this.selection.indices] },
       subRotation: this.subRotationQ ? this.subRotationQ.toArray() : null,
@@ -96,6 +108,53 @@ export function applySceneUndo(SceneManager) {
       lights: deferMeshes ? null : (this.serializeSceneLights?.() || []),
       selectedLightId: this.selectedLightId,
     };
+  };
+
+  // Several objects selected together have no rotation or scale of their
+  // own. They read 0 and 1, then show how far they have been turned and
+  // resized together. Those values are kept for that exact set of objects
+  // while nothing about any of them changes: once the set is no longer
+  // selected, a copy of each object is kept, and selecting the same set again
+  // shows the kept values only if every object still matches its copy.
+  P.groupKey = /** @this {import("./SceneManager").SceneManager} */ function () {
+    if (!this.isGroupMode()) return '';
+    return groupIds(this).join('|');
+  };
+
+  P.getGroupRecord = /** @this {import("./SceneManager").SceneManager} */ function (create = false) {
+    const key = this.groupKey();
+    if (!key) return null;
+    let record = this.groupRecords.get(key);
+    if (record?.copies) {
+      const unchanged = record.ids.every((id) => {
+        const mesh = this.getMesh(id), copy = record.copies.get(id);
+        return !!mesh && !!copy && sameMeshState(mesh, copy);
+      });
+      if (unchanged) record.copies = null;
+      else { this.groupRecords.delete(key); record = undefined; }
+    }
+    if (!record && create) {
+      record = { ids: groupIds(this), q: new THREE.Quaternion(), rotation: [0, 0, 0], scale: [1, 1, 1], copies: null };
+      this.groupRecords.set(key, record);
+    }
+    return record || null;
+  };
+
+  // Runs whenever the selection may have changed, before anything is edited.
+  P.syncGroupRecords = /** @this {import("./SceneManager").SceneManager} */ function () {
+    if (!this.groupRecords?.size) return;
+    const current = this.groupKey();
+    if (current) this.getGroupRecord();
+    for (const [key, record] of this.groupRecords) {
+      if (key === current || record.copies) continue;
+      const meshes = record.ids.map((id) => this.getMesh(id));
+      if (meshes.some((mesh) => !mesh)) { this.groupRecords.delete(key); continue; }
+      // Undo already keeps an unchanged copy of most objects: share it.
+      record.copies = new Map(meshes.map((mesh) => {
+        const last = this._undoMeshCopies?.get(mesh.id);
+        return [mesh.id, last && sameMeshState(mesh, last) ? last : mesh.clone()];
+      }));
+    }
   };
 
   P.materializeSnapshot = /** @this {import("./SceneManager").SceneManager} */ function (snapshot) {
@@ -168,6 +227,7 @@ export function applySceneUndo(SceneManager) {
     this.selection = snapshot.selection;
     this.subRotationQ = snapshot.subRotation ? new THREE.Quaternion().fromArray(snapshot.subRotation) : null;
     this.selectedMeshIds = snapshot.selectedMeshIds ? [...snapshot.selectedMeshIds] : (this.selection.meshId ? [this.selection.meshId] : []);
+    if (snapshot.groupRecords) this.groupRecords = copyGroupRecords(snapshot.groupRecords);
     this.multiSelect = !!snapshot.multiSelect;
     if (snapshot.lights) this.restoreSceneLights?.(snapshot.lights, snapshot.selectedLightId);
     if (snapshot.selectionMode && snapshot.selectionMode !== this.selectionMode) {
@@ -207,6 +267,7 @@ export function applySceneUndo(SceneManager) {
     this.selection = snapshot.selection;
     this.subRotationQ = snapshot.subRotation ? new THREE.Quaternion().fromArray(snapshot.subRotation) : null;
     this.selectedMeshIds = snapshot.selectedMeshIds ? [...snapshot.selectedMeshIds] : (this.selection.meshId ? [this.selection.meshId] : []);
+    if (snapshot.groupRecords) this.groupRecords = copyGroupRecords(snapshot.groupRecords);
     this.multiSelect = !!snapshot.multiSelect;
     if (refresh) {
       this.updateHighlights();
@@ -276,14 +337,11 @@ export function applySceneUndo(SceneManager) {
     if (!transform) return null;
     if (this.isGroupMode()) {
       const center = this.getDisplayCenter();
-      const primaryId = this.selection.meshId && this.selectedMeshIds.includes(this.selection.meshId)
-        ? this.selection.meshId
-        : this.selectedMeshIds[0];
-      const primaryTransform = primaryId ? this.getObjectTransform(primaryId) : transform;
+      const record = this.getGroupRecord();
       return center ? {
         position: [center.x, center.y, center.z],
-        rotation: primaryTransform?.rotation || transform.rotation,
-        scale: [1, 1, 1],
+        rotation: record ? [...record.rotation] : [0, 0, 0],
+        scale: record ? [...record.scale] : [1, 1, 1],
       } : transform;
     }
     if (this.selection.type === 'object') {

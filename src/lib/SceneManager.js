@@ -179,6 +179,10 @@ export class SceneManager {
     this.threeObjects = new Map();
     this.selection = { meshId: null, type: 'object', indices: [] };
     this.selectedMeshIds = [];
+    // Rotation and scale of several objects turned and resized together, kept
+    // per exact set of objects (see getGroupRecord in sceneUndo.js).
+    /** @type {Map<string, {ids: any[], q: THREE.Quaternion, rotation: number[], scale: number[], copies: Map<any, any> | null}>} */
+    this.groupRecords = new Map();
     this.selectionMode = 'object';
     this.activeAction = 'idle';
     this.activeAxis = null;
@@ -1445,6 +1449,7 @@ export class SceneManager {
   }
 
   updateHighlights(force = false) {
+    this.syncGroupRecords?.();
     // Only topology changes (like origin re-centering) force a rebuild during
     // a heavy gesture; object transforms reuse the existing local outline.
     if (this._heavyEdit && !force) { this._highlightsStale = true; return; }
@@ -1680,10 +1685,8 @@ export class SceneManager {
       for (const v of verts) { p.set(v.x, v.y, v.z).applyMatrix4(wm); box.expandByPoint(p); }
     };
     if (this.isGroupMode()) {
-      for (const id of this.selectedMeshIds) {
-        const m = this.getMesh(id);
-        if (m) addVerts(m, this.objectPivotVertices(m));
-      }
+      const groupBox = this.getGroupBox();
+      if (groupBox) return groupBox.min.clone().add(groupBox.max).multiplyScalar(0.5);
     } else {
       const sel = this.selection;
       const mesh = this.getMesh(sel.meshId);
@@ -1863,6 +1866,8 @@ export class SceneManager {
       m.scale.multiplyScalar(factor);
       this.updateObjectTransform(id);
     }
+    const record = this.getGroupRecord(true);
+    if (record) record.scale = record.scale.map((value) => value * factor);
     this.applyScaleSnap(null);
     refreshTransformHighlights(this);
     this.updateHud();
@@ -1891,35 +1896,32 @@ export class SceneManager {
       m.scale[localAxis] = Math.max(0.01, m.scale[localAxis] * factor);
       this.updateObjectTransform(id);
     }
+    const record = this.getGroupRecord(true);
+    if (record) record.scale[axis === 'x' ? 0 : axis === 'y' ? 1 : 2] *= factor;
     refreshTransformHighlights(this);
     this.updateHud();
   }
 
-  // Typed rotation for a group (Transform drawer): the values shown are the
-  // main object's rotation, so the group turns, around its pivot, until that
-  // object's rotation is exactly the typed X, Y, Z. Those exact numbers are
-  // kept: working them back out of the turned object could give another set
-  // of angles for the same turn, which made the other two values jump and
-  // the next typed value turn the group by the wrong amount.
+  // Typed rotation for a group (Transform drawer): the values are how far the
+  // objects have been turned together, so the group turns, around its pivot,
+  // from the angle it reads now to exactly the typed X, Y, Z. Those exact
+  // numbers are kept: working them back out of the turn could give another
+  // set of angles for the same turn.
   setGroupRotationLive(rxDeg, ryDeg, rzDeg) {
-    const primaryId = this.selection.meshId && this.selectedMeshIds.includes(this.selection.meshId)
-      ? this.selection.meshId
-      : this.selectedMeshIds[0];
-    const primary = this.getMesh(primaryId);
-    if (!primary || primary.locked) return;
+    if (!this.selectedMeshIds.some((id) => { const m = this.getMesh(id); return m && !m.locked; })) return;
+    const record = this.getGroupRecord(true);
+    if (!record) return;
     const D = Math.PI / 180;
-    const target = new THREE.Euler(rxDeg * D, ryDeg * D, rzDeg * D, primary.rotation.order);
-    const turn = new THREE.Quaternion().setFromEuler(target)
-      .multiply(new THREE.Quaternion().setFromEuler(primary.rotation).invert())
-      .normalize();
+    const target = new THREE.Quaternion().setFromEuler(new THREE.Euler(rxDeg * D, ryDeg * D, rzDeg * D, 'XYZ'));
+    const turn = target.clone().multiply(record.q.clone().invert()).normalize();
     if (turn.w < 0) turn.set(-turn.x, -turn.y, -turn.z, -turn.w);
     const angle = 2 * Math.acos(Math.min(1, turn.w));
     if (angle > 1e-9) {
       const s = Math.sqrt(Math.max(0, 1 - turn.w * turn.w));
       this.rotateGroupAroundAxis(angle, new THREE.Vector3(turn.x / s, turn.y / s, turn.z / s));
     }
-    primary.rotation.copy(target);
-    this.updateObjectTransform(primary.id);
+    record.q.copy(target);
+    record.rotation = [rxDeg, ryDeg, rzDeg];
     this.updateHud();
   }
 
@@ -2079,6 +2081,13 @@ export class SceneManager {
       curQ.premultiply(q);
       setRotationReadably(m.rotation, curQ);
       this.updateObjectTransform(id);
+    }
+    const record = this.getGroupRecord(true);
+    if (record) {
+      record.q.premultiply(q).normalize();
+      const e = new THREE.Euler();
+      setRotationReadably(e, record.q);
+      record.rotation = [e.x, e.y, e.z].map((r) => r * 180 / Math.PI);
     }
     refreshTransformHighlights(this);
     this.updateHud();
@@ -2733,7 +2742,37 @@ export class SceneManager {
     this.updateHud();
   }
 
+  // World-space box around all the selected objects together (the same
+  // points their center is taken from), in one pass.
+  getGroupBox() {
+    const min = new THREE.Vector3(Infinity, Infinity, Infinity);
+    const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+    for (const id of new Set(this.selectedMeshIds)) {
+      const mesh = this.getMesh(id);
+      if (!mesh) continue;
+      const e = this.getWorldMatrix(mesh).elements;
+      for (const v of this.objectPivotVertices(mesh)) {
+        const vx = v.x, vy = v.y, vz = v.z;
+        const w = 1 / (e[3] * vx + e[7] * vy + e[11] * vz + e[15]);
+        const x = (e[0] * vx + e[4] * vy + e[8] * vz + e[12]) * w;
+        const y = (e[1] * vx + e[5] * vy + e[9] * vz + e[13]) * w;
+        const z = (e[2] * vx + e[6] * vy + e[10] * vz + e[14]) * w;
+        if (x < min.x) min.x = x;
+        if (x > max.x) max.x = x;
+        if (y < min.y) min.y = y;
+        if (y > max.y) max.y = y;
+        if (z < min.z) min.z = z;
+        if (z > max.z) max.z = z;
+      }
+    }
+    return min.x <= max.x ? { min, max } : null;
+  }
+
   getSelectionBounds() {
+    if (this.isGroupMode()) {
+      const box = this.getGroupBox();
+      return box ? { sx: box.max.x - box.min.x, sy: box.max.y - box.min.y, sz: box.max.z - box.min.z } : { sx: 0, sy: 0, sz: 0 };
+    }
     const sel = this.selection;
     const mesh = this.getMesh(sel.meshId);
     if (!mesh) return { sx: 0, sy: 0, sz: 0 };
@@ -2762,6 +2801,22 @@ export class SceneManager {
     }
     const mesh = this.getMesh(sel.meshId);
     if (!mesh) return;
+    // Several objects: one set of values for all of them together, their
+    // overall center and size, and how far they've been turned together.
+    if (this.isGroupMode()) {
+      const box = this.getGroupBox();
+      if (!box) return;
+      const record = this.getGroupRecord();
+      const [rx, ry, rz] = record ? record.rotation : [0, 0, 0];
+      this.cb.onHudChange?.({
+        action,
+        x: q3((box.min.x + box.max.x) / 2), y: q3((box.min.y + box.max.y) / 2), z: q3((box.min.z + box.max.z) / 2),
+        rx: q3(rx), ry: q3(ry), rz: q3(rz),
+        sx: q3(box.max.x - box.min.x), sy: q3(box.max.y - box.min.y), sz: q3(box.max.z - box.min.z),
+        label: 'Pos. (in)', activeAxis: this.activeAxis
+      });
+      return;
+    }
     let rot;
     if (sel.type !== 'object') {
       // The rotation the selection actually has, during a twist and after it.
@@ -2792,15 +2847,7 @@ export class SceneManager {
       ? { sx: maxBounds.x - minBounds.x, sy: maxBounds.y - minBounds.y, sz: maxBounds.z - minBounds.z }
       : { sx: 0, sy: 0, sz: 0 };
     const size = { sx: q3(rawSize.sx), sy: q3(rawSize.sy), sz: q3(rawSize.sz) };
-    if (this.isGroupMode()) {
-      const center = this.getDisplayCenter();
-      this.cb.onHudChange?.({
-        action,
-        x: q3(center.x), y: q3(center.y), z: q3(center.z),
-        ...rot, ...size,
-        label: 'Pos. (in)', activeAxis: this.activeAxis
-      });
-    } else if (sel.type === 'object') {
+    if (sel.type === 'object') {
       // Position values are always the selection's center point, never the
       // object's modeling origin.
       const center = this.getDisplayCenter();
