@@ -58,7 +58,7 @@ export function applySceneOrientation(SceneManager) {
     if (this.selection.meshId && this.selection.type !== 'object') return this.resetSubRotation();
     const meshes = this.orientationTargets();
     if (!meshes.length) return false;
-    const record = this.getGroupRecord();
+    const record = this.getGroupRecord?.();
     if (record && record.rotation.some((d) => d !== 0)) {
       record.resets = [...(record.resets || []), { q: record.q.toArray(), rotation: [...record.rotation] }];
       record.q.identity();
@@ -103,7 +103,7 @@ export function applySceneOrientation(SceneManager) {
       mesh.orientationResets = stack;
     }
     // Two or more objects: the numbers for all of them together come back too.
-    const record = this.getGroupRecord();
+    const record = this.getGroupRecord?.();
     const saved = record?.resets?.pop();
     if (saved) {
       record.q.fromArray(saved.q);

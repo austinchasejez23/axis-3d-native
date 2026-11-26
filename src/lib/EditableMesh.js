@@ -11,14 +11,18 @@ const genId = () => nextId++;
 // Element angle records (see subRotationDegrees in SceneManager.js): one
 // edge or vertex keeps [turn (4 numbers), numbers shown (3)] (older projects:
 // the turn alone); one face keeps { q, rotation, fp }.
-const copyElementRotations = (rotations) => Object.fromEntries(
-  Object.entries(rotations || {}).flatMap(([k, r]) => {
-    if (Array.isArray(r)) return r.length === 4 || r.length === 7 ? [[k, [...r]]] : [];
-    if (r && Array.isArray(r.q) && Array.isArray(r.rotation) && Array.isArray(r.fp)) {
-      return [[k, { q: [...r.q], rotation: [...r.rotation], fp: [...r.fp] }]];
+const copyElementRotations = (rotations) => {
+  /** @type {Record<string, any>} */
+  const copy = {};
+  for (const [k, r] of Object.entries(rotations || {})) {
+    if (Array.isArray(r)) {
+      if (r.length === 4 || r.length === 7) copy[k] = [...r];
+    } else if (r && Array.isArray(r.q) && Array.isArray(r.rotation) && Array.isArray(r.fp)) {
+      copy[k] = { q: [...r.q], rotation: [...r.rotation], fp: [...r.fp] };
     }
-    return [];
-  }));
+  }
+  return copy;
+};
 
 // True when two of a face's triangles meet past the soft-normal angle (a real
 // fold). Degenerate triangles (no normal) are left out.
