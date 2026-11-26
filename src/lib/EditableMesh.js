@@ -8,8 +8,17 @@ import { mergeHiddenDiagonals, reconstructImportedQuads } from './quadMerge';
 let nextId = 1;
 const genId = () => nextId++;
 
+// Element angle records (see subRotationDegrees in SceneManager.js): one
+// edge or vertex keeps [turn (4 numbers), numbers shown (3)] (older projects:
+// the turn alone); one face keeps { q, rotation, fp }.
 const copyElementRotations = (rotations) => Object.fromEntries(
-  Object.entries(rotations || {}).filter(([, q]) => Array.isArray(q) && q.length === 4).map(([k, q]) => [k, [...q]]));
+  Object.entries(rotations || {}).flatMap(([k, r]) => {
+    if (Array.isArray(r)) return r.length === 4 || r.length === 7 ? [[k, [...r]]] : [];
+    if (r && Array.isArray(r.q) && Array.isArray(r.rotation) && Array.isArray(r.fp)) {
+      return [[k, { q: [...r.q], rotation: [...r.rotation], fp: [...r.fp] }]];
+    }
+    return [];
+  }));
 
 // True when two of a face's triangles meet past the soft-normal angle (a real
 // fold). Degenerate triangles (no normal) are left out.
