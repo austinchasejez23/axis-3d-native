@@ -90,4 +90,19 @@ try {
   group.restoreOrientation(kept);
   assert.ok(Math.abs(a.rotation.x) < 1e-12 && same(world(a), wa) && a.orientationResets.length === 1, 'Cancel puts the reset back');
   console.log('PASS: groups reset together; saves, copies and Cancel keep the reset');
+
+  // Faces, edges or vertices selected: only their rotation numbers go to 0;
+  // the object they belong to is not reset.
+  const holder = createPrimitive('cube');
+  holder.rotation.set(0, Math.PI / 4, 0);
+  const faces = new Fixture([holder]);
+  let subResets = 0;
+  Object.assign(faces, { resetSubRotation() { subResets++; return true; } });
+  faces.selection = { meshId: holder.id, type: 'face', indices: [0] };
+  assert.equal(faces.resetOrientation(), true);
+  assert.equal(subResets, 1);
+  assert.ok(Math.abs(holder.rotation.y - Math.PI / 4) < 1e-12 && !holder.orientationResets?.length, 'the object is not reset');
+  assert.equal(faces.undos, 0);
+  assert.equal(faces.canUndoOrientationReset(), false);
+  console.log('PASS: with faces, edges or vertices selected, reset leaves their object as it is');
 } finally { await server.close(); }

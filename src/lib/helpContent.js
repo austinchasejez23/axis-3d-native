@@ -156,7 +156,7 @@ const segments = { key: 'object:segments', mode: 'object', label: 'Segments', ic
 const SIDE = [
   { key: 'side:clay', side: 'clay', label: 'Clay', icon: Globe, desc: 'Displays the model in plain clay shading.' },
   { key: 'side:transparent', side: 'transparent', label: 'Transparent', icon: Scan, desc: 'Makes the model see-through.' },
-  { key: 'side:orientation', side: 'orientation', label: 'Reset orientation', icon: OrientationResetIcon, desc: `Lines the selected geometry's own axes up with the world axes without moving it, so scaling follows the world axes. Double-tap to open its panel and undo the last reset.` },
+  { key: 'side:orientation', side: 'orientation', label: 'Reset orientation', icon: OrientationResetIcon, desc: `Sets the selected objects' rotation to 0° without moving them, lining their own axes up with the world axes so scaling follows the world axes. With faces, edges or vertices selected, only their rotation values go to 0° and the object isn't changed. Double-tap to open its panel and undo the last reset of an object.` },
   { key: 'side:free', side: 'free', label: 'Free Transform', icon: Move3D, desc: `Turns Free Transform on or off. Double-tap to open its settings panel.` },
   { key: 'side:snap', side: 'snap', label: 'Snapping', icon: Magnet, desc: `Snaps movement to set distances and angles. Double-tap to open its settings panel: distance and angle. They are also in Menu > Settings > Snapping.` },
   { key: 'side:precision', side: 'precision', label: 'Resistance', icon: ResistanceIcon, desc: `Adds resistance to moving, turning and scaling for finer control. Double-tap to open its settings panel: at 50% the selection moves 1/4 as far as your finger, at 80% 1/25.` },

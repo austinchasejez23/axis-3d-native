@@ -19,6 +19,13 @@ export interface SceneSnapshot {
   selectedLightId?: string | null;
   [key: string]: unknown;
 }
+export interface SceneTurnRecord {
+  q: import('three').Quaternion;
+  rotation: number[];
+  scale: number[];
+  leftAt: number | null;
+  resets: { q: number[]; rotation: number[] }[];
+}
 export interface SceneLightRecord {
   id: string;
   type: string;
@@ -288,11 +295,15 @@ declare module './SceneManager.js' {
     /** Implemented by sceneSelection.js */
     getGroupCenter(): import('three').Vector3 | null;
     /** Implemented by sceneUndo.js */
-    getGroupRecord(create?: boolean): { ids: any[]; q: import('three').Quaternion; rotation: number[]; scale: number[]; copies: Map<any, any> | null } | null;
+    getGroupRecord(create?: boolean): SceneTurnRecord | null;
     /** Implemented by sceneUndo.js */
-    groupKey(): string;
+    getTurnRecord(create?: boolean): SceneTurnRecord | null;
     /** Implemented by sceneUndo.js */
-    syncGroupRecords(): void;
+    turnKey(): string;
+    /** Implemented by sceneUndo.js */
+    syncTurnRecords(): void;
+    /** Implemented by sceneUndo.js */
+    clearTurnRecords(): void;
     /** Implemented by sceneLights.js */
     getLightingState(): unknown[];
     /** Implemented by sceneUndo.js */

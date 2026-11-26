@@ -69,8 +69,9 @@ function groupIds(manager) {
   return ids.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
-const copyGroupRecords = (records) => new Map([...records].map(([key, r]) => [key, {
-  ids: [...r.ids], q: r.q.clone(), rotation: [...r.rotation], scale: [...r.scale], copies: r.copies,
+const copyTurnRecords = (records) => new Map([...records].map(([key, r]) => [key, {
+  q: r.q.clone(), rotation: [...r.rotation], scale: [...r.scale], leftAt: r.leftAt,
+  resets: (r.resets || []).map((saved) => ({ q: [...saved.q], rotation: [...saved.rotation] })),
 }]));
 
 export function applySceneUndo(SceneManager) {
@@ -96,12 +97,11 @@ export function applySceneUndo(SceneManager) {
   // skipped here and made by pushUndoSnapshot, and only if the selection
   // actually changed (selecting never edits a mesh, so the copy is identical).
   P.captureSnapshot = /** @this {import("./SceneManager").SceneManager} */ function (deferMeshes = false) {
-    this.syncGroupRecords?.();
+    this.syncTurnRecords?.();
     return {
-      groupRecords: this.groupRecords ? copyGroupRecords(this.groupRecords) : null,
+      turnRecords: this.turnRecords ? copyTurnRecords(this.turnRecords) : null,
       meshes: deferMeshes ? null : this._meshCopies(),
       selection: { ...this.selection, indices: [...this.selection.indices] },
-      subRotation: this.subRotationQ ? this.subRotationQ.toArray() : null,
       selectedMeshIds: [...this.selectedMeshIds],
       multiSelect: this.multiSelect,
       selectionMode: this.selectionMode,
@@ -110,51 +110,54 @@ export function applySceneUndo(SceneManager) {
     };
   };
 
-  // Several objects selected together have no rotation or scale of their
-  // own. They read 0 and 1, then show how far they have been turned and
-  // resized together. Those values are kept for that exact set of objects
-  // while nothing about any of them changes: once the set is no longer
-  // selected, a copy of each object is kept, and selecting the same set again
-  // shows the kept values only if every object still matches its copy.
-  P.groupKey = /** @this {import("./SceneManager").SceneManager} */ function () {
-    if (!this.isGroupMode()) return '';
-    return groupIds(this).join('|');
+  // Two or more objects, faces, edges or vertices selected together have no
+  // rotation of their own. Their rotation numbers start at 0 and count how
+  // far they've been turned together (objects also count their scale from
+  // 1). The count is kept for that exact selection until something is edited
+  // while it isn't selected, or there's an undo, a redo or a mode change;
+  // then it starts at 0 again. Selecting other things isn't an edit.
+  P.turnKey = /** @this {import("./SceneManager").SceneManager} */ function () {
+    if (this.isGroupMode()) return `objects:${groupIds(this).join('|')}`;
+    const sel = this.selection;
+    if (!sel?.meshId || sel.type === 'object' || !(sel.indices?.length > 1)) return '';
+    const key = this._subRotationKey();
+    return key ? `${sel.meshId}:${key}` : '';
   };
 
-  P.getGroupRecord = /** @this {import("./SceneManager").SceneManager} */ function (create = false) {
-    const key = this.groupKey();
+  P.getTurnRecord = /** @this {import("./SceneManager").SceneManager} */ function (create = false) {
+    const key = this.turnKey();
     if (!key) return null;
-    let record = this.groupRecords.get(key);
-    if (record?.copies) {
-      const unchanged = record.ids.every((id) => {
-        const mesh = this.getMesh(id), copy = record.copies.get(id);
-        return !!mesh && !!copy && sameMeshState(mesh, copy);
-      });
-      if (unchanged) record.copies = null;
-      else { this.groupRecords.delete(key); record = undefined; }
+    let record = this.turnRecords.get(key);
+    if (record && record.leftAt !== null) {
+      if (record.leftAt === this.editStamp) record.leftAt = null;
+      else { this.turnRecords.delete(key); record = undefined; }
     }
     if (!record && create) {
-      record = { ids: groupIds(this), q: new THREE.Quaternion(), rotation: [0, 0, 0], scale: [1, 1, 1], copies: null };
-      this.groupRecords.set(key, record);
+      record = { q: new THREE.Quaternion(), rotation: [0, 0, 0], scale: [1, 1, 1], leftAt: null, resets: [] };
+      this.turnRecords.set(key, record);
     }
     return record || null;
   };
 
-  // Runs whenever the selection may have changed, before anything is edited.
-  P.syncGroupRecords = /** @this {import("./SceneManager").SceneManager} */ function () {
-    if (!this.groupRecords?.size) return;
-    const current = this.groupKey();
-    if (current) this.getGroupRecord();
-    for (const [key, record] of this.groupRecords) {
-      if (key === current || record.copies) continue;
-      const meshes = record.ids.map((id) => this.getMesh(id));
-      if (meshes.some((mesh) => !mesh)) { this.groupRecords.delete(key); continue; }
-      // Undo already keeps an unchanged copy of most objects: share it.
-      record.copies = new Map(meshes.map((mesh) => {
-        const last = this._undoMeshCopies?.get(mesh.id);
-        return [mesh.id, last && sameMeshState(mesh, last) ? last : mesh.clone()];
-      }));
+  P.getGroupRecord = /** @this {import("./SceneManager").SceneManager} */ function (create = false) {
+    return this.isGroupMode() ? this.getTurnRecord(create) : null;
+  };
+
+  // Runs whenever the selection may have changed, before anything is edited:
+  // a count whose selection was just left remembers the edits made so far.
+  P.syncTurnRecords = /** @this {import("./SceneManager").SceneManager} */ function () {
+    if (!this.turnRecords?.size) return;
+    const current = this.turnKey();
+    if (current) this.getTurnRecord();
+    for (const [key, record] of this.turnRecords) {
+      if (key !== current && record.leftAt === null) record.leftAt = this.editStamp;
     }
+  };
+
+  // Every count back to 0, and a reset edge or vertex back to its true angle.
+  P.clearTurnRecords = /** @this {import("./SceneManager").SceneManager} */ function () {
+    this.turnRecords?.clear();
+    this.tempTurn = null;
   };
 
   P.materializeSnapshot = /** @this {import("./SceneManager").SceneManager} */ function (snapshot) {
@@ -166,6 +169,9 @@ export function applySceneUndo(SceneManager) {
   };
 
   P.pushUndoSnapshot = /** @this {import("./SceneManager").SceneManager} */ function (snapshot) {
+    // Only a change of selection is saved without its objects: anything else
+    // is an edit.
+    if (snapshot.meshes !== null) this.editStamp = (this.editStamp || 0) + 1;
     this.materializeSnapshot(snapshot);
     // Cheap monotonic marker of "the scene was edited", so autosave can detect
     // changes without serializing the whole model.
@@ -192,6 +198,7 @@ export function applySceneUndo(SceneManager) {
 
   P.restoreSnapshot = /** @this {import("./SceneManager").SceneManager} */ function (snapshot) {
     this.editVersion = (this.editVersion || 0) + 1;
+    this.editStamp = (this.editStamp || 0) + 1;
     const before = new Map(this.meshes.map((m) => [m.id, m]));
     // An object already exactly as the step has it stays as it is; only the
     // others are copied back.
@@ -225,9 +232,9 @@ export function applySceneUndo(SceneManager) {
       if (!existingIds.has(id)) this.removeMesh(id);
     }
     this.selection = snapshot.selection;
-    this.subRotationQ = snapshot.subRotation ? new THREE.Quaternion().fromArray(snapshot.subRotation) : null;
+    this.tempTurn = null;
     this.selectedMeshIds = snapshot.selectedMeshIds ? [...snapshot.selectedMeshIds] : (this.selection.meshId ? [this.selection.meshId] : []);
-    if (snapshot.groupRecords) this.groupRecords = copyGroupRecords(snapshot.groupRecords);
+    if (snapshot.turnRecords) this.turnRecords = copyTurnRecords(snapshot.turnRecords);
     this.multiSelect = !!snapshot.multiSelect;
     if (snapshot.lights) this.restoreSceneLights?.(snapshot.lights, snapshot.selectedLightId);
     if (snapshot.selectionMode && snapshot.selectionMode !== this.selectionMode) {
@@ -250,6 +257,7 @@ export function applySceneUndo(SceneManager) {
     const index = this.meshes.findIndex((m) => m.id === meshId);
     if (!saved || index < 0 || !this.threeObjects.has(meshId)) { this.restoreSnapshot(snapshot); return; }
     this.editVersion = (this.editVersion || 0) + 1;
+    this.editStamp = (this.editStamp || 0) + 1;
     const live = this.meshes[index];
     if (!sameMeshState(live, saved)) {
       const mesh = saved.clone();
@@ -265,9 +273,9 @@ export function applySceneUndo(SceneManager) {
       this._undoMeshCopies?.set(meshId, saved);
     }
     this.selection = snapshot.selection;
-    this.subRotationQ = snapshot.subRotation ? new THREE.Quaternion().fromArray(snapshot.subRotation) : null;
+    this.tempTurn = null;
     this.selectedMeshIds = snapshot.selectedMeshIds ? [...snapshot.selectedMeshIds] : (this.selection.meshId ? [this.selection.meshId] : []);
-    if (snapshot.groupRecords) this.groupRecords = copyGroupRecords(snapshot.groupRecords);
+    if (snapshot.turnRecords) this.turnRecords = copyTurnRecords(snapshot.turnRecords);
     this.multiSelect = !!snapshot.multiSelect;
     if (refresh) {
       this.updateHighlights();
@@ -288,6 +296,8 @@ export function applySceneUndo(SceneManager) {
     if (target.paintPatches?.length) current.paintPatches = capturePaintPatches(this, target.paintPatches);
     this.redoStack.push(current);
     this.restoreSnapshot(target);
+    this.clearTurnRecords();
+    this.updateHud();
     return true;
   };
 
@@ -298,6 +308,8 @@ export function applySceneUndo(SceneManager) {
     if (target.paintPatches?.length) current.paintPatches = capturePaintPatches(this, target.paintPatches);
     this.undoStack.push(current);
     this.restoreSnapshot(target);
+    this.clearTurnRecords();
+    this.updateHud();
     return true;
   };
 

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { countedAngles } from './rotationNumbers';
 
 // Orientation reset: line an object's own axes up with the world axes without
 // moving or reshaping it. The rotation is folded into the vertices, so a
@@ -9,7 +10,8 @@ import * as THREE from 'three';
 
 // Give an object the rotation R·q while it stays exactly where it is on
 // screen. The world shape is R·S·v, so every vertex becomes S⁻¹·q⁻¹·S·v.
-function reorient(mesh, q) {
+// `near`: the rotation numbers to stay closest to (see rotationNumbers.js).
+function reorient(mesh, q, near = [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z]) {
   const s = mesh.scale;
   if (!s.x || !s.y || !s.z) return false;
   const inverse = q.clone().invert();
@@ -20,7 +22,8 @@ function reorient(mesh, q) {
     v.y = p.y / s.y;
     v.z = p.z / s.z;
   }
-  mesh.rotation.setFromQuaternion(new THREE.Quaternion().setFromEuler(mesh.rotation).multiply(q));
+  const order = mesh.rotation.order;
+  mesh.rotation.set(...countedAngles(new THREE.Quaternion().setFromEuler(mesh.rotation).multiply(q), near, order), order);
   // A rebuilt primitive would come back in its old orientation.
   mesh.primitiveType = null;
   mesh.invalidateCache();
@@ -47,14 +50,24 @@ export function applySceneOrientation(SceneManager) {
     this.updateHud();
   };
 
-  // Returns false when nothing is selected.
+  // Returns false when nothing is selected. With faces, edges or vertices
+  // selected, only their rotation numbers go to 0 and the object isn't
+  // touched (resetSubRotation). With two or more objects, the numbers for all
+  // of them together go to 0 too.
   P.resetOrientation = /** @this {import("./SceneManager").SceneManager} */ function () {
+    if (this.selection.meshId && this.selection.type !== 'object') return this.resetSubRotation();
     const meshes = this.orientationTargets();
     if (!meshes.length) return false;
+    const record = this.getGroupRecord?.();
+    if (record && record.rotation.some((d) => d !== 0)) {
+      record.resets = [...(record.resets || []), { q: record.q.toArray(), rotation: [...record.rotation] }];
+      record.q.identity();
+      record.rotation = [0, 0, 0];
+    }
     // An object already lined up with the world has nothing to reset; leaving
     // it alone keeps the rotation an earlier reset can still bring back.
     const turned = meshes.filter((mesh) => isTurned(mesh.rotation));
-    if (!turned.length) return true;
+    if (!turned.length) { this.updateHud(); return true; }
     this.pushUndo();
     for (const mesh of turned) {
       const { x, y, z, order } = mesh.rotation;
@@ -68,20 +81,33 @@ export function applySceneOrientation(SceneManager) {
   };
 
   P.canUndoOrientationReset = /** @this {import("./SceneManager").SceneManager} */ function () {
+    if (this.selection.type !== 'object') return false;
     return this.orientationTargets().some((mesh) => mesh.orientationResets?.length);
   };
 
   // Brings back the orientation the last reset removed, carrying along any
   // rotation applied since; the shape and every edit stay as they are.
   P.undoOrientationReset = /** @this {import("./SceneManager").SceneManager} */ function () {
+    if (this.selection.type !== 'object') return false;
     const meshes = this.orientationTargets().filter((mesh) => mesh.orientationResets?.length);
     if (!meshes.length) return false;
     this.pushUndo();
     for (const mesh of meshes) {
       const stack = [...mesh.orientationResets];
       const [x, y, z, order] = stack.pop();
-      if (!reorient(mesh, new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z, order || 'XYZ')))) continue;
+      const wasZero = !isTurned(mesh.rotation);
+      const near = [mesh.rotation.x + x, mesh.rotation.y + y, mesh.rotation.z + z];
+      if (!reorient(mesh, new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z, order || 'XYZ')), near)) continue;
+      // Not turned since the reset: exactly the numbers it had before.
+      if (wasZero) mesh.rotation.set(x, y, z);
       mesh.orientationResets = stack;
+    }
+    // Two or more objects: the numbers for all of them together come back too.
+    const record = this.getGroupRecord?.();
+    const saved = record?.resets?.pop();
+    if (saved) {
+      record.q.fromArray(saved.q);
+      record.rotation = [...saved.rotation];
     }
     this._finishOrientation(meshes);
     return true;

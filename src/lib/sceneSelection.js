@@ -21,6 +21,8 @@ export function applySceneSelection(SceneManager) {
     if (this.drawMode) this.exitDrawMode();
     if (this.cutMode) this.exitCutMode();
     this.exitMultiSelect();
+    // A mode change starts every count of several things again at 0.
+    this.clearTurnRecords();
     this.selectionMode = mode;
     this.targetMergePair = null;
     this.clearSelection();
@@ -49,7 +51,8 @@ export function applySceneSelection(SceneManager) {
       || prevIdx.length !== nextIdx.length || nextIdx.some((v, i) => v !== prevIdx[i]);
     this.selection = sel;
     // A different selection shows the angle it was left at (0 if never turned).
-    if (selectionChanged) this.subRotationQ = this._storedSubRotation();
+    // A reset edge or vertex reads its true angle again once it's left.
+    if (selectionChanged) this.tempTurn = null;
     if (sel.meshId) {
       const focus = this.getSelectionCenter();
       const bounds = this.getSelectionBounds();
@@ -97,7 +100,7 @@ export function applySceneSelection(SceneManager) {
     this.targetMergePair = null;
     this.selection = { meshId: null, type: this.selectionMode, indices: [] };
     this.selectedMeshIds = [];
-    this.subRotationQ = null;
+    this.tempTurn = null;
     this.updateHighlights();
     this.updateStats();
   };

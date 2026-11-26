@@ -28,6 +28,7 @@ import { applySceneMeasure } from './sceneMeasure';
 import { applySceneAddVertex } from './sceneAddVertex';
 import { applySceneReference, loadReferenceImage } from './sceneReference';
 import { applySceneOrientation } from './sceneOrientation';
+import { addTurn, countedAngles, countedDegrees, degreesMatch, limitDegrees, newTurnCount, setTurn, turnFromDegrees, turnToDegrees } from './rotationNumbers';
 import { viewDistance } from './viewDistance';
 import { mergeVerticesWithin, weldCoincidentVertices, edgeKey } from './meshTopology';
 import { notifyUnavailable } from './unavailable';
@@ -65,19 +66,6 @@ const DEFAULT_SUN_DIRECTION = new THREE.Vector3(-5, 8, 1.5).normalize();
 // scratch every frame) are skipped so only the surface updates. Lighter meshes
 // are never affected, so ordinary models look exactly the same as before.
 const HEAVY_EDIT_TRIANGLES = 20000;
-
-// Sets an object's rotation from a turn, as the X, Y, Z angles that read
-// most simply. The same turn has two sets of angles (X+180°, 180°-Y, Z+180°);
-// the usual one keeps Y within ±90°, so a flat object turned past 90° around
-// Y read as X -171°, Z 177° instead of small tilts. Prefer the set with the
-// smaller X and Z.
-function setRotationReadably(rotation, quaternion) {
-  rotation.setFromQuaternion(quaternion);
-  if (rotation.order !== 'XYZ') return;
-  const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-  const x = wrap(rotation.x + Math.PI), y = wrap(Math.PI - rotation.y), z = wrap(rotation.z + Math.PI);
-  if (Math.abs(x) + Math.abs(z) < Math.abs(rotation.x) + Math.abs(rotation.z) - 1e-9) rotation.set(x, y, z);
-}
 
 export class SceneManager {
   constructor(container, callbacks = {}) {
@@ -179,10 +167,15 @@ export class SceneManager {
     this.threeObjects = new Map();
     this.selection = { meshId: null, type: 'object', indices: [] };
     this.selectedMeshIds = [];
-    // Rotation and scale of several objects turned and resized together, kept
-    // per exact set of objects (see getGroupRecord in sceneUndo.js).
-    /** @type {Map<string, {ids: any[], q: THREE.Quaternion, rotation: number[], scale: number[], copies: Map<any, any> | null}>} */
-    this.groupRecords = new Map();
+    // Rotation (and, for objects, scale) of two or more selected objects,
+    // faces, edges or vertices, counted from 0 (see getTurnRecord in
+    // sceneUndo.js), and what has been edited since, to know when to drop them.
+    /** @type {Map<string, {q: THREE.Quaternion, rotation: number[], scale: number[], leftAt: number | null, resets: {q: number[], rotation: number[]}[]}>} */
+    this.turnRecords = new Map();
+    this.editStamp = 0;
+    // One edge or vertex reset to 0 while it stays selected.
+    /** @type {{key: string | null, q: THREE.Quaternion, rotation: number[]} | null} */
+    this.tempTurn = null;
     this.selectionMode = 'object';
     this.activeAction = 'idle';
     this.activeAxis = null;
@@ -665,27 +658,35 @@ export class SceneManager {
     syncObjectHighlightTransforms(this);
   }
 
-  // The actual world angle of a vertex / edge / face selection, as X, Y, Z
-  // angles in degrees: its object's rotation plus however far the selection
-  // has been turned within the object. A selection that was never turned on
-  // an object rotated 45° reads 45°, the same as the object. Twists, free
-  // rotation and typed values all add to the same record (subRotationQ, the
-  // turn within the object), kept on the object for that exact selection (its
-  // vertices), so selecting it again later, or reopening the project, shows
-  // the same angle.
+  // Rotation numbers of a vertex / edge / face selection (X, Y, Z degrees):
+  // - One edge or one vertex: its true angle in the world. That's its object's
+  //   rotation, every orientation reset the object has had (a reset folds the
+  //   rotation into the shape, so its edges keep reading the same angle), and
+  //   however far the edge was turned on its own, kept on its object. Reset
+  //   sets it to 0 only while it stays selected (tempTurn).
+  // - One face: starts at 0 and counts how far it has been turned. The count
+  //   is kept on its object until anything changes the face other than
+  //   turning it: its object moved, turned, scaled or edited, or its edges or
+  //   vertices edited. Then it's back to 0.
+  // - Two or more faces, edges or vertices: a count from 0, the same as
+  //   several objects (getTurnRecord in sceneUndo.js).
   subRotationDegrees() {
     const mesh = this.getMesh(this.selection.meshId);
-    const deg = (r) => {
-      const d = r * 180 / Math.PI;
-      return Math.abs(d) < 1e-9 ? 0 : d;
-    };
-    const turn = this.subRotationQ;
-    // Not turned within its object: exactly the object's own values.
-    if (!turn || 1 - Math.abs(turn.w) < 1e-12) {
-      return mesh ? { x: deg(mesh.rotation.x), y: deg(mesh.rotation.y), z: deg(mesh.rotation.z) } : { x: 0, y: 0, z: 0 };
-    }
-    const e = new THREE.Euler().setFromQuaternion(this._subWorldQuaternion(), mesh?.rotation.order || 'XYZ');
-    return { x: deg(e.x), y: deg(e.y), z: deg(e.z) };
+    const key = this._subRotationKey(), kind = this._subKind();
+    const out = (r) => ({ x: r[0], y: r[1], z: r[2] });
+    if (!mesh || !key || !kind) return { x: 0, y: 0, z: 0 };
+    if (kind === 'several') return out(this.getTurnRecord()?.rotation || [0, 0, 0]);
+    if (kind === 'face') return out(this._faceCount(mesh, key).rotation);
+    if (this.tempTurn && this.tempTurn.key === this._tempKey()) return out(this.tempTurn.rotation);
+    return out(this._trueAngle(mesh, key).rotation);
+  }
+
+  // Which of those the current selection is.
+  _subKind() {
+    const sel = this.selection;
+    if (!sel?.meshId || sel.type === 'object' || !sel.indices?.length) return null;
+    if (sel.indices.length > 1) return 'several';
+    return sel.type === 'face' ? 'face' : 'true';
   }
 
   // The object's rotation as a quaternion.
@@ -693,9 +694,15 @@ export class SceneManager {
     return mesh ? new THREE.Quaternion().setFromEuler(mesh.rotation) : new THREE.Quaternion();
   }
 
-  // World orientation of the selection: object rotation, then its turn within it.
-  _subWorldQuaternion() {
-    return this._objectQuaternion().multiply(this.subRotationQ || new THREE.Quaternion());
+  // The frame an object's edges are measured in: its rotation, then every
+  // orientation reset it has had.
+  _elementFrame(mesh) {
+    const frame = this._objectQuaternion(mesh);
+    const resets = new THREE.Quaternion();
+    for (const [x, y, z, order] of mesh?.orientationResets || []) {
+      resets.premultiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z, order || 'XYZ')));
+    }
+    return frame.multiply(resets);
   }
 
   // Key of the current vertex / edge / face selection in its object's angle
@@ -708,41 +715,142 @@ export class SceneManager {
     return `${sel.type}:${[...ids].sort((a, b) => a - b).join(',')}`;
   }
 
-  // The angle the current selection was left at, from its object's record.
-  _storedSubRotation() {
+  // The same key, with its object (for a reset that lasts while it's selected).
+  _tempKey() {
     const key = this._subRotationKey();
-    const q = key ? this.getMesh(this.selection.meshId)?.elementRotations?.[key] : null;
-    return q ? new THREE.Quaternion().fromArray(q) : null;
+    return key ? `${this.selection.meshId}|${key}` : null;
   }
 
-  // Keep the current selection's angle on its object.
-  _storeSubRotation() {
-    const key = this._subRotationKey();
-    const mesh = key ? this.getMesh(this.selection.meshId) : null;
-    if (!mesh) return;
+  // One edge or vertex: its turn within its object's frame and the numbers
+  // last shown for it, kept on the object.
+  _trueRecord(mesh, key) {
+    const saved = mesh?.elementRotations?.[key];
+    if (!Array.isArray(saved)) return { turn: new THREE.Quaternion(), shown: null };
+    return { turn: new THREE.Quaternion().fromArray(saved), shown: saved.length === 7 ? saved.slice(4, 7) : null };
+  }
+
+  // Its true angle: the world turn, and the numbers for it (typed numbers stay
+  // as typed; otherwise they count on from the numbers shown before).
+  _trueAngle(mesh, key) {
+    const record = this._trueRecord(mesh, key);
+    const world = this._elementFrame(mesh).multiply(record.turn);
+    const order = mesh.rotation.order || 'XYZ';
+    let rotation;
+    if (record.shown && degreesMatch(record.shown, world, order)) rotation = [...record.shown];
+    else {
+      const before = record.shown || [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z].map((r) => r * 180 / Math.PI);
+      rotation = countedDegrees(world, before, order);
+    }
+    return { record, world, rotation };
+  }
+
+  _storeTrueRecord(mesh, key, turn, rotation) {
     if (!mesh.elementRotations) mesh.elementRotations = {};
-    const q = this.subRotationQ;
-    if (!q || 1 - Math.abs(q.w) < 1e-12) delete mesh.elementRotations[key];
-    else mesh.elementRotations[key] = q.toArray();
+    mesh.elementRotations[key] = [...turn.toArray(), ...rotation];
+  }
+
+  // What a face's count depends on: where its object is, how it's turned and
+  // scaled, and where the face's corners are.
+  _faceFingerprint(mesh) {
+    const values = [...mesh.position.toArray(), mesh.rotation.x, mesh.rotation.y, mesh.rotation.z, ...mesh.scale.toArray()];
+    for (const id of this.getSelectedVertexIds()) {
+      const v = mesh.getVertex(id);
+      if (v) values.push(v.x, v.y, v.z);
+    }
+    return values;
+  }
+
+  // The current face's count, or a new one at 0 when it was never turned or
+  // something has changed it since.
+  _faceCount(mesh, key) {
+    const saved = mesh?.elementRotations?.[key];
+    if (saved && !Array.isArray(saved)) {
+      const now = this._faceFingerprint(mesh);
+      if (saved.fp?.length === now.length && saved.fp.every((v, i) => v === now[i])) {
+        return { q: new THREE.Quaternion().fromArray(saved.q), rotation: [...saved.rotation] };
+      }
+    }
+    return newTurnCount();
+  }
+
+  _storeFaceCount(mesh, key, count) {
+    if (!mesh.elementRotations) mesh.elementRotations = {};
+    mesh.elementRotations[key] = { q: count.q.toArray(), rotation: [...count.rotation], fp: this._faceFingerprint(mesh) };
+  }
+
+  // Read the selection's count or true angle before its vertices move...
+  _beginSubTurn(mesh) {
+    const key = this._subRotationKey(), kind = this._subKind();
+    if (!key || !kind) return null;
+    if (kind === 'face') return { kind, key, count: this._faceCount(mesh, key) };
+    if (kind === 'several') return { kind, key, count: this.getTurnRecord(true) };
+    return { kind, key, angle: this._trueAngle(mesh, key) };
+  }
+
+  // ...then add the world turn q to it once they have moved.
+  _endSubTurn(mesh, begun, q) {
+    if (!begun) return;
+    if (begun.kind === 'face') {
+      addTurn(begun.count, q);
+      this._storeFaceCount(mesh, begun.key, begun.count);
+      return;
+    }
+    if (begun.kind === 'several') {
+      if (begun.count) addTurn(begun.count, q);
+      return;
+    }
+    // One edge or vertex: the world turn, as a turn within its object's frame.
+    const frame = this._elementFrame(mesh);
+    const turn = frame.clone().invert().multiply(q).multiply(frame).multiply(begun.angle.record.turn);
+    const rotation = countedDegrees(frame.multiply(turn), begun.angle.rotation, mesh.rotation.order || 'XYZ');
+    this._storeTrueRecord(mesh, begun.key, turn, rotation);
+    if (this.tempTurn && this.tempTurn.key === this._tempKey()) addTurn(this.tempTurn, q);
+  }
+
+  // Orientation reset with faces, edges or vertices selected: only their
+  // rotation numbers go to 0, and the object isn't touched. One edge or
+  // vertex reads 0 only while it stays selected, then its true angle again.
+  resetSubRotation() {
+    const mesh = this.getMesh(this.selection.meshId);
+    const key = this._subRotationKey(), kind = this._subKind();
+    if (!mesh || !key || !kind) return false;
+    if (kind === 'several') {
+      const count = this.getTurnRecord(true);
+      if (count) setTurn(count, [0, 0, 0]);
+    } else if (kind === 'face') this._storeFaceCount(mesh, key, newTurnCount());
+    else this.tempTurn = { key: this._tempKey(), ...newTurnCount() };
+    this.updateHud();
+    return true;
   }
 
   // HUD rotation while vertices/edges/faces are selected rotates ONLY that
-  // selection, around its own center, to the typed world angles (the same
-  // angles the values show), never the object around it.
-  // Typed angles are exact: rotation snapping does not round them.
+  // selection, around its own center, to the typed numbers (the same numbers
+  // the values show), never the object around it. Typed numbers are exact:
+  // rotation snapping does not round them.
   rotateSubSelectionTo(rxDeg, ryDeg, rzDeg) {
-    const D = Math.PI / 180;
     const mesh = this.getMesh(this.selection.meshId);
-    const target = new THREE.Quaternion().setFromEuler(new THREE.Euler(rxDeg * D, ryDeg * D, rzDeg * D, mesh?.rotation.order || 'XYZ'));
-    const delta = target.clone().multiply(this._subWorldQuaternion().invert());
+    const key = this._subRotationKey(), kind = this._subKind();
+    if (!mesh || !key || !kind) return;
+    const typed = [rxDeg, ryDeg, rzDeg].map(limitDegrees);
+    const order = mesh.rotation.order || 'XYZ';
+    const temp = kind === 'true' && this.tempTurn && this.tempTurn.key === this._tempKey() ? this.tempTurn : null;
+    const count = kind === 'several' ? this.getTurnRecord(true) : kind === 'face' ? this._faceCount(mesh, key) : temp;
+    const delta = count
+      ? turnToDegrees(count, typed)
+      : turnFromDegrees(typed, order).multiply(this._trueAngle(mesh, key).world.invert());
     if (1 - Math.abs(delta.w) > 1e-12) {
       this.rotatePivot = this.rotatePivot || this.getSelectionCenter();
       this._rotateSubSelection(delta);
       this.rotatePivot = null;
     }
-    // Exactly the typed angles, without rounding drift.
-    this.subRotationQ = this._objectQuaternion(mesh).invert().multiply(target);
-    this._storeSubRotation();
+    // Exactly the typed numbers, without rounding drift.
+    if (kind === 'several') setTurn(this.getTurnRecord(true), typed);
+    else if (kind === 'face') {
+      const faceCount = this._faceCount(mesh, key);
+      setTurn(faceCount, typed);
+      this._storeFaceCount(mesh, key, faceCount);
+    } else if (temp) setTurn(temp, typed);
+    else this._storeTrueRecord(mesh, key, this._elementFrame(mesh).invert().multiply(turnFromDegrees(typed, order)), typed);
   }
 
   // Manual transform entry from the HUD (object mode only).
@@ -798,7 +906,8 @@ export class SceneManager {
     if (!mesh || mesh.locked) return;
     if (sel.type === 'object') {
       this.recenterOrigin(mesh);
-      mesh.rotation.set(rxDeg * Math.PI / 180, ryDeg * Math.PI / 180, rzDeg * Math.PI / 180);
+      // Typed numbers stay as typed, within ±360.
+      mesh.rotation.set(limitDegrees(rxDeg) * Math.PI / 180, limitDegrees(ryDeg) * Math.PI / 180, limitDegrees(rzDeg) * Math.PI / 180);
       this.updateObjectTransform(mesh.id);
     } else {
       this.rotateSubSelectionTo(rxDeg, ryDeg, rzDeg);
@@ -1449,7 +1558,7 @@ export class SceneManager {
   }
 
   updateHighlights(force = false) {
-    this.syncGroupRecords?.();
+    this.syncTurnRecords?.();
     // Only topology changes (like origin re-centering) force a rebuild during
     // a heavy gesture; object transforms reuse the existing local outline.
     if (this._heavyEdit && !force) { this._highlightsStale = true; return; }
@@ -1911,17 +2020,13 @@ export class SceneManager {
     if (!this.selectedMeshIds.some((id) => { const m = this.getMesh(id); return m && !m.locked; })) return;
     const record = this.getGroupRecord(true);
     if (!record) return;
-    const D = Math.PI / 180;
-    const target = new THREE.Quaternion().setFromEuler(new THREE.Euler(rxDeg * D, ryDeg * D, rzDeg * D, 'XYZ'));
-    const turn = target.clone().multiply(record.q.clone().invert()).normalize();
-    if (turn.w < 0) turn.set(-turn.x, -turn.y, -turn.z, -turn.w);
+    const turn = turnToDegrees(record, [rxDeg, ryDeg, rzDeg]);
     const angle = 2 * Math.acos(Math.min(1, turn.w));
     if (angle > 1e-9) {
       const s = Math.sqrt(Math.max(0, 1 - turn.w * turn.w));
       this.rotateGroupAroundAxis(angle, new THREE.Vector3(turn.x / s, turn.y / s, turn.z / s));
     }
-    record.q.copy(target);
-    record.rotation = [rxDeg, ryDeg, rzDeg];
+    setTurn(record, [rxDeg, ryDeg, rzDeg]);
     this.updateHud();
   }
 
@@ -2017,7 +2122,8 @@ export class SceneManager {
       this.recenterOrigin(mesh);
       const curQ = new THREE.Quaternion().setFromEuler(mesh.rotation);
       curQ.premultiply(q);
-      mesh.rotation.setFromQuaternion(curQ);
+      const { x, y, z, order } = mesh.rotation;
+      mesh.rotation.set(...countedAngles(curQ, [x, y, z], order), order);
       this.updateObjectTransform(mesh.id);
     } else {
       this._rotateSubSelection(q);
@@ -2035,6 +2141,7 @@ export class SceneManager {
     // Pivot stays pinned to where the selection was when the gesture started,
     // so a sub-object rotation can never drift off its own center.
     const center = this.rotatePivot || this.getSelectionCenter();
+    const begun = this._beginSubTurn(mesh);
     this._lockForTransform(mesh);
     const wm = this.getWorldMatrix(mesh);
     // A face can share positions with separately indexed wall vertices.
@@ -2055,12 +2162,7 @@ export class SceneManager {
       const delta = this.worldToLocalDelta(mesh, newWorld.clone().sub(vWorld));
       v.x += delta.x; v.y += delta.y; v.z += delta.z;
     }
-    // The world turn q, recorded as a turn within the object, so the record
-    // stays right if the object itself is rotated later.
-    const objectQ = this._objectQuaternion(mesh);
-    const localTurn = objectQ.clone().invert().multiply(q).multiply(objectQ);
-    this.subRotationQ = localTurn.multiply(this.subRotationQ || new THREE.Quaternion());
-    this._storeSubRotation();
+    this._endSubTurn(mesh, begun, q);
     // Only positions changed: the edge list and the edge/face/vertex maps
     // depend on the faces alone, so they stay valid (working them out again
     // every frame made edge transforms rebuild the whole edge list).
@@ -2079,16 +2181,12 @@ export class SceneManager {
       m.position.copy(center).add(offset);
       const curQ = new THREE.Quaternion().setFromEuler(m.rotation);
       curQ.premultiply(q);
-      setRotationReadably(m.rotation, curQ);
+      const { x, y, z, order } = m.rotation;
+      m.rotation.set(...countedAngles(curQ, [x, y, z], order), order);
       this.updateObjectTransform(id);
     }
     const record = this.getGroupRecord(true);
-    if (record) {
-      record.q.premultiply(q).normalize();
-      const e = new THREE.Euler();
-      setRotationReadably(e, record.q);
-      record.rotation = [e.x, e.y, e.z].map((r) => r * 180 / Math.PI);
-    }
+    if (record) addTurn(record, q);
     refreshTransformHighlights(this);
     this.updateHud();
   }
